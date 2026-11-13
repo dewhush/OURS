@@ -23,6 +23,12 @@ pub struct LocationPoint {
     pub accuracy_m: f64,
     pub speed_mps: f64,
     pub bearing: Option<f64>,
+    #[serde(default)]
+    pub activity: Option<String>,
+    #[serde(default)]
+    pub altitude_m: Option<f64>,
+    #[serde(default)]
+    pub vertical_speed_mps: Option<f64>,
     pub battery_pct: i64,
     pub charging: bool,
     pub recorded_at: i64,
@@ -38,6 +44,9 @@ pub struct PartnerLocation {
     pub accuracy_m: Option<f64>,
     pub speed_mps: Option<f64>,
     pub bearing: Option<f64>,
+    pub activity: Option<String>,
+    pub altitude_m: Option<f64>,
+    pub vertical_speed_mps: Option<f64>,
     pub battery_pct: Option<i64>,
     pub charging: Option<bool>,
     pub recorded_at: Option<i64>,

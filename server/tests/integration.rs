@@ -824,3 +824,138 @@ async fn pairing_without_setup_key_when_unset() {
         .unwrap();
     assert_eq!(third.status(), StatusCode::CONFLICT);
 }
+
+#[tokio::test]
+async fn location_telemetry_and_validation() {
+    let app = TestApp::start().await;
+    let (t1, t2, _id1, _id2) = app.pair_both().await;
+    let now = now_ms();
+
+    // Invalid activity rejected with 400
+    let bad = app
+        .client
+        .post(format!("{}/api/locations", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!([{
+            "lat": -6.2, "lon": 106.8, "accuracy_m": 5.0, "speed_mps": 1.0,
+            "bearing": 45.0, "activity": "teleporting",
+            "battery_pct": 90, "charging": false, "recorded_at": now
+        }]))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+
+    // Valid telemetry stored and returned
+    let ok = app
+        .client
+        .post(format!("{}/api/locations", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!([{
+            "lat": -6.2, "lon": 106.8, "accuracy_m": 6.0, "speed_mps": 14.5,
+            "bearing": 120.0, "activity": "driving", "altitude_m": 22.5, "vertical_speed_mps": 0.4,
+            "battery_pct": 90, "charging": true, "recorded_at": now
+        }]))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+
+    let partner_loc: Value = app
+        .client
+        .get(format!("{}/api/partner/location", app.base_url))
+        .bearer_auth(&t2)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(partner_loc["activity"], "driving");
+    assert_eq!(partner_loc["altitude_m"], 22.5);
+    assert_eq!(partner_loc["vertical_speed_mps"], 0.4);
+}
+
+#[tokio::test]
+async fn join_pair_rate_limits_failed_attempts() {
+    let app = TestApp::start_with_setup_key(None).await;
+    app.client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .json(&json!({"name": "Dewantoro"}))
+        .send()
+        .await
+        .unwrap();
+
+    for _ in 0..10 {
+        let r = app
+            .client
+            .post(format!("{}/api/pair/join", app.base_url))
+            .json(&json!({"code": "BAD999", "name": "Marchanda"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::NOT_FOUND);
+    }
+
+    let blocked = app
+        .client
+        .post(format!("{}/api/pair/join", app.base_url))
+        .json(&json!({"code": "BAD999", "name": "Marchanda"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+    let body: Value = blocked.json().await.unwrap();
+    assert_eq!(body["error"], "rate_limited");
+}
+
+#[tokio::test]
+async fn checkin_photo_strips_exif_metadata() {
+    let app = TestApp::start().await;
+    let (t1, t2, _id1, _id2) = app.pair_both().await;
+
+    // Inject a fake APP1 Exif segment right after SOI (FF D8)
+    let base_jpeg = make_test_jpeg(120, 120);
+    let mut with_exif = Vec::with_capacity(base_jpeg.len() + 16);
+    with_exif.extend_from_slice(&base_jpeg[..2]); // FF D8
+    with_exif.extend_from_slice(&[
+        0xFF, 0xE1, 0x00, 0x0C, b'E', b'x', b'i', b'f', 0x00, 0x00, b'G', b'P', b'S', 0x00,
+    ]);
+    with_exif.extend_from_slice(&base_jpeg[2..]);
+
+    let form = reqwest::multipart::Form::new().part(
+        "photo",
+        reqwest::multipart::Part::bytes(with_exif)
+            .file_name("exif.jpg")
+            .mime_str("image/jpeg")
+            .unwrap(),
+    );
+    let c: Value = app
+        .client
+        .post(format!("{}/api/checkins", app.base_url))
+        .bearer_auth(&t1)
+        .multipart(form)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let photo_id = c["photo_id"].as_str().unwrap();
+
+    let full_bytes = app
+        .client
+        .get(format!("{}/api/photos/{photo_id}?size=full", app.base_url))
+        .bearer_auth(&t2)
+        .send()
+        .await
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+
+    assert!(
+        !full_bytes.windows(4).any(|w| w == b"Exif"),
+        "EXIF metadata must be stripped from stored JPEG"
+    );
+}

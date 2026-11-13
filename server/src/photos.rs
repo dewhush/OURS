@@ -27,6 +27,15 @@ pub fn save_jpeg_and_thumb(data_dir: &Path, bytes: &[u8]) -> AppResult<String> {
     let img = image::load_from_memory_with_format(bytes, ImageFormat::Jpeg)
         .map_err(|_| AppError::bad_request("photo must be a valid JPEG"))?;
 
+    // Re-encode full JPEG to strip any client EXIF/GPS/device metadata.
+    let mut full_buf = Vec::new();
+    {
+        let mut encoder = JpegEncoder::new_with_quality(&mut full_buf, 90);
+        encoder
+            .encode_image(&img)
+            .map_err(|_| AppError::internal("failed to encode photo"))?;
+    }
+
     let thumb = if img.width().max(img.height()) > 400 {
         img.resize(400, 400, FilterType::Triangle)
     } else {
@@ -51,7 +60,7 @@ pub fn save_jpeg_and_thumb(data_dir: &Path, bytes: &[u8]) -> AppResult<String> {
     let full_path = photos_dir.join(format!("{photo_id}_full.jpg"));
     let thumb_path = photos_dir.join(format!("{photo_id}_thumb.jpg"));
 
-    fs::write(&full_path, bytes).map_err(|_| AppError::internal("failed to write photo"))?;
+    fs::write(&full_path, &full_buf).map_err(|_| AppError::internal("failed to write photo"))?;
     if let Err(e) = fs::write(&thumb_path, &thumb_buf) {
         let _ = fs::remove_file(&full_path);
         tracing::error!(error = %e, "failed to write thumbnail");

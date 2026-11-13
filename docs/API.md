@@ -26,6 +26,7 @@ commit is announced to `@android` on the board.
   | 409 | `already_set_up`, `pair_full`, `already_paired`, `no_partner` |
   | 410 | `expired` (check-in already expired) |
   | 413 | `too_large` |
+  | 429 | `rate_limited` (too many failed invite attempts) |
   | 500 | `internal` |
 
   On `401 unauthorized` the client refreshes once and retries; if refresh fails with
@@ -58,13 +59,18 @@ refresh token is invalid once `/api/auth/refresh` succeeds, so persist the new o
   "accuracy_m": 12.5,
   "speed_mps": 1.4,
   "bearing": 270.0,
+  "activity": "walking",
+  "altitude_m": 14.2,
+  "vertical_speed_mps": 0.1,
   "battery_pct": 81,
   "charging": false,
   "recorded_at": 1731500000000
 }
 ```
 `lat` in [-90, 90], `lon` in [-180, 180], `accuracy_m >= 0`, `speed_mps >= 0`,
-`bearing` is `null` or [0, 360), `battery_pct` in [0, 100] (integer), `charging` bool.
+`bearing` is `null` or [0, 360), `activity` is `null` or one of `"still"`, `"walking"`, `"running"`, `"cycling"`, `"driving"`, `"stairs"`,
+`altitude_m` is `null` or [-500, 20000], `vertical_speed_mps` is `null` or [-200, 200],
+`battery_pct` in [0, 100] (integer), `charging` bool.
 
 **PartnerLocation**
 ```json
@@ -73,6 +79,7 @@ refresh token is invalid once `/api/auth/refresh` succeeds, so persist the new o
   "paused": false,
   "last_seen_at": 1731500005000,
   "lat": -6.2, "lon": 106.8, "accuracy_m": 12.5, "speed_mps": 1.4, "bearing": 270.0,
+  "activity": "walking", "altitude_m": 14.2, "vertical_speed_mps": 0.1,
   "battery_pct": 81, "charging": false, "recorded_at": 1731500000000
 }
 ```
@@ -249,7 +256,7 @@ is created only records the state, without an event. Each transition creates a `
 | `lat`, `lon` | decimal text | no (both or neither) |
 | `place_name` | text, max 100 chars | no |
 
--> `201 CheckIn`. The server stores the original and generates a ~400 px (longest side) JPEG thumbnail.
+-> `201 CheckIn`. The server re-encodes the JPEG (stripping any EXIF/GPS metadata) and generates a ~400 px (longest side) JPEG thumbnail.
 Errors: `400 bad_request` (missing or non-JPEG photo), `413 too_large`. Sends a `checkin` event.
 
 ### `GET /api/checkins` (auth)

@@ -134,8 +134,11 @@ pub async fn join_pair(
     State(state): State<AppState>,
     Json(req): Json<JoinPairRequest>,
 ) -> AppResult<(StatusCode, Json<JoinPairResponse>)> {
+    state.check_join_rate_limit()?;
+
     let code = req.code.trim().to_ascii_uppercase();
     if code.is_empty() {
+        state.record_join_failure();
         return Err(AppError::invite_not_found());
     }
     let name = req.name.trim().to_string();
@@ -146,7 +149,7 @@ pub async fn join_pair(
 
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
-    let resp = tokio::task::spawn_blocking(move || -> AppResult<JoinPairResponse> {
+    let res = tokio::task::spawn_blocking(move || -> AppResult<JoinPairResponse> {
         let mut conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
@@ -184,9 +187,17 @@ pub async fn join_pair(
         tx.commit()?;
         Ok(JoinPairResponse { user, tokens })
     })
-    .await??;
+    .await?;
 
-    Ok((StatusCode::CREATED, Json(resp)))
+    match res {
+        Ok(resp) => Ok((StatusCode::CREATED, Json(resp))),
+        Err(err) => {
+            if err.code == "invite_not_found" {
+                state.record_join_failure();
+            }
+            Err(err)
+        }
+    }
 }
 
 pub async fn refresh_auth(

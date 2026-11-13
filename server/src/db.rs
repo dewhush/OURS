@@ -60,6 +60,9 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
             accuracy_m REAL NOT NULL,
             speed_mps REAL NOT NULL,
             bearing REAL,
+            activity TEXT,
+            altitude_m REAL,
+            vertical_speed_mps REAL,
             battery_pct INTEGER NOT NULL,
             charging INTEGER NOT NULL,
             recorded_at INTEGER NOT NULL,
@@ -74,6 +77,9 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
             accuracy_m REAL NOT NULL,
             speed_mps REAL NOT NULL,
             bearing REAL,
+            activity TEXT,
+            altitude_m REAL,
+            vertical_speed_mps REAL,
             battery_pct INTEGER NOT NULL,
             charging INTEGER NOT NULL,
             recorded_at INTEGER NOT NULL,
@@ -175,7 +181,29 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
             .map_err(|e| format!("failed to migrate users.email: {e}"))?;
     }
 
+    ensure_column(&conn, "latest_locations", "activity", "TEXT")?;
+    ensure_column(&conn, "latest_locations", "altitude_m", "REAL")?;
+    ensure_column(&conn, "latest_locations", "vertical_speed_mps", "REAL")?;
+    ensure_column(&conn, "location_history", "activity", "TEXT")?;
+    ensure_column(&conn, "location_history", "altitude_m", "REAL")?;
+    ensure_column(&conn, "location_history", "vertical_speed_mps", "REAL")?;
+
     Ok(Arc::new(Mutex::new(conn)))
+}
+
+fn ensure_column(conn: &Connection, table: &str, column: &str, col_type: &str) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|e| format!("failed to inspect {table}: {e}"))?;
+    let cols = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| format!("failed to query table_info({table}): {e}"))?;
+    let exists = cols.flatten().any(|c| c == column);
+    if !exists {
+        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {col_type}"), [])
+            .map_err(|e| format!("failed to migrate {table}.{column}: {e}"))?;
+    }
+    Ok(())
 }
 
 pub fn get_user(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
@@ -322,6 +350,9 @@ pub fn get_partner_location_for(
             accuracy_m: None,
             speed_mps: None,
             bearing: None,
+            activity: None,
+            altitude_m: None,
+            vertical_speed_mps: None,
             battery_pct: None,
             charging: None,
             recorded_at: None,
@@ -330,27 +361,42 @@ pub fn get_partner_location_for(
 
     let loc = conn
         .query_row(
-            "SELECT lat, lon, accuracy_m, speed_mps, bearing, battery_pct, charging, recorded_at
+            "SELECT lat, lon, accuracy_m, speed_mps, bearing, activity, altitude_m, vertical_speed_mps,
+                    battery_pct, charging, recorded_at
              FROM latest_locations WHERE user_id = ?1",
             params![partner_id],
             |row| {
-                let charging_int: i64 = row.get(6)?;
+                let charging_int: i64 = row.get(9)?;
                 Ok((
                     row.get::<_, f64>(0)?,
                     row.get::<_, f64>(1)?,
                     row.get::<_, f64>(2)?,
                     row.get::<_, f64>(3)?,
                     row.get::<_, Option<f64>>(4)?,
-                    row.get::<_, i64>(5)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<f64>>(6)?,
+                    row.get::<_, Option<f64>>(7)?,
+                    row.get::<_, i64>(8)?,
                     charging_int != 0,
-                    row.get::<_, i64>(7)?,
+                    row.get::<_, i64>(10)?,
                 ))
             },
         )
         .optional()?;
 
-    if let Some((lat, lon, accuracy_m, speed_mps, bearing, battery_pct, charging, recorded_at)) =
-        loc
+    if let Some((
+        lat,
+        lon,
+        accuracy_m,
+        speed_mps,
+        bearing,
+        activity,
+        altitude_m,
+        vertical_speed_mps,
+        battery_pct,
+        charging,
+        recorded_at,
+    )) = loc
     {
         Ok(PartnerLocation {
             user_id: partner_id,
@@ -361,6 +407,9 @@ pub fn get_partner_location_for(
             accuracy_m: Some(accuracy_m),
             speed_mps: Some(speed_mps),
             bearing,
+            activity,
+            altitude_m,
+            vertical_speed_mps,
             battery_pct: Some(battery_pct),
             charging: Some(charging),
             recorded_at: Some(recorded_at),
@@ -375,6 +424,9 @@ pub fn get_partner_location_for(
             accuracy_m: None,
             speed_mps: None,
             bearing: None,
+            activity: None,
+            altitude_m: None,
+            vertical_speed_mps: None,
             battery_pct: None,
             charging: None,
             recorded_at: None,

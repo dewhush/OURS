@@ -48,6 +48,26 @@ fn validate_point(p: &LocationPoint) -> AppResult<()> {
     {
         return Err(AppError::bad_request("bearing must be in [0, 360)"));
     }
+    if let Some(ref act) = p.activity
+        && !matches!(
+            act.as_str(),
+            "still" | "walking" | "running" | "cycling" | "driving" | "stairs"
+        )
+    {
+        return Err(AppError::bad_request(
+            "activity must be one of: still, walking, running, cycling, driving, stairs",
+        ));
+    }
+    if let Some(alt) = p.altitude_m
+        && (!alt.is_finite() || !(-500.0..=20000.0).contains(&alt))
+    {
+        return Err(AppError::bad_request("altitude_m out of range"));
+    }
+    if let Some(vs) = p.vertical_speed_mps
+        && (!vs.is_finite() || !(-200.0..=200.0).contains(&vs))
+    {
+        return Err(AppError::bad_request("vertical_speed_mps out of range"));
+    }
     if !(0..=100).contains(&p.battery_pct) {
         return Err(AppError::bad_request("battery_pct must be in [0, 100]"));
     }
@@ -127,8 +147,8 @@ pub async fn post_locations(
             if history_days > 0 {
                 let mut stmt = tx.prepare(
                     "INSERT INTO location_history
-                     (user_id, lat, lon, accuracy_m, speed_mps, bearing, battery_pct, charging, recorded_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                     (user_id, lat, lon, accuracy_m, speed_mps, bearing, activity, altitude_m, vertical_speed_mps, battery_pct, charging, recorded_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 )?;
                 for p in &points {
                     stmt.execute(params![
@@ -138,6 +158,9 @@ pub async fn post_locations(
                         p.accuracy_m,
                         p.speed_mps,
                         p.bearing,
+                        p.activity,
+                        p.altitude_m,
+                        p.vertical_speed_mps,
                         p.battery_pct,
                         i64::from(p.charging),
                         p.recorded_at
@@ -159,14 +182,17 @@ pub async fn post_locations(
             if updated_latest {
                 tx.execute(
                     "INSERT INTO latest_locations
-                     (user_id, lat, lon, accuracy_m, speed_mps, bearing, battery_pct, charging, recorded_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                     (user_id, lat, lon, accuracy_m, speed_mps, bearing, activity, altitude_m, vertical_speed_mps, battery_pct, charging, recorded_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                      ON CONFLICT(user_id) DO UPDATE SET
                        lat = excluded.lat,
                        lon = excluded.lon,
                        accuracy_m = excluded.accuracy_m,
                        speed_mps = excluded.speed_mps,
                        bearing = excluded.bearing,
+                       activity = excluded.activity,
+                       altitude_m = excluded.altitude_m,
+                       vertical_speed_mps = excluded.vertical_speed_mps,
                        battery_pct = excluded.battery_pct,
                        charging = excluded.charging,
                        recorded_at = excluded.recorded_at",
@@ -177,6 +203,9 @@ pub async fn post_locations(
                         newest.accuracy_m,
                         newest.speed_mps,
                         newest.bearing,
+                        newest.activity,
+                        newest.altitude_m,
+                        newest.vertical_speed_mps,
                         newest.battery_pct,
                         i64::from(newest.charging),
                         newest.recorded_at
@@ -366,23 +395,27 @@ pub async fn get_partner_history(
         }
 
         let mut stmt = conn.prepare(
-            "SELECT lat, lon, accuracy_m, speed_mps, bearing, battery_pct, charging, recorded_at
+            "SELECT lat, lon, accuracy_m, speed_mps, bearing, activity, altitude_m, vertical_speed_mps,
+                    battery_pct, charging, recorded_at
              FROM location_history
              WHERE user_id = ?1 AND recorded_at >= ?2 AND recorded_at <= ?3
              ORDER BY recorded_at ASC
              LIMIT 5000",
         )?;
         let rows = stmt.query_map(params![partner_id, since, until], |r| {
-            let charging_int: i64 = r.get(6)?;
+            let charging_int: i64 = r.get(9)?;
             Ok(LocationPoint {
                 lat: r.get(0)?,
                 lon: r.get(1)?,
                 accuracy_m: r.get(2)?,
                 speed_mps: r.get(3)?,
                 bearing: r.get(4)?,
-                battery_pct: r.get(5)?,
+                activity: r.get(5)?,
+                altitude_m: r.get(6)?,
+                vertical_speed_mps: r.get(7)?,
+                battery_pct: r.get(8)?,
                 charging: charging_int != 0,
-                recorded_at: r.get(7)?,
+                recorded_at: r.get(10)?,
             })
         })?;
         let mut pts = Vec::new();
