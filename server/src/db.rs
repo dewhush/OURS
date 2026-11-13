@@ -137,6 +137,17 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
             created_at INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_events_recipient ON events(recipient_id, id);
+
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            author_id INTEGER NOT NULL,
+            text TEXT,
+            photo_id TEXT,
+            reply_to_message_id INTEGER,
+            reply_to_checkin_id INTEGER,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC, id DESC);
         ",
     )
     .map_err(|e| format!("failed to initialize schema: {e}"))?;

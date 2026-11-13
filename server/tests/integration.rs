@@ -654,3 +654,114 @@ async fn websocket_live_events_and_ping() {
     assert_eq!(loc_ev["id"], 0);
     assert_eq!(loc_ev["data"]["lat"], -6.25);
 }
+
+#[tokio::test]
+async fn chat_messages_json_multipart_and_ws() {
+    let app = TestApp::start().await;
+    let (t1, t2, id1, id2) = app.pair_both().await;
+
+    // User 2 connects WS to receive live chat_message events
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(format!("{}/api/ws?token={t2}", app.ws_base_url))
+            .await
+            .expect("ws connect");
+
+    // 1. User 1 sends plain text JSON message
+    let m1_res = app
+        .client
+        .post(format!("{}/api/messages", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"text": "on my way!"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(m1_res.status(), StatusCode::CREATED);
+    let m1: Value = m1_res.json().await.unwrap();
+    let m1_id = m1["id"].as_i64().unwrap();
+    assert_eq!(m1["author_id"], id1);
+    assert_eq!(m1["text"], "on my way!");
+    assert!(m1["photo_id"].is_null());
+
+    // User 2 receives WS chat_message event
+    let ws_frame = tokio::time::timeout(Duration::from_secs(2), ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let ws_ev: Value = serde_json::from_str(&ws_frame.into_text().unwrap()).unwrap();
+    assert_eq!(ws_ev["type"], "chat_message");
+    assert!(ws_ev["id"].as_i64().unwrap() > 0);
+    assert_eq!(ws_ev["data"]["message"]["id"], m1_id);
+    assert_eq!(ws_ev["data"]["message"]["text"], "on my way!");
+
+    // Small delay so created_at differs cleanly for pagination
+    tokio::time::sleep(Duration::from_millis(5)).await;
+
+    // 2. User 2 sends multipart photo + quoted reply to m1
+    let jpeg = make_test_jpeg(600, 400);
+    let form = reqwest::multipart::Form::new()
+        .text("text", "see you soon")
+        .text("reply_to_message_id", m1_id.to_string())
+        .part(
+            "photo",
+            reqwest::multipart::Part::bytes(jpeg)
+                .file_name("msg.jpg")
+                .mime_str("image/jpeg")
+                .unwrap(),
+        );
+    let m2_res = app
+        .client
+        .post(format!("{}/api/messages", app.base_url))
+        .bearer_auth(&t2)
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(m2_res.status(), StatusCode::CREATED);
+    let m2: Value = m2_res.json().await.unwrap();
+    assert_eq!(m2["author_id"], id2);
+    assert_eq!(m2["reply_to_message_id"], m1_id);
+    let m2_photo = m2["photo_id"].as_str().unwrap();
+
+    // Photo thumbnail is reachable with auth
+    let thumb_res = app
+        .client
+        .get(format!("{}/api/photos/{m2_photo}?size=thumb", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(thumb_res.status(), StatusCode::OK);
+
+    // 3. GET /api/messages pagination (newest first)
+    let page1: Value = app
+        .client
+        .get(format!("{}/api/messages?limit=1", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(page1["items"].as_array().unwrap().len(), 1);
+    assert_eq!(page1["items"][0]["id"], m2["id"]);
+    let next_before = page1["next_before"].as_i64().unwrap();
+
+    let page2: Value = app
+        .client
+        .get(format!(
+            "{}/api/messages?before={next_before}&limit=10",
+            app.base_url
+        ))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(page2["items"].as_array().unwrap().len(), 1);
+    assert_eq!(page2["items"][0]["id"], m1_id);
+    assert!(page2["next_before"].is_null());
+}

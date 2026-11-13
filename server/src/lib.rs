@@ -67,6 +67,10 @@ pub fn build_router(state: AppState) -> Router {
             post(routes::checkins::create_reply),
         )
         .route("/api/memories", get(routes::checkins::list_memories))
+        .route(
+            "/api/messages",
+            get(routes::messages::list_messages).post(routes::messages::post_message),
+        )
         .route("/api/photos/{photo_id}", get(photos::get_photo))
         .route("/api/nudge", post(routes::events::nudge))
         .route("/api/events", get(routes::events::get_events))

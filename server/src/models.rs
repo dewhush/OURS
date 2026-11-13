@@ -190,3 +190,20 @@ pub struct MemoriesResponse {
 pub struct EventsResponse {
     pub events: Vec<Event>,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub id: i64,
+    pub author_id: i64,
+    pub text: Option<String>,
+    pub photo_id: Option<String>,
+    pub reply_to_message_id: Option<i64>,
+    pub reply_to_checkin_id: Option<i64>,
+    pub created_at: i64,
+}
+
+#[derive(Serialize)]
+pub struct MessagesResponse {
+    pub items: Vec<ChatMessage>,
+    pub next_before: Option<i64>,
+}

@@ -91,6 +91,20 @@ Places are shared by both users. `radius_m` in [20, 5000].
 ```
 At least one of `text` / `photo_id` is non-null.
 
+**ChatMessage**
+```json
+{
+  "id": 12,
+  "author_id": 1,
+  "text": "on my way!",
+  "photo_id": null,
+  "reply_to_message_id": null,
+  "reply_to_checkin_id": null,
+  "created_at": 1731500200000
+}
+```
+At least one of `text` / `photo_id` is non-null. `reply_to_message_id` and `reply_to_checkin_id` are optional quoted-reply targets (`null` when not replying).
+
 **CheckIn**
 ```json
 {
@@ -124,6 +138,7 @@ Inbox events are kept for 7 days.
 | `location` | `PartnerLocation` | **No.** WebSocket only, `id` is `0`. Do not move the cursor for it. |
 | `checkin` | `{"checkin": CheckIn}` | yes |
 | `reply` | `{"reply": Reply}` | yes |
+| `chat_message` | `{"message": ChatMessage}` | yes |
 | `highlight` | `{"checkin_id": 5, "highlighted": true}` | yes |
 | `sharing` | `{"paused": true}` | yes |
 | `nudge` | `{}` | yes |
@@ -260,6 +275,25 @@ Highlighted check-ins ordered by `created_at` newest first, with `created_at < b
 `limit` default 50, max 200.
 -> `200 {"items": [CheckIn, ...], "next_before": 1731400000000 | null}` (`null` when there are no more).
 
+## Chat messages
+
+Plain text / photo messages for the messenger thread (merged on the client with 24h check-ins by `created_at`).
+
+### `POST /api/messages` (auth, JSON or `multipart/form-data`)
+- **JSON** (`Content-Type: application/json`):
+  ```json
+  {"text": "on my way!", "reply_to_message_id": null, "reply_to_checkin_id": null}
+  ```
+- **Multipart** (`Content-Type: multipart/form-data`):
+  Parts: `text` (max 2000 chars), `photo` (JPEG, max 10 MB), `reply_to_message_id` (integer text), `reply_to_checkin_id` (integer text).
+At least one of `text` or `photo` is required.
+-> `201 ChatMessage`. Sends a `chat_message` event to the partner.
+
+### `GET /api/messages?before=<ms>&limit=<n>` (auth)
+Messages ordered **newest first** (`created_at DESC, id DESC`), with `created_at < before` (default: now),
+`limit` default 50, max 200.
+-> `200 {"items": [ChatMessage, ...], "next_before": 1731400000000 | null}` (`null` when there are no more).
+
 ## Photos
 
 `GET /api/photos/{photo_id}?size=thumb|full` (auth, default `full`) -> `200` JPEG bytes,
@@ -298,6 +332,7 @@ All messages are **data-only, high priority**; every value is a string:
 | `wake` | none | your phone has been quiet for `OURS_STALE_MINUTES`; restart the location service and upload now |
 | `checkin` | `event_id`, `title`, `body`, `checkin_id` | partner posted a check-in |
 | `reply` | `event_id`, `title`, `body`, `checkin_id` | partner replied |
+| `chat_message` | `event_id`, `title`, `body`, `message_id` | partner sent a chat message |
 | `nudge` | `event_id`, `title`, `body` | thinking of you |
 | `place` | `event_id`, `title`, `body`, `place_id`, `transition` | "Marchanda arrived at Home" / "Marchanda left Home" |
 | `highlight` | `event_id`, `title`, `body`, `checkin_id` | partner saved a highlight |
