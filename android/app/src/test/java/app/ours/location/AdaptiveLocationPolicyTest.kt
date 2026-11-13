@@ -62,4 +62,13 @@ class AdaptiveLocationPolicyTest {
         assertFalse(AdaptiveLocationPolicy.isValid(LocationSample(0.0, 0.0, 10.0, -1.0, 1L)))
         assertTrue(AdaptiveLocationPolicy.isValid(LocationSample(-6.2, 106.8, 15.0, 1.2, 1L)))
     }
+
+    @Test
+    fun `validation rejects NaN and Infinity telemetry values`() {
+        assertFalse(AdaptiveLocationPolicy.isValid(LocationSample(Double.NaN, 106.8, 10.0, 0.0, 1L)))
+        assertFalse(AdaptiveLocationPolicy.isValid(LocationSample(-6.2, Double.POSITIVE_INFINITY, 10.0, 0.0, 1L)))
+        assertFalse(AdaptiveLocationPolicy.isValid(LocationSample(-6.2, 106.8, Double.NaN, 0.0, 1L)))
+        assertFalse(AdaptiveLocationPolicy.isValid(LocationSample(-6.2, 106.8, 10.0, Double.NaN, 1L)))
+        assertFalse(AdaptiveLocationPolicy.isValid(LocationSample(-6.2, 106.8, 10.0, Double.POSITIVE_INFINITY, 1L)))
+    }
 }

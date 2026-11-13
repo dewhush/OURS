@@ -54,14 +54,19 @@ class LocationTrackingService : Service() {
         val prefs = app.prefs
 
         val notification = OursNotifier.buildForegroundNotification(this, prefs.sharingPaused)
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(
-                OursNotifier.FOREGROUND_NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-            )
-        } else {
-            startForeground(OursNotifier.FOREGROUND_NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(
+                    OursNotifier.FOREGROUND_NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+                )
+            } else {
+                startForeground(OursNotifier.FOREGROUND_NOTIFICATION_ID, notification)
+            }
+        } catch (_: SecurityException) {
+            stopSelf()
+            return START_NOT_STICKY
         }
 
         if (!prefs.isPaired || prefs.sharingPaused) {
@@ -201,7 +206,9 @@ class LocationTrackingService : Service() {
         val motion = motionPipeline.snapshot(effectiveSpeed, sample.recordedAt)
         val (batteryPct, charging) = readBatteryState()
         val bearing = if (location.hasBearing()) {
-            location.bearing.toDouble().let { if (it >= 360.0) 0.0 else it.coerceAtLeast(0.0) }
+            location.bearing.toDouble()
+                .takeIf { it.isFinite() }
+                ?.let { if (it >= 360.0) 0.0 else it.coerceAtLeast(0.0) }
         } else {
             null
         }
@@ -216,8 +223,8 @@ class LocationTrackingService : Service() {
             charging = charging,
             recordedAt = sample.recordedAt,
             activity = motion.activity.wireName,
-            altitudeM = motion.altitudeM,
-            verticalSpeedMps = motion.verticalSpeedMps,
+            altitudeM = motion.altitudeM?.takeIf { it.isFinite() },
+            verticalSpeedMps = motion.verticalSpeedMps?.takeIf { it.isFinite() },
         )
 
         val app = application as OursApp
@@ -269,10 +276,19 @@ class LocationTrackingService : Service() {
         const val ACTION_WAKE_FIX = "app.ours.action.WAKE_FIX"
 
         fun start(context: Context, wakeFix: Boolean = false) {
+            val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+            if (!fine && !coarse) return
+
             val intent = Intent(context, LocationTrackingService::class.java).apply {
                 action = if (wakeFix) ACTION_WAKE_FIX else ACTION_START
             }
-            ContextCompat.startForegroundService(context, intent)
+            // Android 12+ may throw ForegroundServiceStartNotAllowedException from background receivers/pushes.
+            runCatching {
+                ContextCompat.startForegroundService(context, intent)
+            }
         }
 
         fun stop(context: Context) {

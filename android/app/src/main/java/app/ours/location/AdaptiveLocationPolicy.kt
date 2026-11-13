@@ -102,6 +102,8 @@ object AdaptiveLocationPolicy {
     }
 
     fun isValid(sample: LocationSample): Boolean {
+        if (!sample.lat.isFinite() || !sample.lon.isFinite()) return false
+        if (!sample.accuracyM.isFinite() || !sample.speedMps.isFinite()) return false
         if (sample.lat !in -90.0..90.0) return false
         if (sample.lon !in -180.0..180.0) return false
         if (sample.accuracyM < 0.0 || sample.accuracyM > MAX_ACCEPTABLE_ACCURACY_M) return false

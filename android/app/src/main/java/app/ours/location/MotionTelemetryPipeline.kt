@@ -85,11 +85,16 @@ class MotionTelemetryPipeline(
             }
             Sensor.TYPE_PRESSURE -> {
                 val hpa = event.values.firstOrNull() ?: return
+                if (!hpa.isFinite() || hpa <= 0f) return
                 val altM = SensorManager.getAltitude(SensorManager.PRESSURE_STANDARD_ATMOSPHERE, hpa).toDouble()
+                if (!altM.isFinite()) return
                 val prevAlt = lastAltitudeM
                 val dtSec = (nowMs - lastPressureTimeMs) / 1000.0
                 if (prevAlt != null && dtSec in 0.5..15.0) {
-                    latestVerticalSpeedMps = (altM - prevAlt) / dtSec
+                    val vspeed = (altM - prevAlt) / dtSec
+                    if (vspeed.isFinite()) {
+                        latestVerticalSpeedMps = vspeed
+                    }
                 }
                 lastAltitudeM = altM
                 latestAltitudeM = altM
@@ -100,7 +105,7 @@ class MotionTelemetryPipeline(
                 val y = event.values.getOrNull(1) ?: return
                 val z = event.values.getOrNull(2) ?: return
                 val g = sqrt((x * x + y * y + z * z).toDouble()) / SensorManager.GRAVITY_EARTH
-                if (g >= CRASH_IMPACT_THRESHOLD_G) {
+                if (g.isFinite() && g >= CRASH_IMPACT_THRESHOLD_G) {
                     onImpactCandidate?.invoke(g, nowMs)
                 }
             }

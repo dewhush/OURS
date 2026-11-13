@@ -31,33 +31,50 @@ object PhotoCompressor {
         }
 
         val decodeOpts = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
-        val decoded = resolver.openInputStream(sourceUri)?.use { input ->
-            BitmapFactory.decodeStream(input, null, decodeOpts)
-        } ?: return null
+        var decoded: Bitmap? = null
+        var oriented: Bitmap? = null
+        var scaled: Bitmap? = null
+        var outFile: File? = null
+        return try {
+            decoded = resolver.openInputStream(sourceUri)?.use { input ->
+                BitmapFactory.decodeStream(input, null, decodeOpts)
+            } ?: return null
 
-        val orientation = resolver.openInputStream(sourceUri)?.use { input ->
-            runCatching {
-                ExifInterface(input).getAttributeInt(
-                    ExifInterface.TAG_ORIENTATION,
-                    ExifInterface.ORIENTATION_NORMAL
-                )
-            }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-        } ?: ExifInterface.ORIENTATION_NORMAL
+            val orientation = resolver.openInputStream(sourceUri)?.use { input ->
+                runCatching {
+                    ExifInterface(input).getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+            } ?: ExifInterface.ORIENTATION_NORMAL
 
-        val oriented = rotateIfNeeded(decoded, orientation)
-        val scaled = scaleDownIfNeeded(oriented)
+            oriented = rotateIfNeeded(decoded, orientation)
+            scaled = scaleDownIfNeeded(oriented)
 
-        val uploadsDir = File(context.filesDir, "uploads").apply { mkdirs() }
-        val outFile = File(uploadsDir, "ours_${UUID.randomUUID()}.jpg")
-        FileOutputStream(outFile).use { out ->
-            scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+            val uploadsDir = File(context.filesDir, "uploads").apply { mkdirs() }
+            val target = File(uploadsDir, "ours_${UUID.randomUUID()}.jpg")
+            outFile = target
+            val ok = FileOutputStream(target).use { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+            }
+            if (!ok) {
+                target.delete()
+                null
+            } else {
+                target
+            }
+        } catch (_: OutOfMemoryError) {
+            outFile?.delete()
+            null
+        } catch (_: Exception) {
+            outFile?.delete()
+            null
+        } finally {
+            if (scaled != null && scaled !== oriented) scaled.recycle()
+            if (oriented != null && oriented !== decoded) oriented.recycle()
+            decoded?.recycle()
         }
-
-        if (scaled !== oriented) scaled.recycle()
-        if (oriented !== decoded) oriented.recycle()
-        decoded.recycle()
-
-        return outFile
     }
 
     private fun rotateIfNeeded(bitmap: Bitmap, orientation: Int): Bitmap {

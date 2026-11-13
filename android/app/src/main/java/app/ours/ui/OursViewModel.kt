@@ -622,6 +622,8 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             isPaired = false,
             onboardingDone = false,
             serverUrl = prefs.serverUrl,
+            language = prefs.language,
+            themeMode = prefs.themeMode,
         )
     }
 
