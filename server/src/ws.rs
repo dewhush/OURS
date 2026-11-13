@@ -66,59 +66,80 @@ pub async fn ws_handler(
     Ok(ws.on_upgrade(move |socket| handle_socket(state, user_id, socket)))
 }
 
+async fn send_with_timeout<S>(ws_tx: &mut S, msg: Message) -> bool
+where
+    S: SinkExt<Message> + Unpin,
+{
+    matches!(
+        tokio::time::timeout(Duration::from_secs(10), ws_tx.send(msg)).await,
+        Ok(Ok(()))
+    )
+}
+
 async fn handle_socket(state: AppState, user_id: i64, socket: WebSocket) {
-    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    let conn_id = state.next_ws_conn_id();
+    let (tx, mut rx) = mpsc::channel::<String>(128);
     {
         let mut guard = state.ws_senders.write().await;
-        guard.entry(user_id).or_default().push(tx.clone());
+        guard.entry(user_id).or_default().push((conn_id, tx));
     }
 
     let (mut ws_tx, mut ws_rx) = socket.split();
-    let (pong_tx, mut pong_rx) = mpsc::unbounded_channel::<Message>();
+    let (pong_tx, mut pong_rx) = mpsc::channel::<Message>(16);
 
-    let write_task = tokio::spawn(async move {
+    let mut write_task = tokio::spawn(async move {
         let mut ping_interval = tokio::time::interval(Duration::from_secs(30));
         ping_interval.tick().await;
         loop {
             tokio::select! {
                 _ = ping_interval.tick() => {
-                    if ws_tx.send(Message::Ping(Vec::new().into())).await.is_err() {
+                    if !send_with_timeout(&mut ws_tx, Message::Ping(Vec::new().into())).await {
                         break;
                     }
                 }
-                Some(msg) = pong_rx.recv() => {
-                    if ws_tx.send(msg).await.is_err() {
+                msg = pong_rx.recv() => {
+                    let Some(msg) = msg else { break; };
+                    if !send_with_timeout(&mut ws_tx, msg).await {
                         break;
                     }
                 }
-                Some(text) = rx.recv() => {
-                    if ws_tx.send(Message::Text(text.into())).await.is_err() {
+                text = rx.recv() => {
+                    let Some(text) = text else { break; };
+                    if !send_with_timeout(&mut ws_tx, Message::Text(text.into())).await {
                         break;
                     }
                 }
-                else => break,
             }
         }
+        let _ = tokio::time::timeout(Duration::from_secs(2), ws_tx.close()).await;
     });
 
-    while let Some(Ok(msg)) = ws_rx.next().await {
-        match msg {
-            Message::Text(txt) => {
-                if let Ok(parsed) = serde_json::from_str::<ClientMsg>(&txt)
-                    && parsed.msg_type.as_deref() == Some("ping")
-                {
-                    let _ = pong_tx.send(Message::Text(r#"{"type":"pong"}"#.into()));
+    let read_task = async {
+        while let Some(Ok(msg)) = ws_rx.next().await {
+            match msg {
+                Message::Text(txt) => {
+                    if let Ok(parsed) = serde_json::from_str::<ClientMsg>(&txt)
+                        && parsed.msg_type.as_deref() == Some("ping")
+                    {
+                        let _ = pong_tx.try_send(Message::Text(r#"{"type":"pong"}"#.into()));
+                    }
                 }
+                Message::Close(_) => break,
+                _ => {}
             }
-            Message::Close(_) => break,
-            _ => {}
+        }
+    };
+
+    tokio::select! {
+        _ = &mut write_task => {},
+        _ = read_task => {
+            write_task.abort();
         }
     }
 
-    write_task.abort();
     let mut guard = state.ws_senders.write().await;
     if let Some(list) = guard.get_mut(&user_id) {
-        list.retain(|s| !s.same_channel(&tx));
+        list.retain(|(id, _)| *id != conn_id);
         if list.is_empty() {
             guard.remove(&user_id);
         }

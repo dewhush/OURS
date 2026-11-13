@@ -1037,3 +1037,32 @@ async fn logout_revokes_refresh_token_and_create_rate_limits() {
         .unwrap();
     assert_eq!(orphan_res.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn logout_closes_active_websocket_connections() {
+    let app = TestApp::start().await;
+    let (t1, _t2, _id1, _id2) = app.pair_both().await;
+
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(format!("{}/api/ws?token={t1}", app.ws_base_url))
+            .await
+            .expect("ws connect");
+
+    let out = app
+        .client
+        .post(format!("{}/api/auth/logout", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(out.status(), StatusCode::NO_CONTENT);
+
+    // WebSocket must close immediately upon logout
+    let frame = tokio::time::timeout(Duration::from_secs(2), ws.next())
+        .await
+        .expect("ws close should not time out");
+    assert!(
+        frame.is_none() || matches!(frame, Some(Ok(WsMessage::Close(_))) | Some(Err(_))),
+        "expected WS close after logout, got {frame:?}"
+    );
+}

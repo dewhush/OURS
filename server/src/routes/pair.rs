@@ -310,6 +310,8 @@ pub async fn logout(
     })
     .await??;
 
+    state.disconnect_ws(user_id).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -375,6 +377,8 @@ pub async fn set_push_token(
         Ok(())
     })
     .await??;
+
+    state.disconnect_ws(user_id).await;
 
     Ok(StatusCode::NO_CONTENT)
 }

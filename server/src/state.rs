@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -10,7 +11,7 @@ use crate::error::{AppError, AppResult};
 use crate::fcm::FcmClient;
 use crate::models::Event;
 
-pub type WsSenders = Arc<RwLock<HashMap<i64, Vec<mpsc::UnboundedSender<String>>>>>;
+pub type WsSenders = Arc<RwLock<HashMap<i64, Vec<(u64, mpsc::Sender<String>)>>>>;
 
 #[derive(Clone, Default)]
 pub struct SlidingLimiter {
@@ -44,6 +45,7 @@ pub struct AppState {
     pub db: Db,
     pub ws_senders: WsSenders,
     pub fcm: FcmClient,
+    next_ws_id: Arc<AtomicU64>,
     join_failures: SlidingLimiter,
     create_failures: SlidingLimiter,
     refresh_failures: SlidingLimiter,
@@ -56,10 +58,15 @@ impl AppState {
             db,
             ws_senders: Arc::new(RwLock::new(HashMap::new())),
             fcm,
+            next_ws_id: Arc::new(AtomicU64::new(1)),
             join_failures: SlidingLimiter::default(),
             create_failures: SlidingLimiter::default(),
             refresh_failures: SlidingLimiter::default(),
         }
+    }
+
+    pub fn next_ws_conn_id(&self) -> u64 {
+        self.next_ws_id.fetch_add(1, Ordering::Relaxed)
     }
 
     pub fn check_join_rate_limit(&self) -> AppResult<()> {
@@ -104,10 +111,14 @@ impl AppState {
         };
         let mut guard = self.ws_senders.write().await;
         if let Some(senders) = guard.get_mut(&recipient_id) {
-            senders.retain(|tx| tx.send(json.clone()).is_ok());
+            senders.retain(|(_, tx)| tx.try_send(json.clone()).is_ok());
             if senders.is_empty() {
                 guard.remove(&recipient_id);
             }
         }
+    }
+
+    pub async fn disconnect_ws(&self, user_id: i64) {
+        self.ws_senders.write().await.remove(&user_id);
     }
 }
