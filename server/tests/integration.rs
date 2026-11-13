@@ -64,7 +64,7 @@ impl TestApp {
             .client
             .post(format!("{}/api/pair/create", self.base_url))
             .header("X-Setup-Key", "test-setup-key")
-            .json(&json!({"name": "Dewa"}))
+            .json(&json!({"name": "Dewantoro"}))
             .send()
             .await
             .unwrap()
@@ -121,7 +121,7 @@ async fn pairing_and_refresh_flow() {
         .client
         .post(format!("{}/api/pair/create", app.base_url))
         .header("X-Setup-Key", "wrong")
-        .json(&json!({"name": "Dewa"}))
+        .json(&json!({"name": "Dewantoro"}))
         .send()
         .await
         .unwrap();
@@ -132,7 +132,7 @@ async fn pairing_and_refresh_flow() {
         .client
         .post(format!("{}/api/pair/create", app.base_url))
         .header("X-Setup-Key", "test-setup-key")
-        .json(&json!({"name": "Dewa"}))
+        .json(&json!({"name": "Dewantoro"}))
         .send()
         .await
         .unwrap();
@@ -208,7 +208,7 @@ async fn pairing_and_refresh_flow() {
         .json()
         .await
         .unwrap();
-    assert_eq!(me["me"]["name"], "Dewa");
+    assert_eq!(me["me"]["name"], "Dewantoro");
     assert_eq!(me["partner"]["name"], "Marchanda");
 
     // Refresh token rotation

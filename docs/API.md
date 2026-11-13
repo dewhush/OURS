@@ -35,7 +35,7 @@ commit is announced to `@android` on the board.
 
 **User**
 ```json
-{"id": 1, "name": "Dewa", "created_at": 1731500000000}
+{"id": 1, "name": "Dewantoro", "created_at": 1731500000000}
 ```
 
 **Tokens**
@@ -153,7 +153,7 @@ Inbox events are kept for 7 days.
 ### `POST /api/pair/create`
 First phone only. Header `X-Setup-Key: <OURS_SETUP_KEY>`. Only works while zero users exist.
 ```json
-{"name": "Dewa"}
+{"name": "Dewantoro"}
 ```
 `name`: 1-40 chars after trimming.
 -> `201`
