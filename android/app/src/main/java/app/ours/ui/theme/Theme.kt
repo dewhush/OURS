@@ -7,6 +7,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
+
+val LocalOursIsDark = staticCompositionLocalOf { false }
 
 object OursTheme {
     val colors: OursColors
@@ -18,6 +21,11 @@ object OursTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalOursStrings.current
+
+    val isDark: Boolean
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalOursIsDark.current
 }
 
 @Composable
@@ -59,6 +67,7 @@ fun OursTheme(
     CompositionLocalProvider(
         LocalOursColors provides colors,
         LocalOursStrings provides strings,
+        LocalOursIsDark provides darkTheme,
     ) {
         MaterialTheme(
             colorScheme = m3Scheme,

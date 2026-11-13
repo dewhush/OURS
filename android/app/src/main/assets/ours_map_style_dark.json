@@ -1,0 +1,176 @@
+{
+  "version": 8,
+  "name": "OURS Monochrome Dark",
+  "sources": {
+    "openmaptiles": {
+      "type": "vector",
+      "url": "https://tiles.openfreemap.org/planet"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#0F0F0E"
+      }
+    },
+    {
+      "id": "landuse_residential",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landuse",
+      "filter": ["==", "class", "residential"],
+      "paint": {
+        "fill-color": "#141413"
+      }
+    },
+    {
+      "id": "landcover_green",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landcover",
+      "filter": ["in", "class", "grass", "wood", "park", "forest"],
+      "paint": {
+        "fill-color": "#181816"
+      }
+    },
+    {
+      "id": "landuse_park",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landuse",
+      "filter": ["in", "class", "park", "cemetery", "pitch", "playground", "recreation_ground"],
+      "paint": {
+        "fill-color": "#1B1B19"
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#161615"
+      }
+    },
+    {
+      "id": "waterway",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "waterway",
+      "paint": {
+        "line-color": "#20201E",
+        "line-width": 1.6
+      }
+    },
+    {
+      "id": "building",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "building",
+      "minzoom": 13,
+      "paint": {
+        "fill-color": "#1C1C1A",
+        "fill-outline-color": "#262623"
+      }
+    },
+    {
+      "id": "road_service_casing",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 13,
+      "filter": ["in", "class", "service", "track", "path"],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#1F1F1D",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 13, 0.8, 17, 3.0]
+      }
+    },
+    {
+      "id": "road_minor",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 11,
+      "filter": ["in", "class", "minor", "tertiary"],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#2C2C2A",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.0, 16, 6.0]
+      }
+    },
+    {
+      "id": "road_secondary",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "minzoom": 8,
+      "filter": ["==", "class", "secondary"],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#383835",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.2, 16, 7.5]
+      }
+    },
+    {
+      "id": "road_primary",
+      "type": "line",
+      "source": "openmaptiles",
+      "source-layer": "transportation",
+      "filter": ["in", "class", "primary", "trunk", "motorway"],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#4A4A46",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.4, 16, 8.5]
+      }
+    },
+    {
+      "id": "place_city",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "place",
+      "filter": ["in", "class", "city", "town", "village", "suburb", "neighbourhood"],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:en"], ["get", "name"]],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 6, 11, 14, 14],
+        "text-max-width": 8
+      },
+      "paint": {
+        "text-color": "#FAF8F4",
+        "text-halo-color": "#0F0F0E",
+        "text-halo-width": 1.6
+      }
+    },
+    {
+      "id": "road_label",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "transportation_name",
+      "minzoom": 13,
+      "layout": {
+        "symbol-placement": "line",
+        "text-field": ["get", "name"],
+        "text-size": 11
+      },
+      "paint": {
+        "text-color": "#A8A6A0",
+        "text-halo-color": "#0F0F0E",
+        "text-halo-width": 1.4
+      }
+    }
+  ]
+}

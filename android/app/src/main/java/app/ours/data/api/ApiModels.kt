@@ -101,6 +101,9 @@ data class LocationPointDto(
     @SerialName("battery_pct") val batteryPct: Int,
     val charging: Boolean,
     @SerialName("recorded_at") val recordedAt: Long,
+    val activity: String? = null,
+    @SerialName("altitude_m") val altitudeM: Double? = null,
+    @SerialName("vertical_speed_mps") val verticalSpeedMps: Double? = null,
 )
 
 @Serializable
@@ -116,6 +119,9 @@ data class PartnerLocationDto(
     @SerialName("battery_pct") val batteryPct: Int? = null,
     val charging: Boolean? = null,
     @SerialName("recorded_at") val recordedAt: Long? = null,
+    val activity: String? = null,
+    @SerialName("altitude_m") val altitudeM: Double? = null,
+    @SerialName("vertical_speed_mps") val verticalSpeedMps: Double? = null,
 )
 
 @Serializable

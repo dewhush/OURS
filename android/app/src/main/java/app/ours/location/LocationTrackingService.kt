@@ -29,6 +29,7 @@ class LocationTrackingService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var locationManager: LocationManager
+    private lateinit var motionPipeline: MotionTelemetryPipeline
     private var currentConfig = SamplingConfig(
         intervalMs = AdaptiveLocationPolicy.MOVING_INTERVAL_MS,
         minDistanceMeters = AdaptiveLocationPolicy.MOVING_MIN_DISTANCE_M,
@@ -44,6 +45,8 @@ class LocationTrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        motionPipeline = MotionTelemetryPipeline(this)
+        motionPipeline.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -87,6 +90,7 @@ class LocationTrackingService : Service() {
     }
 
     override fun onDestroy() {
+        motionPipeline.stop()
         stopLocationUpdates()
         scope.cancel()
         super.onDestroy()
@@ -184,12 +188,17 @@ class LocationTrackingService : Service() {
         )
         if (!AdaptiveLocationPolicy.isValid(sample)) return
 
+        val isDrift = AdaptiveLocationPolicy.isStationaryDrift(sample, lastSample)
         val nextCfg = AdaptiveLocationPolicy.nextConfig(sample, lastSample)
-        lastSample = sample
+        if (!isDrift) {
+            lastSample = sample
+        }
         if (nextCfg.intervalMs != currentConfig.intervalMs) {
             registerUpdates(nextCfg)
         }
 
+        val effectiveSpeed = if (isDrift) 0.0 else sample.speedMps
+        val motion = motionPipeline.snapshot(effectiveSpeed, sample.recordedAt)
         val (batteryPct, charging) = readBatteryState()
         val bearing = if (location.hasBearing()) {
             location.bearing.toDouble().let { if (it >= 360.0) 0.0 else it.coerceAtLeast(0.0) }
@@ -201,11 +210,14 @@ class LocationTrackingService : Service() {
             lat = sample.lat,
             lon = sample.lon,
             accuracyM = sample.accuracyM,
-            speedMps = sample.speedMps,
+            speedMps = effectiveSpeed,
             bearing = bearing,
             batteryPct = batteryPct,
             charging = charging,
             recordedAt = sample.recordedAt,
+            activity = motion.activity.wireName,
+            altitudeM = motion.altitudeM,
+            verticalSpeedMps = motion.verticalSpeedMps,
         )
 
         val app = application as OursApp

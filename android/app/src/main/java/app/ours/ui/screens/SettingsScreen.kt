@@ -2,6 +2,8 @@ package app.ours.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.ours.ui.OursUiState
@@ -42,6 +45,7 @@ import app.ours.ui.components.OursCard
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
+import app.ours.ui.components.oursPressScale
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -141,6 +145,23 @@ fun SettingsScreen(
                     LanguagePillToggle(
                         current = state.language,
                         onSelect = { vm.setLanguage(it) },
+                    )
+                }
+
+                HorizontalDivider(thickness = 1.dp, color = colors.border)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(OursSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(strings.themeTitle, style = OursTypography.title, color = colors.ink)
+                    ThemePillToggle(
+                        current = state.themeMode,
+                        labels = Triple(strings.themeSystem, strings.themeLight, strings.themeDark),
+                        onSelect = { vm.setThemeMode(it) },
                     )
                 }
 
@@ -356,6 +377,54 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+    }
+}
+
+@Composable
+private fun ThemePillToggle(
+    current: String,
+    labels: Triple<String, String, String>,
+    onSelect: (String) -> Unit,
+) {
+    val colors = OursTheme.colors
+    val options = listOf(
+        "system" to labels.first,
+        "light" to labels.second,
+        "dark" to labels.third,
+    )
+    Surface(
+        shape = RoundedCornerShape(OursRadius.chip),
+        color = colors.surfaceMuted,
+        border = BorderStroke(1.dp, colors.border),
+    ) {
+        Row(
+            modifier = Modifier.padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            options.forEach { (mode, label) ->
+                val selected = current == mode
+                val interactionSource = remember { MutableInteractionSource() }
+                Surface(
+                    modifier = Modifier
+                        .oursPressScale(interactionSource)
+                        .clip(RoundedCornerShape(OursRadius.chip))
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = { onSelect(mode) },
+                        ),
+                    shape = RoundedCornerShape(OursRadius.chip),
+                    color = if (selected) colors.action else colors.surfaceMuted,
+                ) {
+                    Text(
+                        text = label,
+                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (selected) colors.onAction else colors.inkSecondary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+            }
         }
     }
 }

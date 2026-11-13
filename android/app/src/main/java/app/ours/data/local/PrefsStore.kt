@@ -21,13 +21,23 @@ class PrefsStore(context: Context) {
         get() = prefs.getString(KEY_LANGUAGE, "en") ?: "en"
         set(value) = prefs.edit().putString(KEY_LANGUAGE, if (value == "id") "id" else "en").apply()
 
+    var themeMode: String
+        get() = prefs.getString(KEY_THEME_MODE, "system") ?: "system"
+        set(value) {
+            val normalized = when (value) {
+                "light", "dark" -> value
+                else -> "system"
+            }
+            prefs.edit().putString(KEY_THEME_MODE, normalized).apply()
+        }
+
     var accessToken: String?
-        get() = prefs.getString(KEY_ACCESS_TOKEN, null)
-        private set(value) = prefs.edit().putString(KEY_ACCESS_TOKEN, value).apply()
+        get() = TokenCipher.decrypt(prefs.getString(KEY_ACCESS_TOKEN, null))
+        private set(value) = prefs.edit().putString(KEY_ACCESS_TOKEN, TokenCipher.encrypt(value)).apply()
 
     var refreshToken: String?
-        get() = prefs.getString(KEY_REFRESH_TOKEN, null)
-        private set(value) = prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
+        get() = TokenCipher.decrypt(prefs.getString(KEY_REFRESH_TOKEN, null))
+        private set(value) = prefs.edit().putString(KEY_REFRESH_TOKEN, TokenCipher.encrypt(value)).apply()
 
     var accessExpiresAt: Long
         get() = prefs.getLong(KEY_ACCESS_EXPIRES_AT, 0L)
@@ -93,9 +103,9 @@ class PrefsStore(context: Context) {
 
     fun saveTokens(tokens: TokensDto) {
         prefs.edit()
-            .putString(KEY_ACCESS_TOKEN, tokens.accessToken)
+            .putString(KEY_ACCESS_TOKEN, TokenCipher.encrypt(tokens.accessToken))
             .putLong(KEY_ACCESS_EXPIRES_AT, tokens.accessExpiresAt)
-            .putString(KEY_REFRESH_TOKEN, tokens.refreshToken)
+            .putString(KEY_REFRESH_TOKEN, TokenCipher.encrypt(tokens.refreshToken))
             .putLong(KEY_REFRESH_EXPIRES_AT, tokens.refreshExpiresAt)
             .apply()
     }
@@ -117,14 +127,17 @@ class PrefsStore(context: Context) {
     fun clearSession() {
         val savedServerUrl = serverUrl
         val savedLang = language
+        val savedTheme = themeMode
         prefs.edit().clear().apply()
         serverUrl = savedServerUrl
         language = savedLang
+        themeMode = savedTheme
     }
 
     companion object {
         private const val KEY_SERVER_URL = "server_url"
         private const val KEY_LANGUAGE = "language"
+        private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_ACCESS_EXPIRES_AT = "access_expires_at"
         private const val KEY_REFRESH_TOKEN = "refresh_token"

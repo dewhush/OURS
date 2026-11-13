@@ -41,7 +41,7 @@ class OursApiClient(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
-        .pingInterval(30, TimeUnit.SECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)
         .build()
 
     fun createImageLoader(context: Context): ImageLoader {

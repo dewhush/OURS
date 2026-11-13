@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -110,7 +111,12 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val state by vm.state.collectAsStateWithLifecycle()
-            OursTheme(language = state.language) {
+            val darkTheme = when (state.themeMode) {
+                "light" -> false
+                "dark" -> true
+                else -> isSystemInDarkTheme()
+            }
+            OursTheme(darkTheme = darkTheme, language = state.language) {
                 var showSplash by remember { mutableStateOf(true) }
                 LaunchedEffect(Unit) {
                     delay(650)

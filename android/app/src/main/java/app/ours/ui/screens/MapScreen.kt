@@ -148,9 +148,13 @@ fun MapScreen(
                             if (loc.charging == true) "$pct% charging" else "$pct%"
                         } ?: "--%"
                         val speedText = Formatters.speedKmh(loc.speedMps)
+                        val activityPrefix = loc.activity
+                            ?.takeIf { it.isNotBlank() && it != "still" }
+                            ?.replaceFirstChar { it.uppercase() }
+                            ?.let { "$it · " } ?: ""
                         val updatedText = loc.recordedAt?.let { Formatters.relativeTime(it, nowMs) } ?: "--"
                         Text(
-                            text = "$speedText  |  $batteryText  |  $updatedText",
+                            text = "$activityPrefix$speedText  |  $batteryText  |  $updatedText",
                             style = OursTypography.tabular,
                             color = colors.inkSecondary,
                         )

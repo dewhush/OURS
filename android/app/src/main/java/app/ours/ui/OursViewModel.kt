@@ -43,6 +43,7 @@ data class OursUiState(
     val isPaired: Boolean = false,
     val onboardingDone: Boolean = false,
     val language: String = "en",
+    val themeMode: String = "system",
     val serverUrl: String = "",
     val inviteCode: String? = null,
     val me: UserDto? = null,
@@ -80,6 +81,7 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             isPaired = prefs.isPaired,
             onboardingDone = prefs.onboardingDone,
             language = prefs.language,
+            themeMode = prefs.themeMode,
             serverUrl = prefs.serverUrl,
             inviteCode = prefs.inviteCode,
             me = if (prefs.userId > 0 && prefs.userName != null) {
@@ -152,6 +154,11 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
     fun setLanguage(lang: String) {
         prefs.language = lang
         _state.update { it.copy(language = prefs.language) }
+    }
+
+    fun setThemeMode(mode: String) {
+        prefs.themeMode = mode
+        _state.update { it.copy(themeMode = prefs.themeMode) }
     }
 
     fun clearError() {

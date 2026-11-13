@@ -1,9 +1,19 @@
 package app.ours.location
 
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+
+enum class MotionActivity(val wireName: String) {
+    STILL("still"),
+    WALKING("walking"),
+    RUNNING("running"),
+    CYCLING("cycling"),
+    DRIVING("driving"),
+    STAIRS("stairs"),
+}
 
 data class SamplingConfig(
     val intervalMs: Long,
@@ -20,19 +30,28 @@ data class LocationSample(
 )
 
 object AdaptiveLocationPolicy {
-    const val MOVING_INTERVAL_MS = 30_000L
-    const val STATIONARY_INTERVAL_MS = 300_000L
-    const val MOVING_MIN_DISTANCE_M = 10f
-    const val STATIONARY_MIN_DISTANCE_M = 25f
+    const val MOVING_INTERVAL_MS = 5_000L
+    const val STATIONARY_INTERVAL_MS = 180_000L
+    const val MOVING_MIN_DISTANCE_M = 5f
+    const val STATIONARY_MIN_DISTANCE_M = 20f
 
-    const val MOVING_SPEED_THRESHOLD_MPS = 1.0
-    const val SIGNIFICANT_DISPLACEMENT_M = 35.0
+    const val MOVING_SPEED_THRESHOLD_MPS = 0.9
+    const val SIGNIFICANT_DISPLACEMENT_M = 25.0
     const val MAX_ACCEPTABLE_ACCURACY_M = 500.0
+    const val DRIFT_ACCURACY_THRESHOLD_M = 25.0
+    const val DRIFT_MAX_SPEED_MPS = 1.2
 
     fun nextConfig(
         current: LocationSample,
         previous: LocationSample?,
     ): SamplingConfig {
+        if (isStationaryDrift(current, previous)) {
+            return SamplingConfig(
+                intervalMs = STATIONARY_INTERVAL_MS,
+                minDistanceMeters = STATIONARY_MIN_DISTANCE_M,
+                isMoving = false,
+            )
+        }
         val movedBySpeed = current.speedMps >= MOVING_SPEED_THRESHOLD_MPS
         val movedByDistance = previous != null &&
             distanceMeters(previous.lat, previous.lon, current.lat, current.lon) >= SIGNIFICANT_DISPLACEMENT_M
@@ -50,6 +69,36 @@ object AdaptiveLocationPolicy {
                 isMoving = false,
             )
         }
+    }
+
+    /**
+     * Rejects noisy indoor/stationary GPS drift when accuracy is poor and displacement
+     * falls well inside the accuracy radius at low reported speed.
+     */
+    fun isStationaryDrift(
+        current: LocationSample,
+        previous: LocationSample?,
+    ): Boolean {
+        if (previous == null) return false
+        if (current.accuracyM <= DRIFT_ACCURACY_THRESHOLD_M) return false
+        if (current.speedMps >= DRIFT_MAX_SPEED_MPS) return false
+        val disp = distanceMeters(previous.lat, previous.lon, current.lat, current.lon)
+        return disp < current.accuracyM * 0.8
+    }
+
+    fun classifyActivity(
+        speedMps: Double,
+        stepCadenceHz: Double = 0.0,
+        verticalSpeedMps: Double = 0.0,
+    ): MotionActivity {
+        if (speedMps >= 8.5) return MotionActivity.DRIVING
+        if (abs(verticalSpeedMps) >= 0.25 && speedMps < 4.5 && (stepCadenceHz >= 0.4 || speedMps >= 0.3)) {
+            return MotionActivity.STAIRS
+        }
+        if (speedMps >= 4.5 && stepCadenceHz < 1.2) return MotionActivity.CYCLING
+        if (speedMps >= 2.6 || stepCadenceHz >= 2.4) return MotionActivity.RUNNING
+        if (speedMps >= 0.6 || stepCadenceHz >= 0.5) return MotionActivity.WALKING
+        return MotionActivity.STILL
     }
 
     fun isValid(sample: LocationSample): Boolean {
