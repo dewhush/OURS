@@ -7,8 +7,15 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +51,8 @@ import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
+import app.ours.ui.components.oursPressScale
+import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -78,7 +87,6 @@ fun OnboardingScreen(
 
     var pairModeCreate by remember { mutableStateOf(true) }
     var myName by remember { mutableStateOf("") }
-    var setupKey by remember { mutableStateOf("") }
     var inviteCodeInput by remember { mutableStateOf("") }
 
     val googlePickerLauncher = rememberLauncherForActivityResult(
@@ -163,8 +171,23 @@ fun OnboardingScreen(
             )
         }
 
-        when (step) {
-            0 -> {
+        AnimatedContent(
+            targetState = step,
+            transitionSpec = {
+                val forward = targetState >= initialState
+                (fadeIn(OursMotion.enterSpec()) + slideInHorizontally(OursMotion.enterSpec()) { w ->
+                    if (forward) w / 6 else -w / 6
+                }).togetherWith(
+                    fadeOut(OursMotion.exitSpec()) + slideOutHorizontally(OursMotion.exitSpec()) { w ->
+                        if (forward) -w / 6 else w / 6
+                    }
+                )
+            },
+            label = "onboardingStep",
+        ) { currentStep ->
+            Column(verticalArrangement = Arrangement.spacedBy(OursSpacing.md)) {
+                when (currentStep) {
+                    0 -> {
                 Text(strings.connectGmailTitle, style = OursTypography.display, color = colors.ink)
                 Text(
                     strings.connectGmailSubtitle,
@@ -253,15 +276,7 @@ fun OnboardingScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                if (pairModeCreate) {
-                    OutlinedTextField(
-                        value = setupKey,
-                        onValueChange = { setupKey = it },
-                        label = { Text(strings.setupKeyLabel) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
+                if (!pairModeCreate) {
                     OutlinedTextField(
                         value = inviteCodeInput,
                         onValueChange = { inviteCodeInput = it.uppercase() },
@@ -278,11 +293,11 @@ fun OnboardingScreen(
                 OursButton(
                     text = if (pairModeCreate) strings.createPair else strings.joinWithCode,
                     loading = state.busy,
-                    enabled = myName.isNotBlank() && (if (pairModeCreate) setupKey.isNotBlank() else inviteCodeInput.isNotBlank()),
+                    enabled = myName.isNotBlank() && (pairModeCreate || inviteCodeInput.isNotBlank()),
                     onClick = {
                         val email = gmailAddress.trim().takeIf { it.isNotBlank() }
                         if (pairModeCreate) {
-                            vm.createPair(serverUrl, setupKey, myName, email) { step = 2 }
+                            vm.createPair(serverUrl, "", myName, email) { step = 2 }
                         } else {
                             vm.joinPair(serverUrl, inviteCodeInput, myName, email) { step = 2 }
                         }
@@ -434,6 +449,8 @@ fun OnboardingScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+                }
+            }
         }
     }
 
@@ -500,12 +517,16 @@ fun LanguagePillToggle(
         ) {
             listOf("en" to "EN", "id" to "ID").forEach { (code, label) ->
                 val selected = current == code
+                val interactionSource = remember { MutableInteractionSource() }
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = if (selected) colors.action else colors.surfaceMuted,
                     modifier = Modifier
+                        .oursPressScale(interactionSource)
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { onSelect(code) },
+                        .clickable(interactionSource = interactionSource, indication = null) {
+                            onSelect(code)
+                        },
                 ) {
                     Text(
                         text = label,

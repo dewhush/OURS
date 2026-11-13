@@ -1,5 +1,7 @@
 package app.ours.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -21,8 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.ours.ui.theme.OursMotion
+import app.ours.ui.theme.OursRadius
 import app.ours.ui.OursUiState
 import app.ours.ui.OursViewModel
 import app.ours.ui.components.OursAvatar
@@ -49,6 +56,22 @@ fun MapScreen(
     val strings = OursTheme.strings
     var recenterTrigger by remember { mutableIntStateOf(0) }
     var showPartnerSheet by remember { mutableStateOf(false) }
+    var nudgePulseKey by remember { mutableIntStateOf(0) }
+    val nudgeRingScale = remember { Animatable(1f) }
+    val nudgeRingAlpha = remember { Animatable(0f) }
+
+    LaunchedEffect(nudgePulseKey) {
+        if (nudgePulseKey > 0) {
+            nudgeRingScale.snapTo(1f)
+            nudgeRingAlpha.snapTo(0.75f)
+            nudgeRingScale.animateTo(1.22f, OursMotion.enterSpec(240))
+        }
+    }
+    LaunchedEffect(nudgePulseKey) {
+        if (nudgePulseKey > 0) {
+            nudgeRingAlpha.animateTo(0f, OursMotion.enterSpec(240))
+        }
+    }
 
     val partnerName = state.partner?.name ?: "Partner"
     val loc = state.partnerLocation
@@ -170,18 +193,33 @@ fun MapScreen(
                 },
                 modifier = Modifier.weight(1f),
             )
-            OursButton(
-                text = strings.nudge,
-                variant = OursButtonVariant.Secondary,
-                onClick = { vm.sendNudge() },
-                leadingIcon = {
-                    Icon(
-                        imageVector = OursIcons.Heart,
-                        contentDescription = strings.nudge,
-                        modifier = Modifier.size(18.dp),
-                    )
-                },
-            )
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            scaleX = nudgeRingScale.value
+                            scaleY = nudgeRingScale.value
+                            alpha = nudgeRingAlpha.value
+                        }
+                        .border(2.dp, colors.action, RoundedCornerShape(OursRadius.control)),
+                )
+                OursButton(
+                    text = strings.nudge,
+                    variant = OursButtonVariant.Secondary,
+                    onClick = {
+                        nudgePulseKey++
+                        vm.sendNudge()
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = OursIcons.Heart,
+                            contentDescription = strings.nudge,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                )
+            }
             OursButton(
                 text = strings.center,
                 variant = OursButtonVariant.Secondary,

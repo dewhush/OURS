@@ -1,11 +1,15 @@
 package app.ours.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.composed
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -414,5 +418,51 @@ fun OursSendConfirmation(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun OursStaggeredItem(
+    index: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val alpha = remember { Animatable(0f) }
+    val offsetY = remember { Animatable(12f) }
+
+    LaunchedEffect(Unit) {
+        val delayMs = (index.coerceIn(0, 6) * OursMotion.STAGGER_MS).toLong()
+        if (delayMs > 0) delay(delayMs)
+        alpha.animateTo(1f, OursMotion.enterSpec())
+    }
+    LaunchedEffect(Unit) {
+        val delayMs = (index.coerceIn(0, 6) * OursMotion.STAGGER_MS).toLong()
+        if (delayMs > 0) delay(delayMs)
+        offsetY.animateTo(0f, OursMotion.enterSpec())
+    }
+
+    Box(
+        modifier = modifier.graphicsLayer {
+            this.alpha = alpha.value
+            this.translationY = offsetY.value * density
+        },
+    ) {
+        content()
+    }
+}
+
+fun Modifier.oursPressScale(
+    interactionSource: MutableInteractionSource,
+    enabled: Boolean = true,
+): Modifier = composed {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) OursMotion.PRESS_SCALE else 1f,
+        animationSpec = OursMotion.enterSpec(150),
+        label = "pressScale",
+    )
+    this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
     }
 }

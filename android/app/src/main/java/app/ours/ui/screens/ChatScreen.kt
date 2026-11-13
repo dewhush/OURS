@@ -3,6 +3,7 @@ package app.ours.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,7 @@ import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursLoadingState
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
+import app.ours.ui.components.oursPressScale
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -567,12 +569,14 @@ private fun CheckInBubble(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
                     ) {
+                        val saveInteraction = remember { MutableInteractionSource() }
                         Surface(
                             shape = RoundedCornerShape(OursRadius.chip),
                             color = if (checkIn.highlighted) colors.actionSoft else colors.surfaceMuted,
                             modifier = Modifier
+                                .oursPressScale(saveInteraction)
                                 .clip(RoundedCornerShape(OursRadius.chip))
-                                .clickable(onClick = onToggleHighlight),
+                                .clickable(interactionSource = saveInteraction, indication = null, onClick = onToggleHighlight),
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

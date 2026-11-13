@@ -8,11 +8,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -120,6 +126,30 @@ class MainActivity : ComponentActivity() {
 private fun OursSplashOverlay() {
     val colors = OursTheme.colors
     val strings = OursTheme.strings
+
+    val iconScale = remember { Animatable(0.88f) }
+    val iconOffsetY = remember { Animatable(12f) }
+    val pulseScale = remember { Animatable(0.92f) }
+    val pulseAlpha = remember { Animatable(0.55f) }
+    val textAlpha = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        iconScale.animateTo(1f, OursMotion.enterSpec(240))
+    }
+    LaunchedEffect(Unit) {
+        iconOffsetY.animateTo(0f, OursMotion.enterSpec(240))
+    }
+    LaunchedEffect(Unit) {
+        pulseScale.animateTo(1.28f, OursMotion.enterSpec(480))
+    }
+    LaunchedEffect(Unit) {
+        pulseAlpha.animateTo(0f, OursMotion.enterSpec(480))
+    }
+    LaunchedEffect(Unit) {
+        delay(90)
+        textAlpha.animateTo(1f, OursMotion.enterSpec(220))
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -130,27 +160,50 @@ private fun OursSplashOverlay() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(OursSpacing.sm),
         ) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = Color(0xFF0F0F0E),
-                modifier = Modifier.size(88.dp),
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(88.dp)
+                        .graphicsLayer {
+                            scaleX = pulseScale.value
+                            scaleY = pulseScale.value
+                            alpha = pulseAlpha.value
+                        }
+                        .border(2.dp, colors.action, RoundedCornerShape(24.dp)),
+                )
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFF0F0F0E),
+                    modifier = Modifier
+                        .size(88.dp)
+                        .graphicsLayer {
+                            scaleX = iconScale.value
+                            scaleY = iconScale.value
+                            translationY = iconOffsetY.value * density
+                        },
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                        contentDescription = "OURS",
+                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                    )
+                }
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.graphicsLayer { alpha = textAlpha.value },
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                    contentDescription = "OURS",
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                Text(
+                    text = "OURS",
+                    style = OursTypography.display.copy(fontWeight = FontWeight.Bold),
+                    color = colors.ink,
+                )
+                Text(
+                    text = strings.splashTagline,
+                    style = OursTypography.caption,
+                    color = colors.inkMuted,
                 )
             }
-            Text(
-                text = "OURS",
-                style = OursTypography.display.copy(fontWeight = FontWeight.Bold),
-                color = colors.ink,
-            )
-            Text(
-                text = strings.splashTagline,
-                style = OursTypography.caption,
-                color = colors.inkMuted,
-            )
         }
     }
 }
@@ -292,35 +345,43 @@ private fun OursRoot(vm: OursViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            when (state.activeTab) {
-                MainTab.Map -> MapScreen(
-                    state = state,
-                    vm = vm,
-                    onQuickCheckIn = { launchCheckInCamera() },
-                )
-                MainTab.Memories -> MemoriesScreen(
-                    state = state,
-                    vm = vm,
-                    onOpenFullPhoto = { item ->
-                        fullCheckIn = item
-                        fullPhotoId = item.photoId
-                    },
-                )
-                MainTab.Chat -> ChatScreen(
-                    state = state,
-                    vm = vm,
-                    onLaunchCameraCheckIn = { launchCheckInCamera() },
-                    onLaunchCameraReply = { cid -> launchReplyCamera(cid) },
-                    onOpenFullPhoto = { item ->
-                        fullCheckIn = item
-                        fullPhotoId = item.photoId
-                    },
-                    onOpenFullPhotoId = { pid ->
-                        fullCheckIn = null
-                        fullPhotoId = pid
-                    },
-                )
-                MainTab.Settings -> SettingsScreen(state = state, vm = vm)
+            AnimatedContent(
+                targetState = state.activeTab,
+                transitionSpec = {
+                    fadeIn(OursMotion.enterSpec()).togetherWith(fadeOut(OursMotion.exitSpec()))
+                },
+                label = "mainTabTransition",
+            ) { tab ->
+                when (tab) {
+                    MainTab.Map -> MapScreen(
+                        state = state,
+                        vm = vm,
+                        onQuickCheckIn = { launchCheckInCamera() },
+                    )
+                    MainTab.Memories -> MemoriesScreen(
+                        state = state,
+                        vm = vm,
+                        onOpenFullPhoto = { item ->
+                            fullCheckIn = item
+                            fullPhotoId = item.photoId
+                        },
+                    )
+                    MainTab.Chat -> ChatScreen(
+                        state = state,
+                        vm = vm,
+                        onLaunchCameraCheckIn = { launchCheckInCamera() },
+                        onLaunchCameraReply = { cid -> launchReplyCamera(cid) },
+                        onOpenFullPhoto = { item ->
+                            fullCheckIn = item
+                            fullPhotoId = item.photoId
+                        },
+                        onOpenFullPhotoId = { pid ->
+                            fullCheckIn = null
+                            fullPhotoId = pid
+                        },
+                    )
+                    MainTab.Settings -> SettingsScreen(state = state, vm = vm)
+                }
             }
 
             OursSendConfirmation(

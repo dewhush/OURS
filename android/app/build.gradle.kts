@@ -33,7 +33,8 @@ android {
         buildConfigField("String", "FIREBASE_API_KEY", "\"${cfg("ours.firebase.apiKey")}\"")
         buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${cfg("ours.firebase.projectId")}\"")
         buildConfigField("String", "FIREBASE_SENDER_ID", "\"${cfg("ours.firebase.senderId")}\"")
-        buildConfigField("String", "DEFAULT_SERVER_URL", "\"${cfg("ours.defaultServerUrl")}\"")
+        val bakedServerUrl = cfg("OURS_SERVER_URL").ifBlank { cfg("ours.defaultServerUrl") }
+        buildConfigField("String", "DEFAULT_SERVER_URL", "\"$bakedServerUrl\"")
     }
 
     buildTypes {

@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +37,7 @@ import app.ours.ui.components.OursEmptyState
 import app.ours.ui.components.OursErrorState
 import app.ours.ui.components.OursLoadingState
 import app.ours.ui.components.OursMapView
+import app.ours.ui.components.OursStaggeredItem
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -130,17 +131,18 @@ fun MemoriesScreen(
                         contentPadding = PaddingValues(OursSpacing.md),
                         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
                     ) {
-                        items(state.memories, key = { it.id }) { item ->
+                        itemsIndexed(state.memories, key = { _, it -> it.id }) { idx, item ->
                             val authorName = if (item.authorId == state.me?.id) {
                                 state.me.name
                             } else {
                                 state.partner?.name ?: "Partner"
                             }
-                            OursCard(
-                                radius = OursRadius.mediaCard,
-                                padding = PaddingValues(OursSpacing.sm),
-                                onClick = { onOpenFullPhoto(item) },
-                            ) {
+                            OursStaggeredItem(index = idx) {
+                                OursCard(
+                                    radius = OursRadius.mediaCard,
+                                    padding = PaddingValues(OursSpacing.sm),
+                                    onClick = { onOpenFullPhoto(item) },
+                                ) {
                                 AsyncImage(
                                     model = vm.photoUrl(item.photoId, thumb = true),
                                     contentDescription = item.note ?: "Saved memory photo",
@@ -182,6 +184,7 @@ fun MemoriesScreen(
                                         color = colors.inkMuted,
                                     )
                                 }
+                            }
                             }
                         }
 

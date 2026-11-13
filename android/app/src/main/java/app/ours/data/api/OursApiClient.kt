@@ -87,12 +87,13 @@ class OursApiClient(
         val payload = OursJson.encodeToString(
             PairCreateRequest(name = name.trim(), email = email?.trim()?.takeIf { it.isNotBlank() })
         )
-        val req = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url("$base/api/pair/create")
-            .header("X-Setup-Key", setupKey.trim())
             .post(payload.toRequestBody(jsonMediaType))
-            .build()
-        return executeUnauthed(req) { body -> OursJson.decodeFromString(body) }
+        if (setupKey.isNotBlank()) {
+            reqBuilder.header("X-Setup-Key", setupKey.trim())
+        }
+        return executeUnauthed(reqBuilder.build()) { body -> OursJson.decodeFromString(body) }
     }
 
     suspend fun getInvite(): InviteResponse {
