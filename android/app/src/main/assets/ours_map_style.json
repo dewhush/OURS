@@ -32,7 +32,7 @@
       "source-layer": "landcover",
       "filter": ["in", "class", "grass", "wood", "park", "forest"],
       "paint": {
-        "fill-color": "#E2ECDF"
+        "fill-color": "#ECE8E0"
       }
     },
     {
@@ -42,7 +42,7 @@
       "source-layer": "landuse",
       "filter": ["in", "class", "park", "cemetery", "pitch", "playground", "recreation_ground"],
       "paint": {
-        "fill-color": "#DCE8D8"
+        "fill-color": "#E8E3DA"
       }
     },
     {
@@ -51,7 +51,7 @@
       "source": "openmaptiles",
       "source-layer": "water",
       "paint": {
-        "fill-color": "#CFE2EC"
+        "fill-color": "#DFDBD2"
       }
     },
     {
@@ -60,7 +60,7 @@
       "source": "openmaptiles",
       "source-layer": "waterway",
       "paint": {
-        "line-color": "#BFD7E4",
+        "line-color": "#D5D0C7",
         "line-width": 1.6
       }
     },
@@ -148,7 +148,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#E6BFA5",
+        "line-color": "#C7C2B8",
         "line-width": ["interpolate", ["linear"], ["zoom"], 6, 2.0, 16, 10.5]
       }
     },
@@ -163,7 +163,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#FCE4D2",
+        "line-color": "#FAF8F4",
         "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.2, 16, 8.0]
       }
     },

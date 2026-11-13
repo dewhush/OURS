@@ -194,6 +194,18 @@ fun OnboardingScreen(
             Column(verticalArrangement = Arrangement.spacedBy(OursSpacing.md)) {
                 when (currentStep) {
                     0 -> {
+                Surface(
+                    shape = RoundedCornerShape(OursRadius.chip),
+                    color = colors.actionSoft,
+                ) {
+                    Text(
+                        text = "OURS · PRIVATE FOR TWO",
+                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.ink,
+                        modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 4.dp),
+                    )
+                }
+
                 Text(strings.connectGmailTitle, style = OursTypography.display, color = colors.ink)
                 Text(
                     strings.connectGmailSubtitle,
@@ -201,45 +213,51 @@ fun OnboardingScreen(
                     color = colors.inkSecondary,
                 )
 
-                OursButton(
-                    text = strings.continueWithGoogle,
-                    variant = OursButtonVariant.Secondary,
-                    onClick = {
-                        @Suppress("DEPRECATION")
-                        val intent = AccountManager.newChooseAccountIntent(
-                            null,
-                            null,
-                            arrayOf("com.google"),
-                            null,
-                            null,
-                            null,
-                            null,
-                        )
-                        runCatching { googlePickerLauncher.launch(intent) }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                OursCard(modifier = Modifier.fillMaxWidth()) {
+                    OursButton(
+                        text = strings.continueWithGoogle,
+                        variant = OursButtonVariant.Secondary,
+                        onClick = {
+                            @Suppress("DEPRECATION")
+                            val intent = AccountManager.newChooseAccountIntent(
+                                null,
+                                null,
+                                arrayOf("com.google"),
+                                null,
+                                null,
+                                null,
+                                null,
+                            )
+                            runCatching { googlePickerLauncher.launch(intent) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
 
-                OutlinedTextField(
-                    value = gmailAddress,
-                    onValueChange = { gmailAddress = it },
-                    label = { Text(strings.gmailAddressLabel) },
-                    placeholder = { Text("you@gmail.com") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                    Spacer(Modifier.height(OursSpacing.sm))
 
-                OursButton(
-                    text = strings.continueLabel,
-                    onClick = {
-                        if (myName.isBlank() && gmailAddress.contains("@")) {
-                            myName = gmailAddress.substringBefore("@").replaceFirstChar { it.uppercase() }
-                        }
-                        step = 1
-                    },
-                    enabled = gmailAddress.contains("@"),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                    OutlinedTextField(
+                        value = gmailAddress,
+                        onValueChange = { gmailAddress = it },
+                        label = { Text(strings.gmailAddressLabel) },
+                        placeholder = { Text("you@gmail.com") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(OursSpacing.md))
+
+                    OursButton(
+                        text = strings.continueLabel,
+                        onClick = {
+                            if (myName.isBlank() && gmailAddress.contains("@")) {
+                                myName = gmailAddress.substringBefore("@").replaceFirstChar { it.uppercase() }
+                            }
+                            step = 1
+                        },
+                        enabled = gmailAddress.contains("@"),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
 
                 Text(
                     text = strings.serverSettingsLink,
