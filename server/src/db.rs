@@ -28,6 +28,7 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            email TEXT,
             created_at INTEGER NOT NULL,
             sharing_paused INTEGER NOT NULL DEFAULT 0,
             last_seen_at INTEGER,
@@ -152,19 +153,42 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
     )
     .map_err(|e| format!("failed to initialize schema: {e}"))?;
 
+    // Migrate existing DBs that predate the email column
+    let has_email: bool = {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(users)")
+            .map_err(|e| format!("failed to inspect users table: {e}"))?;
+        let cols = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("failed to query table_info: {e}"))?;
+        let mut found = false;
+        for c in cols.flatten() {
+            if c == "email" {
+                found = true;
+                break;
+            }
+        }
+        found
+    };
+    if !has_email {
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT", [])
+            .map_err(|e| format!("failed to migrate users.email: {e}"))?;
+    }
+
     Ok(Arc::new(Mutex::new(conn)))
 }
 
 pub fn get_user(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
     Ok(conn
         .query_row(
-            "SELECT id, name, created_at FROM users WHERE id = ?1",
+            "SELECT id, name, email, created_at FROM users WHERE id = ?1",
             params![user_id],
             |row| {
                 Ok(User {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    created_at: row.get(2)?,
+                    email: row.get(2)?,
+                    created_at: row.get(3)?,
                 })
             },
         )
@@ -174,13 +198,14 @@ pub fn get_user(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
 pub fn get_partner(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
     Ok(conn
         .query_row(
-            "SELECT id, name, created_at FROM users WHERE id != ?1 ORDER BY id LIMIT 1",
+            "SELECT id, name, email, created_at FROM users WHERE id != ?1 ORDER BY id LIMIT 1",
             params![user_id],
             |row| {
                 Ok(User {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    created_at: row.get(2)?,
+                    email: row.get(2)?,
+                    created_at: row.get(3)?,
                 })
             },
         )

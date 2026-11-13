@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct User {
     pub id: i64,
     pub name: String,
+    pub email: Option<String>,
     pub created_at: i64,
 }
 
@@ -93,6 +94,7 @@ pub struct Event {
 #[derive(Deserialize)]
 pub struct CreatePairRequest {
     pub name: String,
+    pub email: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -113,6 +115,7 @@ pub struct InviteResponse {
 pub struct JoinPairRequest {
     pub code: String,
     pub name: String,
+    pub email: Option<String>,
 }
 
 #[derive(Serialize)]

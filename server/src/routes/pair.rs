@@ -16,6 +16,20 @@ use crate::state::AppState;
 
 const INVITE_TTL_MS: i64 = 24 * 60 * 60 * 1000;
 
+fn normalize_email(raw: Option<String>) -> AppResult<Option<String>> {
+    let Some(s) = raw else {
+        return Ok(None);
+    };
+    let trimmed = s.trim().to_ascii_lowercase();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.len() > 254 || !trimmed.contains('@') {
+        return Err(AppError::bad_request("invalid email address"));
+    }
+    Ok(Some(trimmed))
+}
+
 pub async fn create_pair(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -33,6 +47,7 @@ pub async fn create_pair(
     if name.is_empty() || name.chars().count() > 40 {
         return Err(AppError::bad_request("name must be 1-40 characters"));
     }
+    let email = normalize_email(req.email)?;
 
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
@@ -49,8 +64,8 @@ pub async fn create_pair(
 
         let now = now_ms();
         tx.execute(
-            "INSERT INTO users (name, created_at, last_seen_at) VALUES (?1, ?2, ?2)",
-            params![name, now],
+            "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
+            params![name, email, now],
         )?;
         let user_id = tx.last_insert_rowid();
         let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
@@ -125,6 +140,7 @@ pub async fn join_pair(
     if name.is_empty() || name.chars().count() > 40 {
         return Err(AppError::bad_request("name must be 1-40 characters"));
     }
+    let email = normalize_email(req.email)?;
 
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
@@ -156,8 +172,8 @@ pub async fn join_pair(
             params![now, code],
         )?;
         tx.execute(
-            "INSERT INTO users (name, created_at, last_seen_at) VALUES (?1, ?2, ?2)",
-            params![name, now],
+            "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
+            params![name, email, now],
         )?;
         let user_id = tx.last_insert_rowid();
         let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;

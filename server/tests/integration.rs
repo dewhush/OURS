@@ -127,17 +127,18 @@ async fn pairing_and_refresh_flow() {
         .unwrap();
     assert_eq!(bad.status(), StatusCode::FORBIDDEN);
 
-    // Create first user
+    // Create first user with Gmail email
     let res = app
         .client
         .post(format!("{}/api/pair/create", app.base_url))
         .header("X-Setup-Key", "test-setup-key")
-        .json(&json!({"name": "Dewantoro"}))
+        .json(&json!({"name": "Dewantoro", "email": "Dewantoro@gmail.com"}))
         .send()
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
     let body1: Value = res.json().await.unwrap();
+    assert_eq!(body1["user"]["email"], "dewantoro@gmail.com");
     let access1 = body1["tokens"]["access_token"].as_str().unwrap().to_string();
     let refresh1 = body1["tokens"]["refresh_token"].as_str().unwrap().to_string();
     let old_code = body1["invite_code"].as_str().unwrap().to_string();
@@ -177,15 +178,21 @@ async fn pairing_and_refresh_flow() {
         assert_eq!(old_join.status(), StatusCode::NOT_FOUND);
     }
 
-    // Join with lowercase + spaces
+    // Join with lowercase + spaces and Gmail email
     let join_res = app
         .client
         .post(format!("{}/api/pair/join", app.base_url))
-        .json(&json!({"code": format!("  {} ", new_code.to_lowercase()), "name": "Marchanda"}))
+        .json(&json!({
+            "code": format!("  {} ", new_code.to_lowercase()),
+            "name": "Marchanda",
+            "email": "marchanda@gmail.com"
+        }))
         .send()
         .await
         .unwrap();
     assert_eq!(join_res.status(), StatusCode::CREATED);
+    let join_body: Value = join_res.json().await.unwrap();
+    assert_eq!(join_body["user"]["email"], "marchanda@gmail.com");
 
     // Third user -> 409 pair_full
     let third = app
@@ -209,7 +216,9 @@ async fn pairing_and_refresh_flow() {
         .await
         .unwrap();
     assert_eq!(me["me"]["name"], "Dewantoro");
+    assert_eq!(me["me"]["email"], "dewantoro@gmail.com");
     assert_eq!(me["partner"]["name"], "Marchanda");
+    assert_eq!(me["partner"]["email"], "marchanda@gmail.com");
 
     // Refresh token rotation
     let ref_res = app

@@ -35,8 +35,9 @@ commit is announced to `@android` on the board.
 
 **User**
 ```json
-{"id": 1, "name": "Dewantoro", "created_at": 1731500000000}
+{"id": 1, "name": "Dewantoro", "email": "dewantoro@gmail.com", "created_at": 1731500000000}
 ```
+`email` is `null` when not provided during pairing.
 
 **Tokens**
 ```json
@@ -153,9 +154,9 @@ Inbox events are kept for 7 days.
 ### `POST /api/pair/create`
 First phone only. Header `X-Setup-Key: <OURS_SETUP_KEY>`. Only works while zero users exist.
 ```json
-{"name": "Dewantoro"}
+{"name": "Dewantoro", "email": "dewantoro@gmail.com"}
 ```
-`name`: 1-40 chars after trimming.
+`name`: 1-40 chars after trimming. `email`: optional string (`null` or omitted if unset).
 -> `201`
 ```json
 {"user": User, "tokens": Tokens, "invite_code": "K7M3QX", "invite_expires_at": 1731586400000}
@@ -171,8 +172,9 @@ Issues a fresh invite code (old ones stop working) while the partner has not joi
 
 ### `POST /api/pair/join`
 ```json
-{"code": "K7M3QX", "name": "Marchanda"}
+{"code": "K7M3QX", "name": "Marchanda", "email": "marchanda@gmail.com"}
 ```
+`email`: optional string (`null` or omitted if unset).
 -> `201 {"user": User, "tokens": Tokens}`
 Errors: `404 invite_not_found`, `409 pair_full` (two users already exist; there can never be more).
 
