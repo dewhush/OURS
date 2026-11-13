@@ -6,7 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.ours.OursApp
 import app.ours.data.api.ApiException
+import app.ours.data.api.ChatMessageDto
 import app.ours.data.api.CheckInDto
+import app.ours.data.api.EventChatMessageData
 import app.ours.data.api.EventCheckInData
 import app.ours.data.api.EventDto
 import app.ours.data.api.EventHighlightData
@@ -50,6 +52,9 @@ data class OursUiState(
     val checkIns: List<CheckInDto> = emptyList(),
     val checkInsLoading: Boolean = false,
     val checkInsError: String? = null,
+    val chatMessages: List<ChatMessageDto> = emptyList(),
+    val messagesNextBefore: Long? = null,
+    val messagesLoading: Boolean = false,
     val memories: List<CheckInDto> = emptyList(),
     val memoriesNextBefore: Long? = null,
     val memoriesLoading: Boolean = false,
@@ -121,7 +126,10 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         when (tab) {
             MainTab.Map -> refreshPartnerLocation()
             MainTab.Memories -> if (_state.value.memories.isEmpty()) refreshMemories()
-            MainTab.Chat -> refreshCheckIns()
+            MainTab.Chat -> {
+                refreshCheckIns()
+                refreshMessages()
+            }
             MainTab.Settings -> refreshMeAndPlaces()
         }
     }
@@ -251,6 +259,7 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         refreshMeAndPlaces()
         refreshPartnerLocation()
         refreshCheckIns()
+        refreshMessages()
         refreshMemories()
         FirebaseBootstrap.syncTokenIfNeeded(app)
     }
@@ -313,6 +322,61 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                 }
+        }
+    }
+
+    fun refreshMessages(loadMore: Boolean = false) {
+        viewModelScope.launch {
+            val before = if (loadMore) _state.value.messagesNextBefore else null
+            if (loadMore && before == null) return@launch
+            _state.update { it.copy(messagesLoading = true) }
+            runCatching { api.getMessages(beforeMs = before, limit = 50) }
+                .onSuccess { resp ->
+                    _state.update { cur ->
+                        val merged = if (loadMore) cur.chatMessages + resp.items else resp.items
+                        cur.copy(
+                            chatMessages = merged.distinctBy { it.id },
+                            messagesNextBefore = resp.nextBefore,
+                            messagesLoading = false,
+                        )
+                    }
+                }
+                .onFailure {
+                    _state.update { it.copy(messagesLoading = false) }
+                }
+        }
+    }
+
+    fun sendChatMessage(
+        text: String?,
+        photoUri: Uri? = null,
+        replyToMessageId: Long? = null,
+        replyToCheckInId: Long? = null,
+    ) {
+        if (text.isNullOrBlank() && photoUri == null) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, errorMessage = null) }
+            val compressed = if (photoUri != null) {
+                withContext(Dispatchers.IO) { PhotoCompressor.compressToUploadFile(app, photoUri) }
+            } else null
+
+            runCatching {
+                api.sendMessage(
+                    text = text,
+                    photoFile = compressed,
+                    replyToMessageId = replyToMessageId,
+                    replyToCheckInId = replyToCheckInId,
+                )
+            }.onSuccess { msg ->
+                compressed?.delete()
+                _state.update { cur ->
+                    val next = (listOf(msg) + cur.chatMessages).distinctBy { it.id }
+                    cur.copy(busy = false, chatMessages = next)
+                }
+            }.onFailure { err ->
+                compressed?.delete()
+                _state.update { it.copy(busy = false, errorMessage = err.message ?: "Message failed") }
+            }
         }
     }
 
@@ -638,6 +702,15 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             db.replaceCheckInsCache(next)
                             cur.copy(checkIns = next)
+                        }
+                    }
+            }
+            "chat_message" -> {
+                runCatching { OursJson.decodeFromJsonElement<EventChatMessageData>(event.data) }
+                    .onSuccess { data ->
+                        _state.update { cur ->
+                            val next = (listOf(data.message) + cur.chatMessages).distinctBy { it.id }
+                            cur.copy(chatMessages = next)
                         }
                     }
             }

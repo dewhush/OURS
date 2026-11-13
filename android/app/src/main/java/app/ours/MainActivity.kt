@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -166,46 +168,60 @@ private fun OursRoot(vm: OursViewModel) {
     Scaffold(
         containerColor = colors.canvas,
         bottomBar = {
-            NavigationBar(
-                containerColor = colors.surface,
-                contentColor = colors.ink,
-                tonalElevation = 0.dp,
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
             ) {
-                val navColors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = colors.action,
-                    selectedTextColor = colors.action,
-                    unselectedIconColor = colors.inkMuted,
-                    unselectedTextColor = colors.inkMuted,
-                    indicatorColor = colors.actionSoft,
-                )
-                NavigationBarItem(
-                    selected = state.activeTab == MainTab.Map,
-                    onClick = { vm.selectTab(MainTab.Map) },
-                    icon = { Icon(OursIcons.Map, contentDescription = "Map") },
-                    label = { Text("Map", style = OursTypography.label) },
-                    colors = navColors,
-                )
-                NavigationBarItem(
-                    selected = state.activeTab == MainTab.Memories,
-                    onClick = { vm.selectTab(MainTab.Memories) },
-                    icon = { Icon(OursIcons.Memories, contentDescription = "Memories") },
-                    label = { Text("Memories", style = OursTypography.label) },
-                    colors = navColors,
-                )
-                NavigationBarItem(
-                    selected = state.activeTab == MainTab.Chat,
-                    onClick = { vm.selectTab(MainTab.Chat) },
-                    icon = { Icon(OursIcons.Chat, contentDescription = "Chat") },
-                    label = { Text("Chat", style = OursTypography.label) },
-                    colors = navColors,
-                )
-                NavigationBarItem(
-                    selected = state.activeTab == MainTab.Settings,
-                    onClick = { vm.selectTab(MainTab.Settings) },
-                    icon = { Icon(OursIcons.Settings, contentDescription = "Settings") },
-                    label = { Text("Settings", style = OursTypography.label) },
-                    colors = navColors,
-                )
+                Surface(
+                    shape = RoundedCornerShape(OursRadius.card),
+                    color = colors.glassSurfaceStrong,
+                    border = BorderStroke(1.dp, colors.glassBorder),
+                    shadowElevation = 8.dp,
+                ) {
+                    NavigationBar(
+                        containerColor = Color.Transparent,
+                        contentColor = colors.ink,
+                        tonalElevation = 0.dp,
+                    ) {
+                        val navColors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = colors.action,
+                            selectedTextColor = colors.action,
+                            unselectedIconColor = colors.inkMuted,
+                            unselectedTextColor = colors.inkMuted,
+                            indicatorColor = colors.actionSoft,
+                        )
+                        NavigationBarItem(
+                            selected = state.activeTab == MainTab.Map,
+                            onClick = { vm.selectTab(MainTab.Map) },
+                            icon = { Icon(OursIcons.Map, contentDescription = "Map") },
+                            label = { Text("Map", style = OursTypography.label) },
+                            colors = navColors,
+                        )
+                        NavigationBarItem(
+                            selected = state.activeTab == MainTab.Memories,
+                            onClick = { vm.selectTab(MainTab.Memories) },
+                            icon = { Icon(OursIcons.Memories, contentDescription = "Memories") },
+                            label = { Text("Memories", style = OursTypography.label) },
+                            colors = navColors,
+                        )
+                        NavigationBarItem(
+                            selected = state.activeTab == MainTab.Chat,
+                            onClick = { vm.selectTab(MainTab.Chat) },
+                            icon = { Icon(OursIcons.Chat, contentDescription = "Chat") },
+                            label = { Text("Chat", style = OursTypography.label) },
+                            colors = navColors,
+                        )
+                        NavigationBarItem(
+                            selected = state.activeTab == MainTab.Settings,
+                            onClick = { vm.selectTab(MainTab.Settings) },
+                            icon = { Icon(OursIcons.Settings, contentDescription = "Settings") },
+                            label = { Text("Settings", style = OursTypography.label) },
+                            colors = navColors,
+                        )
+                    }
+                }
             }
         },
     ) { innerPadding ->

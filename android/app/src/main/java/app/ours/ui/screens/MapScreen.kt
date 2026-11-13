@@ -87,6 +87,7 @@ fun MapScreen(
                 .statusBarsPadding()
                 .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm)
                 .fillMaxWidth(),
+            frosted = true,
             onClick = { showPartnerSheet = true },
         ) {
             Row(

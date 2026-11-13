@@ -41,7 +41,7 @@ class OursMessagingService : FirebaseMessagingService() {
                 val id = data["event_id"]?.toIntOrNull() ?: 9001
                 OursNotifier.notify(this, OursNotifier.CHANNEL_NUDGE, id, title, body)
             }
-            "checkin", "reply", "place", "highlight" -> {
+            "checkin", "reply", "chat_message", "place", "highlight" -> {
                 val title = data["title"] ?: "OURS"
                 val body = data["body"] ?: "New update"
                 val id = data["event_id"]?.toIntOrNull() ?: System.currentTimeMillis().toInt()

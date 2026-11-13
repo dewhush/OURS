@@ -99,6 +99,13 @@ object OursNotifier {
                 "$partner replied",
                 "Tap to read their reply."
             )
+            "chat_message" -> notify(
+                context,
+                CHANNEL_UPDATES,
+                event.id.toInt(),
+                partner,
+                "Sent a new message."
+            )
             "highlight" -> {
                 val data = runCatching { OursJson.decodeFromJsonElement<EventHighlightData>(event.data) }.getOrNull()
                 if (data?.highlighted == true) {

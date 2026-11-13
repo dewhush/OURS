@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.ours.data.api.CheckInDto
 import app.ours.data.api.PartnerLocationDto
 import app.ours.data.api.PlaceDto
+import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.annotations.MarkerOptions
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -65,27 +66,41 @@ fun OursMapView(
         @Suppress("DEPRECATION")
         map.clear()
 
+        val iconFactory = IconFactory.getInstance(context)
+        val isLive = partnerLocation?.recordedAt?.let { System.currentTimeMillis() - it <= 15 * 60_000L } ?: false
+
         if (partnerLocation != null && !partnerLocation.paused &&
             partnerLocation.lat != null && partnerLocation.lon != null
         ) {
+            val partnerIcon = iconFactory.fromBitmap(
+                MapMarkerFactory.partnerAvatarPin(
+                    context = context,
+                    initial = partnerName.ifBlank { "P" },
+                    isLive = isLive,
+                )
+            )
             @Suppress("DEPRECATION")
             map.addMarker(
                 MarkerOptions()
                     .position(LatLng(partnerLocation.lat, partnerLocation.lon))
                     .title(partnerName)
+                    .icon(partnerIcon)
             )
         }
 
         for (place in places) {
+            val placeIcon = iconFactory.fromBitmap(MapMarkerFactory.placePin(context, place.name))
             @Suppress("DEPRECATION")
             map.addMarker(
                 MarkerOptions()
                     .position(LatLng(place.lat, place.lon))
                     .title(place.name)
                     .snippet("${place.radiusM.toInt()} m")
+                    .icon(placeIcon)
             )
         }
 
+        val memoryIcon = iconFactory.fromBitmap(MapMarkerFactory.highlightPin(context))
         for (h in highlights) {
             if (h.lat != null && h.lon != null) {
                 @Suppress("DEPRECATION")
@@ -94,6 +109,7 @@ fun OursMapView(
                         .position(LatLng(h.lat, h.lon))
                         .title(h.placeName ?: "Memory")
                         .snippet(h.note ?: "Saved highlight")
+                        .icon(memoryIcon)
                 )
             }
         }

@@ -259,6 +259,51 @@ class OursApiClient(
         return executeAuthed(req) { body -> OursJson.decodeFromString(body) }
     }
 
+    suspend fun getMessages(beforeMs: Long? = null, limit: Int = 50): MessagesResponse {
+        val url = buildString {
+            append("${base()}/api/messages?limit=$limit")
+            if (beforeMs != null) append("&before=$beforeMs")
+        }
+        val req = Request.Builder().url(url).get().build()
+        return executeAuthed(req) { body -> OursJson.decodeFromString(body) }
+    }
+
+    suspend fun sendMessage(
+        text: String?,
+        photoFile: File? = null,
+        replyToMessageId: Long? = null,
+        replyToCheckInId: Long? = null,
+    ): ChatMessageDto {
+        val req = if (photoFile == null) {
+            val payload = OursJson.encodeToString(
+                CreateMessageRequest(
+                    text = text.orEmpty().trim(),
+                    replyToMessageId = replyToMessageId,
+                    replyToCheckInId = replyToCheckInId,
+                )
+            )
+            Request.Builder()
+                .url("${base()}/api/messages")
+                .post(payload.toRequestBody(jsonMediaType))
+                .build()
+        } else {
+            val multipart = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("photo", photoFile.name, photoFile.asRequestBody(jpegMediaType))
+                .apply {
+                    if (!text.isNullOrBlank()) addFormDataPart("text", text.trim())
+                    if (replyToMessageId != null) addFormDataPart("reply_to_message_id", replyToMessageId.toString())
+                    if (replyToCheckInId != null) addFormDataPart("reply_to_checkin_id", replyToCheckInId.toString())
+                }
+                .build()
+            Request.Builder()
+                .url("${base()}/api/messages")
+                .post(multipart)
+                .build()
+        }
+        return executeAuthed(req) { body -> OursJson.decodeFromString(body) }
+    }
+
     suspend fun nudge() {
         val req = Request.Builder()
             .url("${base()}/api/nudge")

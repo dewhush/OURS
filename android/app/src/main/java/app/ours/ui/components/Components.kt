@@ -75,7 +75,7 @@ fun OursButton(
 
     val containerColor = when (variant) {
         OursButtonVariant.Primary -> colors.action
-        OursButtonVariant.Secondary -> colors.surfaceMuted
+        OursButtonVariant.Secondary -> colors.glassSurfaceStrong
         OursButtonVariant.Ghost -> Color.Transparent
         OursButtonVariant.Destructive -> colors.errorSoft
     }
@@ -86,7 +86,7 @@ fun OursButton(
         OursButtonVariant.Destructive -> colors.error
     }
     val border = when (variant) {
-        OursButtonVariant.Secondary -> BorderStroke(1.dp, colors.border)
+        OursButtonVariant.Secondary -> BorderStroke(1.dp, colors.glassBorder)
         else -> null
     }
 
@@ -145,6 +145,7 @@ fun OursCard(
     modifier: Modifier = Modifier,
     radius: Dp = OursRadius.card,
     padding: PaddingValues = PaddingValues(OursSpacing.md),
+    frosted: Boolean = false,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -176,8 +177,9 @@ fun OursCard(
     Surface(
         modifier = modifier.then(clickModifier),
         shape = RoundedCornerShape(radius),
-        color = colors.surface,
-        border = BorderStroke(1.dp, colors.border),
+        color = if (frosted) colors.glassSurfaceStrong else colors.surface,
+        border = BorderStroke(1.dp, if (frosted) colors.glassBorder else colors.border),
+        shadowElevation = if (frosted) 6.dp else 0.dp,
     ) {
         Column(modifier = Modifier.padding(padding), content = content)
     }
@@ -195,7 +197,7 @@ fun OursBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = OursRadius.sheet, topEnd = OursRadius.sheet),
-        containerColor = colors.surface,
+        containerColor = colors.glassSurfaceStrong,
         contentColor = colors.ink,
     ) {
         Column(

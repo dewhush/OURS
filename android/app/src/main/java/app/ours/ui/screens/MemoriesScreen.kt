@@ -95,6 +95,7 @@ fun MemoriesScreen(
                             .align(Alignment.BottomCenter)
                             .padding(OursSpacing.md)
                             .fillMaxWidth(),
+                        frosted = true,
                     ) {
                         Text("No pinned memories yet", style = OursTypography.title, color = colors.ink)
                         Text(
