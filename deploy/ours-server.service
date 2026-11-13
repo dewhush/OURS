@@ -1,0 +1,24 @@
+[Unit]
+Description=OURS Private Location & Check-In Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mnemonic
+Group=mnemonic
+WorkingDirectory=/opt/ours
+EnvironmentFile=/etc/ours/ours.env
+ExecStart=/opt/ours/ours-server
+Restart=always
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/ours
+
+[Install]
+WantedBy=multi-user.target

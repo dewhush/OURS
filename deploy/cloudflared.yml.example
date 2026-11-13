@@ -1,0 +1,8 @@
+# Example /etc/cloudflared/config.yml for OURS
+tunnel: <YOUR-TUNNEL-UUID>
+credentials-file: /etc/cloudflared/<YOUR-TUNNEL-UUID>.json
+
+ingress:
+  - hostname: ours.example.com
+    service: http://127.0.0.1:8080
+  - service: http_status:404
