@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -17,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,6 +53,8 @@ import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
+import app.ours.ui.components.OursStatusChip
+import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
@@ -170,6 +174,8 @@ fun OnboardingScreen(
                 onSelect = { vm.setLanguage(it) },
             )
         }
+
+        OnboardingProgressBar(step = step, totalSteps = 4)
 
         AnimatedContent(
             targetState = step,
@@ -443,6 +449,25 @@ fun OnboardingScreen(
                     XiaomiStepsCard()
                 }
 
+                OursCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = strings.onboardingReadyBadge,
+                            style = OursTypography.title,
+                            color = colors.ink,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OursStatusChip(
+                            label = "4 / 4",
+                            tone = StatusTone.Live,
+                        )
+                    }
+                }
+
                 OursButton(
                     text = strings.startUsingOurs,
                     onClick = { vm.finishOnboarding() },
@@ -570,6 +595,44 @@ fun XiaomiStepsCard() {
                 },
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+}
+
+@Composable
+private fun OnboardingProgressBar(
+    step: Int,
+    totalSteps: Int,
+) {
+    val colors = OursTheme.colors
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+    ) {
+        repeat(totalSteps) { index ->
+            val targetFill = if (index <= step) 1f else 0f
+            val fill by animateFloatAsState(
+                targetValue = targetFill,
+                animationSpec = OursMotion.enterSpec(),
+                label = "onboarding-step-$index",
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(OursRadius.chip))
+                    .background(colors.surfaceMuted),
+            ) {
+                if (fill > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fill)
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(OursRadius.chip))
+                            .background(colors.action),
+                    )
+                }
+            }
         }
     }
 }

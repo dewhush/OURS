@@ -10,7 +10,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -18,8 +20,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,15 +33,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -57,6 +61,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -73,6 +78,7 @@ import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursSendConfirmation
+import app.ours.ui.components.oursPressScale
 import app.ours.ui.screens.ChatScreen
 import app.ours.ui.screens.MapScreen
 import app.ours.ui.screens.MemoriesScreen
@@ -81,6 +87,7 @@ import app.ours.ui.screens.SettingsScreen
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
+import app.ours.ui.theme.OursStrings
 import app.ours.ui.theme.OursTheme
 import app.ours.ui.theme.OursTypography
 import coil3.compose.AsyncImage
@@ -283,61 +290,11 @@ private fun OursRoot(vm: OursViewModel) {
     Scaffold(
         containerColor = colors.canvas,
         bottomBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(OursRadius.card),
-                    color = colors.glassSurfaceStrong,
-                    border = BorderStroke(1.dp, colors.glassBorder),
-                    shadowElevation = 8.dp,
-                ) {
-                    NavigationBar(
-                        containerColor = Color.Transparent,
-                        contentColor = colors.ink,
-                        tonalElevation = 0.dp,
-                    ) {
-                        val navColors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = colors.action,
-                            selectedTextColor = colors.action,
-                            unselectedIconColor = colors.inkMuted,
-                            unselectedTextColor = colors.inkMuted,
-                            indicatorColor = colors.actionSoft,
-                        )
-                        NavigationBarItem(
-                            selected = state.activeTab == MainTab.Map,
-                            onClick = { vm.selectTab(MainTab.Map) },
-                            icon = { Icon(OursIcons.Map, contentDescription = strings.navMap) },
-                            label = { Text(strings.navMap, style = OursTypography.label) },
-                            colors = navColors,
-                        )
-                        NavigationBarItem(
-                            selected = state.activeTab == MainTab.Memories,
-                            onClick = { vm.selectTab(MainTab.Memories) },
-                            icon = { Icon(OursIcons.Memories, contentDescription = strings.navMemories) },
-                            label = { Text(strings.navMemories, style = OursTypography.label) },
-                            colors = navColors,
-                        )
-                        NavigationBarItem(
-                            selected = state.activeTab == MainTab.Chat,
-                            onClick = { vm.selectTab(MainTab.Chat) },
-                            icon = { Icon(OursIcons.Chat, contentDescription = strings.navChat) },
-                            label = { Text(strings.navChat, style = OursTypography.label) },
-                            colors = navColors,
-                        )
-                        NavigationBarItem(
-                            selected = state.activeTab == MainTab.Settings,
-                            onClick = { vm.selectTab(MainTab.Settings) },
-                            icon = { Icon(OursIcons.Settings, contentDescription = strings.navSettings) },
-                            label = { Text(strings.navSettings, style = OursTypography.label) },
-                            colors = navColors,
-                        )
-                    }
-                }
-            }
+            OursFloatingBottomNav(
+                activeTab = state.activeTab,
+                strings = strings,
+                onSelect = vm::selectTab,
+            )
         },
     ) { innerPadding ->
         Box(
@@ -493,6 +450,101 @@ private fun OursRoot(vm: OursViewModel) {
                             style = OursTypography.body,
                             color = Color.White,
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OursFloatingBottomNav(
+    activeTab: MainTab,
+    strings: OursStrings,
+    onSelect: (MainTab) -> Unit,
+) {
+    val colors = OursTheme.colors
+    val items = listOf(
+        Triple(MainTab.Map, OursIcons.Map, strings.navMap),
+        Triple(MainTab.Memories, OursIcons.Memories, strings.navMemories),
+        Triple(MainTab.Chat, OursIcons.Chat, strings.navChat),
+        Triple(MainTab.Settings, OursIcons.Settings, strings.navSettings),
+    )
+    val selectedIndex = items.indexOfFirst { it.first == activeTab }.coerceAtLeast(0)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(OursRadius.card),
+            color = colors.glassSurfaceStrong,
+            border = BorderStroke(1.dp, colors.glassBorder),
+            shadowElevation = 8.dp,
+        ) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(6.dp),
+            ) {
+                val tabWidth = maxWidth / items.size
+                val indicatorOffset by animateDpAsState(
+                    targetValue = tabWidth * selectedIndex,
+                    animationSpec = OursMotion.enterSpec(),
+                    label = "nav-pill-x",
+                )
+
+                Box(
+                    modifier = Modifier
+                        .offset(x = indicatorOffset)
+                        .width(tabWidth)
+                        .height(52.dp)
+                        .clip(RoundedCornerShape(OursRadius.inner))
+                        .background(colors.actionSoft),
+                )
+
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    items.forEach { (tab, icon, label) ->
+                        val selected = tab == activeTab
+                        val interactionSource = remember { MutableInteractionSource() }
+                        val tint by animateColorAsState(
+                            targetValue = if (selected) colors.action else colors.inkMuted,
+                            animationSpec = OursMotion.enterSpec(),
+                            label = "nav-tint-${tab.name}",
+                        )
+                        Column(
+                            modifier = Modifier
+                                .width(tabWidth)
+                                .height(52.dp)
+                                .oursPressScale(interactionSource)
+                                .clip(RoundedCornerShape(OursRadius.inner))
+                                .clickable(
+                                    interactionSource = interactionSource,
+                                    indication = null,
+                                    onClick = { onSelect(tab) },
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = label,
+                                tint = tint,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = label,
+                                style = OursTypography.label.copy(
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                ),
+                                color = tint,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }

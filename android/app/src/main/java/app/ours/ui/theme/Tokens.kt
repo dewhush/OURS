@@ -105,12 +105,13 @@ object OursRadius {
 }
 
 object OursMotion {
-    const val ENTER_MS = 200
-    const val EXIT_MS = 160 // ~20% shorter than entrances
+    const val ENTER_MS = 220
+    const val EXIT_MS = 160 // ~27% shorter than entrances
     const val STAGGER_MS = 30
     const val PRESS_SCALE = 0.97f
 
-    val EaseOut = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)
+    // Apple fluid cubic-bezier(0.22, 1, 0.36, 1)
+    val EaseOut = CubicBezierEasing(0.22f, 1.0f, 0.36f, 1.0f)
     val EaseInOut = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
 
     fun <T> enterSpec(durationMs: Int = ENTER_MS) =
@@ -128,15 +129,15 @@ object OursTypography {
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
         fontSize = 26.sp,
-        lineHeight = 32.sp,
-        letterSpacing = (-0.4).sp,
+        lineHeight = 31.sp,
+        letterSpacing = (-0.78).sp, // -0.03em Pentagram display tracking
     )
     val headline = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
-        lineHeight = 26.sp,
-        letterSpacing = (-0.2).sp,
+        lineHeight = 25.sp,
+        letterSpacing = (-0.6).sp, // -0.03em
     )
     val title = TextStyle(
         fontFamily = FontFamily.SansSerif,

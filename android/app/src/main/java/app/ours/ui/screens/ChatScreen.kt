@@ -77,6 +77,8 @@ private sealed interface ChatThreadItem {
     }
 }
 
+private enum class ChatFilter { All, Photos, Saved }
+
 private data class ReplyTarget(
     val messageId: Long? = null,
     val checkInId: Long? = null,
@@ -101,6 +103,8 @@ fun ChatScreen(
 
     var draft by remember { mutableStateOf("") }
     var replyTarget by remember { mutableStateOf<ReplyTarget?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf(ChatFilter.All) }
 
     val threadItems = remember(state.chatMessages, state.checkIns) {
         (state.chatMessages.map { ChatThreadItem.MessageItem(it) } +
@@ -108,9 +112,33 @@ fun ChatScreen(
             .sortedBy { it.createdAt }
     }
 
-    LaunchedEffect(threadItems.size) {
-        if (threadItems.isNotEmpty()) {
-            listState.animateScrollToItem(threadItems.lastIndex)
+    val filteredThreadItems = remember(threadItems, searchQuery, filter) {
+        val q = searchQuery.trim().lowercase()
+        threadItems.filter { item ->
+            val matchesFilter = when (filter) {
+                ChatFilter.All -> true
+                ChatFilter.Photos -> when (item) {
+                    is ChatThreadItem.MessageItem -> !item.msg.photoId.isNullOrBlank()
+                    is ChatThreadItem.CheckInItem -> item.checkIn.photoId.isNotBlank()
+                }
+                ChatFilter.Saved -> when (item) {
+                    is ChatThreadItem.MessageItem -> false
+                    is ChatThreadItem.CheckInItem -> item.checkIn.highlighted
+                }
+            }
+            val matchesQuery = q.isEmpty() || when (item) {
+                is ChatThreadItem.MessageItem -> item.msg.text?.lowercase()?.contains(q) == true
+                is ChatThreadItem.CheckInItem ->
+                    (item.checkIn.note?.lowercase()?.contains(q) == true) ||
+                        (item.checkIn.placeName?.lowercase()?.contains(q) == true)
+            }
+            matchesFilter && matchesQuery
+        }
+    }
+
+    LaunchedEffect(filteredThreadItems.size) {
+        if (filteredThreadItems.isNotEmpty()) {
+            listState.animateScrollToItem(filteredThreadItems.lastIndex)
         }
     }
 
@@ -182,6 +210,20 @@ fun ChatScreen(
             }
         }
 
+        OursSearchFilterBar(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            placeholder = strings.searchPlaceholder,
+            filters = listOf(
+                ChatFilter.All to strings.filterAll,
+                ChatFilter.Photos to strings.filterPhotos,
+                ChatFilter.Saved to strings.filterSaved,
+            ),
+            selectedFilter = filter,
+            onSelectFilter = { filter = it },
+            modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
+        )
+
         // Chronological messenger thread
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
@@ -222,7 +264,7 @@ fun ChatScreen(
                             }
                         }
 
-                        items(threadItems, key = { it.key }) { item ->
+                        items(filteredThreadItems, key = { it.key }) { item ->
                             when (item) {
                                 is ChatThreadItem.MessageItem -> {
                                     val msg = item.msg
