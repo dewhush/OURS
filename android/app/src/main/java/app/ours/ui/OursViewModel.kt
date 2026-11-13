@@ -42,6 +42,7 @@ enum class MainTab { Map, Memories, Chat, Settings }
 data class OursUiState(
     val isPaired: Boolean = false,
     val onboardingDone: Boolean = false,
+    val language: String = "en",
     val serverUrl: String = "",
     val inviteCode: String? = null,
     val me: UserDto? = null,
@@ -78,13 +79,14 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         OursUiState(
             isPaired = prefs.isPaired,
             onboardingDone = prefs.onboardingDone,
+            language = prefs.language,
             serverUrl = prefs.serverUrl,
             inviteCode = prefs.inviteCode,
             me = if (prefs.userId > 0 && prefs.userName != null) {
-                UserDto(prefs.userId, prefs.userName!!, 0L)
+                UserDto(prefs.userId, prefs.userName!!, prefs.userEmail, 0L)
             } else null,
             partner = if (prefs.partnerId != null && prefs.partnerName != null) {
-                UserDto(prefs.partnerId!!, prefs.partnerName!!, 0L)
+                UserDto(prefs.partnerId!!, prefs.partnerName!!, prefs.partnerEmail, 0L)
             } else null,
             sharingPaused = prefs.sharingPaused,
             partnerPaused = prefs.partnerPaused,
@@ -147,6 +149,11 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setLanguage(lang: String) {
+        prefs.language = lang
+        _state.update { it.copy(language = prefs.language) }
+    }
+
     fun clearError() {
         _state.update { it.copy(errorMessage = null) }
     }
@@ -169,12 +176,12 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         "Connected (v${resp.version})"
     }
 
-    fun createPair(serverUrl: String, setupKey: String, name: String, onSuccess: (String) -> Unit) {
+    fun createPair(serverUrl: String, setupKey: String, name: String, email: String?, onSuccess: (String) -> Unit) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true, errorMessage = null) }
             runCatching {
                 prefs.serverUrl = serverUrl
-                api.createPair(serverUrl, setupKey, name)
+                api.createPair(serverUrl, setupKey, name, email)
             }.onSuccess { resp ->
                 prefs.saveSelf(resp.user)
                 prefs.saveTokens(resp.tokens)
@@ -196,12 +203,12 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun joinPair(serverUrl: String, code: String, name: String, onSuccess: () -> Unit) {
+    fun joinPair(serverUrl: String, code: String, name: String, email: String?, onSuccess: () -> Unit) {
         viewModelScope.launch {
             _state.update { it.copy(busy = true, errorMessage = null) }
             runCatching {
                 prefs.serverUrl = serverUrl
-                api.joinPair(serverUrl, code, name)
+                api.joinPair(serverUrl, code, name, email)
             }.onSuccess { resp ->
                 prefs.saveSelf(resp.user)
                 prefs.saveTokens(resp.tokens)
@@ -270,6 +277,7 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                 prefs.saveSelf(meResp.me)
                 prefs.partnerId = meResp.partner?.id
                 prefs.partnerName = meResp.partner?.name
+                prefs.partnerEmail = meResp.partner?.email
                 prefs.sharingPaused = meResp.sharingPaused
                 prefs.partnerPaused = meResp.partnerPaused
                 if (meResp.partner != null) prefs.inviteCode = null

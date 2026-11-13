@@ -14,9 +14,11 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
 import androidx.core.content.ContextCompat
 import app.ours.MainActivity
 import app.ours.R
+import app.ours.data.api.EventChatMessageData
 import app.ours.data.api.EventDto
 import app.ours.data.api.EventHighlightData
 import app.ours.data.api.EventPlaceData
@@ -99,13 +101,16 @@ object OursNotifier {
                 "$partner replied",
                 "Tap to read their reply."
             )
-            "chat_message" -> notify(
-                context,
-                CHANNEL_UPDATES,
-                event.id.toInt(),
-                partner,
-                "Sent a new message."
-            )
+            "chat_message" -> {
+                val data = runCatching { OursJson.decodeFromJsonElement<EventChatMessageData>(event.data) }.getOrNull()
+                val text = data?.message?.text ?: "Sent a photo"
+                notifyMessaging(
+                    context = context,
+                    id = event.id.toInt(),
+                    senderName = partner,
+                    text = text,
+                )
+            }
             "highlight" -> {
                 val data = runCatching { OursJson.decodeFromJsonElement<EventHighlightData>(event.data) }.getOrNull()
                 if (data?.highlighted == true) {
@@ -151,6 +156,39 @@ object OursNotifier {
         }
     }
 
+    fun notifyMessaging(context: Context, id: Int, senderName: String, text: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        ensureChannels(context)
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pi = PendingIntent.getActivity(
+            context,
+            id,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val sender = Person.Builder().setName(senderName).build()
+        val style = NotificationCompat.MessagingStyle(sender)
+            .addMessage(text, System.currentTimeMillis(), sender)
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_UPDATES)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setColor(0xFFD95D39.toInt())
+            .setSubText("OURS")
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setStyle(style)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+        applyShortCriticalTextIfSupported(builder, senderName)
+        NotificationManagerCompat.from(context).notify(id, builder.build())
+    }
+
     fun notify(context: Context, channelId: String, id: Int, title: String, body: String) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
@@ -168,14 +206,32 @@ object OursNotifier {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification = NotificationCompat.Builder(context, channelId)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setColor(0xFFD95D39.toInt())
+            .setSubText("OURS")
+            .setCategory(
+                if (channelId == CHANNEL_NUDGE) NotificationCompat.CATEGORY_SOCIAL
+                else NotificationCompat.CATEGORY_STATUS
+            )
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
             .setContentIntent(pi)
-            .build()
-        NotificationManagerCompat.from(context).notify(id, notification)
+        applyShortCriticalTextIfSupported(builder, title.take(16))
+        NotificationManagerCompat.from(context).notify(id, builder.build())
+    }
+
+    private fun applyShortCriticalTextIfSupported(
+        builder: NotificationCompat.Builder,
+        shortText: String,
+    ) {
+        if (Build.VERSION.SDK_INT >= 36) {
+            runCatching {
+                val method = builder.javaClass.getMethod("setShortCriticalText", CharSequence::class.java)
+                method.invoke(builder, shortText)
+            }
+        }
     }
 
     fun buzzPhone(context: Context) {

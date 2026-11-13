@@ -13,8 +13,13 @@ class PrefsStore(context: Context) {
     var serverUrl: String
         get() = prefs.getString(KEY_SERVER_URL, null)
             ?.takeIf { it.isNotBlank() }
-            ?: BuildConfig.DEFAULT_SERVER_URL
+            ?: BuildConfig.DEFAULT_SERVER_URL.takeIf { it.isNotBlank() }
+            ?: "http://192.168.100.92:8080"
         set(value) = prefs.edit().putString(KEY_SERVER_URL, value.trim().trimEnd('/')).apply()
+
+    var language: String
+        get() = prefs.getString(KEY_LANGUAGE, "en") ?: "en"
+        set(value) = prefs.edit().putString(KEY_LANGUAGE, if (value == "id") "id" else "en").apply()
 
     var accessToken: String?
         get() = prefs.getString(KEY_ACCESS_TOKEN, null)
@@ -40,6 +45,10 @@ class PrefsStore(context: Context) {
         get() = prefs.getString(KEY_USER_NAME, null)
         set(value) = prefs.edit().putString(KEY_USER_NAME, value).apply()
 
+    var userEmail: String?
+        get() = prefs.getString(KEY_USER_EMAIL, null)
+        set(value) = prefs.edit().putString(KEY_USER_EMAIL, value).apply()
+
     var partnerId: Long?
         get() = if (prefs.contains(KEY_PARTNER_ID)) prefs.getLong(KEY_PARTNER_ID, -1L).takeIf { it > 0 } else null
         set(value) {
@@ -50,6 +59,10 @@ class PrefsStore(context: Context) {
     var partnerName: String?
         get() = prefs.getString(KEY_PARTNER_NAME, null)
         set(value) = prefs.edit().putString(KEY_PARTNER_NAME, value).apply()
+
+    var partnerEmail: String?
+        get() = prefs.getString(KEY_PARTNER_EMAIL, null)
+        set(value) = prefs.edit().putString(KEY_PARTNER_EMAIL, value).apply()
 
     var sharingPaused: Boolean
         get() = prefs.getBoolean(KEY_SHARING_PAUSED, false)
@@ -91,6 +104,7 @@ class PrefsStore(context: Context) {
         prefs.edit()
             .putLong(KEY_USER_ID, user.id)
             .putString(KEY_USER_NAME, user.name)
+            .putString(KEY_USER_EMAIL, user.email)
             .apply()
     }
 
@@ -102,20 +116,25 @@ class PrefsStore(context: Context) {
 
     fun clearSession() {
         val savedServerUrl = serverUrl
+        val savedLang = language
         prefs.edit().clear().apply()
         serverUrl = savedServerUrl
+        language = savedLang
     }
 
     companion object {
         private const val KEY_SERVER_URL = "server_url"
+        private const val KEY_LANGUAGE = "language"
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_ACCESS_EXPIRES_AT = "access_expires_at"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_REFRESH_EXPIRES_AT = "refresh_expires_at"
         private const val KEY_USER_ID = "user_id"
         private const val KEY_USER_NAME = "user_name"
+        private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_PARTNER_ID = "partner_id"
         private const val KEY_PARTNER_NAME = "partner_name"
+        private const val KEY_PARTNER_EMAIL = "partner_email"
         private const val KEY_SHARING_PAUSED = "sharing_paused"
         private const val KEY_PARTNER_PAUSED = "partner_paused"
         private const val KEY_EVENT_CURSOR = "event_cursor"

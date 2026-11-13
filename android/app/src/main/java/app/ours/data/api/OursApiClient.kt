@@ -81,9 +81,12 @@ class OursApiClient(
         serverUrl: String,
         setupKey: String,
         name: String,
+        email: String? = null,
     ): PairCreateResponse {
         val base = serverUrl.trim().trimEnd('/')
-        val payload = OursJson.encodeToString(PairCreateRequest(name.trim()))
+        val payload = OursJson.encodeToString(
+            PairCreateRequest(name = name.trim(), email = email?.trim()?.takeIf { it.isNotBlank() })
+        )
         val req = Request.Builder()
             .url("$base/api/pair/create")
             .header("X-Setup-Key", setupKey.trim())
@@ -104,9 +107,16 @@ class OursApiClient(
         serverUrl: String,
         code: String,
         name: String,
+        email: String? = null,
     ): PairJoinResponse {
         val base = serverUrl.trim().trimEnd('/')
-        val payload = OursJson.encodeToString(PairJoinRequest(code.trim(), name.trim()))
+        val payload = OursJson.encodeToString(
+            PairJoinRequest(
+                code = code.trim(),
+                name = name.trim(),
+                email = email?.trim()?.takeIf { it.isNotBlank() },
+            )
+        )
         val req = Request.Builder()
             .url("$base/api/pair/join")
             .post(payload.toRequestBody(jsonMediaType))

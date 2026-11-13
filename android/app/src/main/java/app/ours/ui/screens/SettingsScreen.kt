@@ -46,6 +46,7 @@ fun SettingsScreen(
     vm: OursViewModel,
 ) {
     val colors = OursTheme.colors
+    val strings = OursTheme.strings
     var serverInput by remember(state.serverUrl) { mutableStateOf(state.serverUrl) }
     var showAddPlace by remember { mutableStateOf(false) }
     var showXiaomiGuide by remember { mutableStateOf(false) }
@@ -59,22 +60,24 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
     ) {
         item {
-            Text("Settings", style = OursTypography.display, color = colors.ink)
+            Text(strings.settingsTitle, style = OursTypography.display, color = colors.ink)
         }
 
         // Pairing info
         item {
             OursCard(modifier = Modifier.fillMaxWidth()) {
-                Text("Pair", style = OursTypography.title, color = colors.ink)
+                Text(strings.pairCardTitle, style = OursTypography.title, color = colors.ink)
                 Spacer(Modifier.height(OursSpacing.xs))
+                val meEmail = state.me?.email?.let { " ($it)" } ?: ""
                 Text(
-                    "Signed in as ${state.me?.name ?: "You"}",
+                    "${strings.signedInAs} ${state.me?.name ?: "You"}$meEmail",
                     style = OursTypography.body,
                     color = colors.inkSecondary,
                 )
                 if (state.partner != null) {
+                    val pEmail = state.partner.email?.let { " ($it)" } ?: ""
                     Text(
-                        "Paired with ${state.partner.name}",
+                        "${strings.pairedWith} ${state.partner.name}$pEmail",
                         style = OursTypography.body,
                         color = colors.live,
                     )
@@ -89,9 +92,26 @@ fun SettingsScreen(
                     }
                     Spacer(Modifier.height(OursSpacing.xs))
                     OursButton(
-                        text = "Generate new invite code",
+                        text = strings.generateInvite,
                         variant = OursButtonVariant.Secondary,
                         onClick = { vm.refreshInviteCode() },
+                    )
+                }
+            }
+        }
+
+        // Language switcher
+        item {
+            OursCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(strings.languageTitle, style = OursTypography.title, color = colors.ink)
+                    LanguagePillToggle(
+                        current = state.language,
+                        onSelect = { vm.setLanguage(it) },
                     )
                 }
             }
@@ -106,9 +126,9 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Pause location sharing", style = OursTypography.title, color = colors.ink)
+                        Text(strings.pauseSharingTitle, style = OursTypography.title, color = colors.ink)
                         Text(
-                            "Quietly hides your coordinates until you turn sharing back on.",
+                            strings.pauseSharingSubtitle,
                             style = OursTypography.caption,
                             color = colors.inkSecondary,
                         )
@@ -128,9 +148,9 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Saved places", style = OursTypography.headline, color = colors.ink)
+                Text(strings.savedPlacesTitle, style = OursTypography.headline, color = colors.ink)
                 OursButton(
-                    text = "Add place",
+                    text = strings.addPlace,
                     variant = OursButtonVariant.Secondary,
                     onClick = { showAddPlace = true },
                     leadingIcon = {
@@ -144,7 +164,7 @@ fun SettingsScreen(
             item {
                 OursCard(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        "No saved places yet. Add Home or Work to get arrival and departure alerts.",
+                        strings.noPlacesHint,
                         style = OursTypography.caption,
                         color = colors.inkSecondary,
                     )
@@ -185,15 +205,15 @@ fun SettingsScreen(
         // Xiaomi / HyperOS guide
         item {
             OursCard(modifier = Modifier.fillMaxWidth()) {
-                Text("Background reliability", style = OursTypography.title, color = colors.ink)
+                Text(strings.backgroundReliability, style = OursTypography.title, color = colors.ink)
                 Text(
-                    "Xiaomi / Poco HyperOS checklist to keep live location running.",
+                    strings.xiaomiChecklistHint,
                     style = OursTypography.caption,
                     color = colors.inkSecondary,
                 )
                 Spacer(Modifier.height(OursSpacing.sm))
                 OursButton(
-                    text = "Open Xiaomi setup guide",
+                    text = strings.openXiaomiGuide,
                     variant = OursButtonVariant.Secondary,
                     onClick = { showXiaomiGuide = true },
                     modifier = Modifier.fillMaxWidth(),
@@ -204,7 +224,7 @@ fun SettingsScreen(
         // Server URL
         item {
             OursCard(modifier = Modifier.fillMaxWidth()) {
-                Text("Server URL", style = OursTypography.title, color = colors.ink)
+                Text(strings.serverUrlTitle, style = OursTypography.title, color = colors.ink)
                 Spacer(Modifier.height(OursSpacing.xs))
                 OutlinedTextField(
                     value = serverInput,
@@ -214,7 +234,7 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(OursSpacing.xs))
                 OursButton(
-                    text = "Save server URL",
+                    text = strings.saveServerUrl,
                     variant = OursButtonVariant.Secondary,
                     enabled = serverInput.isNotBlank() && serverInput != state.serverUrl,
                     onClick = { vm.updateServerUrl(serverInput) },
@@ -226,7 +246,7 @@ fun SettingsScreen(
         // Sign out
         item {
             OursButton(
-                text = "Sign out & unpair this phone",
+                text = strings.signOutCta,
                 variant = OursButtonVariant.Destructive,
                 onClick = { vm.signOut() },
                 modifier = Modifier.fillMaxWidth(),

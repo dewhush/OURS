@@ -1,11 +1,14 @@
 package app.ours.ui.screens
 
 import android.Manifest
+import android.accounts.AccountManager
+import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,8 +19,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,15 +31,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import app.ours.ui.OursUiState
 import app.ours.ui.OursViewModel
+import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
+import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
 import app.ours.ui.theme.OursTypography
@@ -47,6 +57,7 @@ fun OnboardingScreen(
     vm: OursViewModel,
 ) {
     val colors = OursTheme.colors
+    val strings = OursTheme.strings
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -59,14 +70,30 @@ fun OnboardingScreen(
         )
     }
 
+    var gmailAddress by remember { mutableStateOf(state.me?.email ?: "") }
     var serverUrl by remember { mutableStateOf(state.serverUrl.ifBlank { "http://192.168.100.92:8080" }) }
     var serverStatus by remember { mutableStateOf<String?>(null) }
     var checkingServer by remember { mutableStateOf(false) }
+    var showServerSheet by remember { mutableStateOf(false) }
 
     var pairModeCreate by remember { mutableStateOf(true) }
     var myName by remember { mutableStateOf("") }
     var setupKey by remember { mutableStateOf("") }
     var inviteCodeInput by remember { mutableStateOf("") }
+
+    val googlePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val picked = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+            if (!picked.isNullOrBlank()) {
+                gmailAddress = picked
+                if (myName.isBlank()) {
+                    myName = picked.substringBefore("@").replaceFirstChar { it.uppercase() }
+                }
+            }
+        }
+    }
 
     var fineGranted by remember {
         mutableStateOf(
@@ -120,79 +147,98 @@ fun OnboardingScreen(
             .padding(OursSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
     ) {
-        Text(
-            text = "OURS",
-            style = OursTypography.label.copy(fontWeight = FontWeight.Bold),
-            color = colors.action,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = "OURS",
+                style = OursTypography.label.copy(fontWeight = FontWeight.Bold),
+                color = colors.action,
+            )
+            LanguagePillToggle(
+                current = state.language,
+                onSelect = { vm.setLanguage(it) },
+            )
+        }
 
         when (step) {
             0 -> {
-                Text("Connect to your server", style = OursTypography.display, color = colors.ink)
+                Text(strings.connectGmailTitle, style = OursTypography.display, color = colors.ink)
                 Text(
-                    "OURS runs on your own server. Enter its LAN or tunnel address.",
+                    strings.connectGmailSubtitle,
                     style = OursTypography.body,
                     color = colors.inkSecondary,
                 )
+
+                OursButton(
+                    text = strings.continueWithGoogle,
+                    variant = OursButtonVariant.Secondary,
+                    onClick = {
+                        @Suppress("DEPRECATION")
+                        val intent = AccountManager.newChooseAccountIntent(
+                            null,
+                            null,
+                            arrayOf("com.google"),
+                            null,
+                            null,
+                            null,
+                            null,
+                        )
+                        runCatching { googlePickerLauncher.launch(intent) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
                 OutlinedTextField(
-                    value = serverUrl,
-                    onValueChange = { serverUrl = it },
-                    label = { Text("Server URL") },
-                    placeholder = { Text("http://192.168.100.92:8080") },
+                    value = gmailAddress,
+                    onValueChange = { gmailAddress = it },
+                    label = { Text(strings.gmailAddressLabel) },
+                    placeholder = { Text("you@gmail.com") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                if (serverStatus != null) {
-                    Text(serverStatus!!, style = OursTypography.caption, color = colors.live)
-                }
-                if (state.errorMessage != null) {
-                    Text(state.errorMessage, style = OursTypography.caption, color = colors.error)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm)) {
-                    OursButton(
-                        text = "Test connection",
-                        variant = OursButtonVariant.Secondary,
-                        loading = checkingServer,
-                        onClick = {
-                            scope.launch {
-                                checkingServer = true
-                                serverStatus = null
-                                vm.testServerHealth(serverUrl)
-                                    .onSuccess { serverStatus = it }
-                                    .onFailure { serverStatus = it.message ?: "Unreachable" }
-                                checkingServer = false
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
-                    OursButton(
-                        text = "Continue",
-                        onClick = {
-                            vm.updateServerUrl(serverUrl)
-                            step = 1
-                        },
-                        enabled = serverUrl.isNotBlank(),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+
+                OursButton(
+                    text = strings.continueLabel,
+                    onClick = {
+                        if (myName.isBlank() && gmailAddress.contains("@")) {
+                            myName = gmailAddress.substringBefore("@").replaceFirstChar { it.uppercase() }
+                        }
+                        step = 1
+                    },
+                    enabled = gmailAddress.contains("@"),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Text(
+                    text = strings.serverSettingsLink,
+                    style = OursTypography.caption.copy(fontWeight = FontWeight.Medium),
+                    color = colors.inkMuted,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(OursRadius.chip))
+                        .clickable { showServerSheet = true }
+                        .padding(vertical = OursSpacing.xxs),
+                )
             }
 
             1 -> {
-                Text("Pair your phones", style = OursTypography.display, color = colors.ink)
+                Text(strings.pairTitle, style = OursTypography.display, color = colors.ink)
                 Text(
-                    "Only two people can join this server.",
+                    strings.pairSubtitle,
                     style = OursTypography.body,
                     color = colors.inkSecondary,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {
                     OursButton(
-                        text = "Create pair",
+                        text = strings.createPair,
                         variant = if (pairModeCreate) OursButtonVariant.Primary else OursButtonVariant.Secondary,
                         onClick = { pairModeCreate = true },
                         modifier = Modifier.weight(1f),
                     )
                     OursButton(
-                        text = "Join with code",
+                        text = strings.joinWithCode,
                         variant = if (!pairModeCreate) OursButtonVariant.Primary else OursButtonVariant.Secondary,
                         onClick = { pairModeCreate = false },
                         modifier = Modifier.weight(1f),
@@ -202,7 +248,7 @@ fun OnboardingScreen(
                 OutlinedTextField(
                     value = myName,
                     onValueChange = { myName = it },
-                    label = { Text("Your name") },
+                    label = { Text(strings.yourName) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -211,7 +257,7 @@ fun OnboardingScreen(
                     OutlinedTextField(
                         value = setupKey,
                         onValueChange = { setupKey = it },
-                        label = { Text("Server setup key") },
+                        label = { Text(strings.setupKeyLabel) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -219,7 +265,7 @@ fun OnboardingScreen(
                     OutlinedTextField(
                         value = inviteCodeInput,
                         onValueChange = { inviteCodeInput = it.uppercase() },
-                        label = { Text("6-character invite code") },
+                        label = { Text(strings.inviteCodeLabel) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -230,20 +276,21 @@ fun OnboardingScreen(
                 }
 
                 OursButton(
-                    text = if (pairModeCreate) "Create pair" else "Join pair",
+                    text = if (pairModeCreate) strings.createPair else strings.joinWithCode,
                     loading = state.busy,
                     enabled = myName.isNotBlank() && (if (pairModeCreate) setupKey.isNotBlank() else inviteCodeInput.isNotBlank()),
                     onClick = {
+                        val email = gmailAddress.trim().takeIf { it.isNotBlank() }
                         if (pairModeCreate) {
-                            vm.createPair(serverUrl, setupKey, myName) { step = 2 }
+                            vm.createPair(serverUrl, setupKey, myName, email) { step = 2 }
                         } else {
-                            vm.joinPair(serverUrl, inviteCodeInput, myName) { step = 2 }
+                            vm.joinPair(serverUrl, inviteCodeInput, myName, email) { step = 2 }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OursButton(
-                    text = "Back",
+                    text = strings.backLabel,
                     variant = OursButtonVariant.Ghost,
                     onClick = { step = 0 },
                 )
@@ -251,11 +298,11 @@ fun OnboardingScreen(
 
             2 -> {
                 if (!state.inviteCode.isNullOrBlank()) {
-                    OursCard(modifier = Modifier.fillMaxWidth()) {
-                        Text("Invite your partner", style = OursTypography.title, color = colors.ink)
+                    OursCard(modifier = Modifier.fillMaxWidth(), frosted = true) {
+                        Text(strings.invitePartnerTitle, style = OursTypography.title, color = colors.ink)
                         Spacer(Modifier.height(OursSpacing.xxs))
                         Text(
-                            "Share this code so they can join:",
+                            strings.invitePartnerSubtitle,
                             style = OursTypography.caption,
                             color = colors.inkSecondary,
                         )
@@ -268,18 +315,18 @@ fun OnboardingScreen(
                     }
                 }
 
-                Text("Location & alerts", style = OursTypography.display, color = colors.ink)
+                Text(strings.permissionsTitle, style = OursTypography.display, color = colors.ink)
                 Text(
-                    "Grant permissions step by step so location stays live in the background.",
+                    strings.permissionsSubtitle,
                     style = OursTypography.body,
                     color = colors.inkSecondary,
                 )
 
                 OursCard(modifier = Modifier.fillMaxWidth()) {
-                    Text("1. Precise location", style = OursTypography.title, color = colors.ink)
+                    Text(strings.preciseLocation, style = OursTypography.title, color = colors.ink)
                     Spacer(Modifier.height(OursSpacing.xs))
                     OursButton(
-                        text = if (fineGranted) "Granted" else "Allow location",
+                        text = if (fineGranted) strings.granted else strings.allowLocation,
                         variant = if (fineGranted) OursButtonVariant.Secondary else OursButtonVariant.Primary,
                         enabled = !fineGranted,
                         onClick = {
@@ -295,15 +342,15 @@ fun OnboardingScreen(
                 }
 
                 OursCard(modifier = Modifier.fillMaxWidth()) {
-                    Text("2. Background location", style = OursTypography.title, color = colors.ink)
+                    Text(strings.backgroundLocation, style = OursTypography.title, color = colors.ink)
                     Text(
-                        "Pick \"Allow all the time\" on the next screen.",
+                        strings.backgroundLocationHint,
                         style = OursTypography.caption,
                         color = colors.inkSecondary,
                     )
                     Spacer(Modifier.height(OursSpacing.xs))
                     OursButton(
-                        text = if (bgGranted) "Allow all the time granted" else "Allow in background",
+                        text = if (bgGranted) strings.backgroundGranted else strings.allowInBackground,
                         variant = if (bgGranted) OursButtonVariant.Secondary else OursButtonVariant.Primary,
                         enabled = fineGranted && !bgGranted,
                         onClick = {
@@ -319,15 +366,15 @@ fun OnboardingScreen(
 
                 if (Build.VERSION.SDK_INT >= 33) {
                     OursCard(modifier = Modifier.fillMaxWidth()) {
-                        Text("3. Notifications", style = OursTypography.title, color = colors.ink)
+                        Text(strings.notificationsTitle, style = OursTypography.title, color = colors.ink)
                         Text(
-                            "For check-ins, replies, place arrivals, and the foreground service.",
+                            strings.notificationsHint,
                             style = OursTypography.caption,
                             color = colors.inkSecondary,
                         )
                         Spacer(Modifier.height(OursSpacing.xs))
                         OursButton(
-                            text = if (notifGranted) "Notifications allowed" else "Allow notifications",
+                            text = if (notifGranted) strings.notificationsGranted else strings.allowNotifications,
                             variant = if (notifGranted) OursButtonVariant.Secondary else OursButtonVariant.Primary,
                             enabled = !notifGranted,
                             onClick = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
@@ -337,7 +384,7 @@ fun OnboardingScreen(
                 }
 
                 OursButton(
-                    text = "Continue to battery setup",
+                    text = strings.continueBatterySetup,
                     onClick = { step = 3 },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -346,26 +393,26 @@ fun OnboardingScreen(
             3 -> {
                 val isXiaomi = XiaomiGuideHelper.isXiaomiFamily()
                 Text(
-                    if (isXiaomi) "Xiaomi / HyperOS setup" else "Keep location alive",
+                    if (isXiaomi) strings.xiaomiTitle else strings.keepAliveTitle,
                     style = OursTypography.display,
                     color = colors.ink,
                 )
                 Text(
-                    "Exempt OURS from battery saving so updates stay fresh without opening the app.",
+                    strings.batterySubtitle,
                     style = OursTypography.body,
                     color = colors.inkSecondary,
                 )
 
                 OursCard(modifier = Modifier.fillMaxWidth()) {
-                    Text("Battery optimization", style = OursTypography.title, color = colors.ink)
+                    Text(strings.batteryOptimization, style = OursTypography.title, color = colors.ink)
                     Text(
-                        if (batteryExempt) "Already unrestricted." else "Allow OURS to run without battery limits.",
+                        if (batteryExempt) strings.alreadyUnrestricted else strings.allowUnrestrictedHint,
                         style = OursTypography.caption,
                         color = colors.inkSecondary,
                     )
                     Spacer(Modifier.height(OursSpacing.xs))
                     OursButton(
-                        text = if (batteryExempt) "Unrestricted" else "Disable battery optimization",
+                        text = if (batteryExempt) strings.unrestricted else strings.disableBatteryOpt,
                         variant = if (batteryExempt) OursButtonVariant.Secondary else OursButtonVariant.Primary,
                         onClick = {
                             runCatching {
@@ -382,10 +429,91 @@ fun OnboardingScreen(
                 }
 
                 OursButton(
-                    text = "Start using OURS",
+                    text = strings.startUsingOurs,
                     onClick = { vm.finishOnboarding() },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+        }
+    }
+
+    if (showServerSheet) {
+        OursBottomSheet(onDismiss = { showServerSheet = false }) {
+            Text(strings.serverSettingsTitle, style = OursTypography.headline, color = colors.ink)
+            Spacer(Modifier.height(OursSpacing.sm))
+            OutlinedTextField(
+                value = serverUrl,
+                onValueChange = { serverUrl = it },
+                label = { Text(strings.serverUrlTitle) },
+                placeholder = { Text("http://192.168.100.92:8080") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (serverStatus != null) {
+                Spacer(Modifier.height(OursSpacing.xs))
+                Text(serverStatus!!, style = OursTypography.caption, color = colors.live)
+            }
+            Spacer(Modifier.height(OursSpacing.sm))
+            Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {
+                OursButton(
+                    text = strings.testConnection,
+                    variant = OursButtonVariant.Secondary,
+                    loading = checkingServer,
+                    onClick = {
+                        scope.launch {
+                            checkingServer = true
+                            serverStatus = null
+                            vm.testServerHealth(serverUrl)
+                                .onSuccess { serverStatus = it }
+                                .onFailure { serverStatus = it.message ?: "Unreachable" }
+                            checkingServer = false
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                OursButton(
+                    text = strings.saveServerUrl,
+                    onClick = {
+                        vm.updateServerUrl(serverUrl)
+                        showServerSheet = false
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LanguagePillToggle(
+    current: String,
+    onSelect: (String) -> Unit,
+) {
+    val colors = OursTheme.colors
+    Surface(
+        shape = RoundedCornerShape(OursRadius.chip),
+        color = colors.surfaceMuted,
+    ) {
+        Row(
+            modifier = Modifier.padding(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            listOf("en" to "EN", "id" to "ID").forEach { (code, label) ->
+                val selected = current == code
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (selected) colors.action else colors.surfaceMuted,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onSelect(code) },
+                ) {
+                    Text(
+                        text = label,
+                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (selected) colors.onAction else colors.inkSecondary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
             }
         }
     }

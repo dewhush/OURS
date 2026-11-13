@@ -13,14 +13,21 @@ object OursTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalOursColors.current
+
+    val strings: OursStrings
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalOursStrings.current
 }
 
 @Composable
 fun OursTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    language: String = "en",
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) OursDarkColors else OursLightColors
+    val strings = if (language == "id") OursIndonesianStrings else OursEnglishStrings
     val m3Scheme = if (darkTheme) {
         darkColorScheme(
             primary = colors.action,
@@ -49,7 +56,10 @@ fun OursTheme(
         )
     }
 
-    CompositionLocalProvider(LocalOursColors provides colors) {
+    CompositionLocalProvider(
+        LocalOursColors provides colors,
+        LocalOursStrings provides strings,
+    ) {
         MaterialTheme(
             colorScheme = m3Scheme,
             content = content,

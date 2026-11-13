@@ -27,6 +27,7 @@ data class HealthResponse(
 data class UserDto(
     val id: Long,
     val name: String,
+    val email: String? = null,
     @SerialName("created_at") val createdAt: Long,
 )
 
@@ -41,6 +42,7 @@ data class TokensDto(
 @Serializable
 data class PairCreateRequest(
     val name: String,
+    val email: String? = null,
 )
 
 @Serializable
@@ -61,6 +63,7 @@ data class InviteResponse(
 data class PairJoinRequest(
     val code: String,
     val name: String,
+    val email: String? = null,
 )
 
 @Serializable

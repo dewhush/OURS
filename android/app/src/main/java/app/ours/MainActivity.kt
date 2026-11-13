@@ -8,7 +8,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -66,11 +72,13 @@ import app.ours.ui.screens.MapScreen
 import app.ours.ui.screens.MemoriesScreen
 import app.ours.ui.screens.OnboardingScreen
 import app.ours.ui.screens.SettingsScreen
+import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
 import app.ours.ui.theme.OursTypography
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
 import java.io.File
 import java.util.UUID
 
@@ -87,9 +95,62 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            OursTheme {
-                OursRoot(vm = vm)
+            val state by vm.state.collectAsStateWithLifecycle()
+            OursTheme(language = state.language) {
+                var showSplash by remember { mutableStateOf(true) }
+                LaunchedEffect(Unit) {
+                    delay(650)
+                    showSplash = false
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    OursRoot(vm = vm)
+                    AnimatedVisibility(
+                        visible = showSplash,
+                        exit = fadeOut(OursMotion.exitSpec()),
+                    ) {
+                        OursSplashOverlay()
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun OursSplashOverlay() {
+    val colors = OursTheme.colors
+    val strings = OursTheme.strings
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.canvas),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.sm),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = Color(0xFF0F0F0E),
+                modifier = Modifier.size(88.dp),
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                    contentDescription = "OURS",
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                )
+            }
+            Text(
+                text = "OURS",
+                style = OursTypography.display.copy(fontWeight = FontWeight.Bold),
+                color = colors.ink,
+            )
+            Text(
+                text = strings.splashTagline,
+                style = OursTypography.caption,
+                color = colors.inkMuted,
+            )
         }
     }
 }
@@ -164,6 +225,7 @@ private fun OursRoot(vm: OursViewModel) {
     }
 
     val colors = OursTheme.colors
+    val strings = OursTheme.strings
 
     Scaffold(
         containerColor = colors.canvas,
@@ -195,29 +257,29 @@ private fun OursRoot(vm: OursViewModel) {
                         NavigationBarItem(
                             selected = state.activeTab == MainTab.Map,
                             onClick = { vm.selectTab(MainTab.Map) },
-                            icon = { Icon(OursIcons.Map, contentDescription = "Map") },
-                            label = { Text("Map", style = OursTypography.label) },
+                            icon = { Icon(OursIcons.Map, contentDescription = strings.navMap) },
+                            label = { Text(strings.navMap, style = OursTypography.label) },
                             colors = navColors,
                         )
                         NavigationBarItem(
                             selected = state.activeTab == MainTab.Memories,
                             onClick = { vm.selectTab(MainTab.Memories) },
-                            icon = { Icon(OursIcons.Memories, contentDescription = "Memories") },
-                            label = { Text("Memories", style = OursTypography.label) },
+                            icon = { Icon(OursIcons.Memories, contentDescription = strings.navMemories) },
+                            label = { Text(strings.navMemories, style = OursTypography.label) },
                             colors = navColors,
                         )
                         NavigationBarItem(
                             selected = state.activeTab == MainTab.Chat,
                             onClick = { vm.selectTab(MainTab.Chat) },
-                            icon = { Icon(OursIcons.Chat, contentDescription = "Chat") },
-                            label = { Text("Chat", style = OursTypography.label) },
+                            icon = { Icon(OursIcons.Chat, contentDescription = strings.navChat) },
+                            label = { Text(strings.navChat, style = OursTypography.label) },
                             colors = navColors,
                         )
                         NavigationBarItem(
                             selected = state.activeTab == MainTab.Settings,
                             onClick = { vm.selectTab(MainTab.Settings) },
-                            icon = { Icon(OursIcons.Settings, contentDescription = "Settings") },
-                            label = { Text("Settings", style = OursTypography.label) },
+                            icon = { Icon(OursIcons.Settings, contentDescription = strings.navSettings) },
+                            label = { Text(strings.navSettings, style = OursTypography.label) },
                             colors = navColors,
                         )
                     }

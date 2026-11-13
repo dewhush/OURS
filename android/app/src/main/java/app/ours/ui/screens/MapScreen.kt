@@ -46,6 +46,7 @@ fun MapScreen(
     onQuickCheckIn: () -> Unit,
 ) {
     val colors = OursTheme.colors
+    val strings = OursTheme.strings
     var recenterTrigger by remember { mutableIntStateOf(0) }
     var showPartnerSheet by remember { mutableStateOf(false) }
 
@@ -63,11 +64,11 @@ fun MapScreen(
         else -> StatusTone.Muted
     }
     val statusLabel = when {
-        state.partner == null -> "Waiting for partner"
-        isPaused -> "Sharing paused"
-        hasCoords && !isStale -> "Live"
+        state.partner == null -> strings.waitingForPartner
+        isPaused -> strings.sharingPaused
+        hasCoords && !isStale -> strings.liveStatus
         loc?.recordedAt != null -> Formatters.relativeTime(loc.recordedAt, nowMs)
-        else -> "No fix yet"
+        else -> strings.noFixYet
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -115,7 +116,7 @@ fun MapScreen(
                     Spacer(Modifier.height(2.dp))
                     if (isPaused) {
                         Text(
-                            text = "Location hidden while paused",
+                            text = strings.locationHiddenPaused,
                             style = OursTypography.caption,
                             color = colors.inkSecondary,
                         )
@@ -139,7 +140,7 @@ fun MapScreen(
                     } else {
                         Text(
                             text = loc?.lastSeenAt?.let { "Last seen ${Formatters.relativeTime(it, nowMs)}" }
-                                ?: "Waiting for first location",
+                                ?: strings.waitingFirstLocation,
                             style = OursTypography.caption,
                             color = colors.inkSecondary,
                         )
@@ -158,7 +159,7 @@ fun MapScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OursButton(
-                text = "Check in",
+                text = strings.checkIn,
                 onClick = onQuickCheckIn,
                 leadingIcon = {
                     Icon(
@@ -170,19 +171,19 @@ fun MapScreen(
                 modifier = Modifier.weight(1f),
             )
             OursButton(
-                text = "Nudge",
+                text = strings.nudge,
                 variant = OursButtonVariant.Secondary,
                 onClick = { vm.sendNudge() },
                 leadingIcon = {
                     Icon(
                         imageVector = OursIcons.Heart,
-                        contentDescription = "Thinking of you",
+                        contentDescription = strings.nudge,
                         modifier = Modifier.size(18.dp),
                     )
                 },
             )
             OursButton(
-                text = "Center",
+                text = strings.center,
                 variant = OursButtonVariant.Secondary,
                 onClick = {
                     recenterTrigger++
@@ -191,7 +192,7 @@ fun MapScreen(
                 leadingIcon = {
                     Icon(
                         imageVector = OursIcons.Crosshair,
-                        contentDescription = "Center on partner",
+                        contentDescription = strings.center,
                         modifier = Modifier.size(18.dp),
                     )
                 },

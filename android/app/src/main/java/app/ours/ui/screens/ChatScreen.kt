@@ -92,6 +92,7 @@ fun ChatScreen(
     onOpenFullPhotoId: (String) -> Unit,
 ) {
     val colors = OursTheme.colors
+    val strings = OursTheme.strings
     val partnerName = state.partner?.name ?: "Partner"
     val myId = state.me?.id ?: -1L
     val listState = rememberLazyListState()
@@ -187,9 +188,9 @@ fun ChatScreen(
                 }
                 threadItems.isEmpty() -> {
                     OursEmptyState(
-                        title = "Say hello to $partnerName",
-                        detail = "Send a message or snap a 24-hour photo check-in.",
-                        actionLabel = "Take a photo",
+                        title = "${strings.sayHelloTitle} ($partnerName)",
+                        detail = strings.sayHelloDetail,
+                        actionLabel = strings.takePhoto,
                         onAction = onLaunchCameraCheckIn,
                     )
                 }
@@ -347,7 +348,7 @@ fun ChatScreen(
                         ) {
                             if (draft.isEmpty()) {
                                 Text(
-                                    text = "Message...",
+                                    text = strings.messagePlaceholder,
                                     style = OursTypography.body,
                                     color = colors.inkMuted,
                                 )

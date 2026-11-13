@@ -51,6 +51,7 @@ fun MemoriesScreen(
     onOpenFullPhoto: (CheckInDto) -> Unit,
 ) {
     val colors = OursTheme.colors
+    val strings = OursTheme.strings
     var showMapMode by remember { mutableStateOf(false) }
 
     Column(
@@ -66,15 +67,15 @@ fun MemoriesScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Memories", style = OursTypography.display, color = colors.ink)
+            Text(strings.memoriesTitle, style = OursTypography.display, color = colors.ink)
             Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {
                 OursButton(
-                    text = "Timeline",
+                    text = strings.timelineTab,
                     variant = if (!showMapMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
                     onClick = { showMapMode = false },
                 )
                 OursButton(
-                    text = "Map",
+                    text = strings.mapTab,
                     variant = if (showMapMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
                     onClick = { showMapMode = true },
                 )
