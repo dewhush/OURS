@@ -152,7 +152,8 @@ Inbox events are kept for 7 days.
 ## Auth and pairing
 
 ### `POST /api/pair/create`
-First phone only. Header `X-Setup-Key: <OURS_SETUP_KEY>`. Only works while zero users exist.
+First phone only. Only works while zero users exist. If `OURS_SETUP_KEY` is configured on the server,
+header `X-Setup-Key: <OURS_SETUP_KEY>` is required; when `OURS_SETUP_KEY` is unset/empty, no setup key header is needed.
 ```json
 {"name": "Dewantoro", "email": "dewantoro@gmail.com"}
 ```

@@ -25,6 +25,10 @@ struct TestApp {
 
 impl TestApp {
     async fn start() -> Self {
+        Self::start_with_setup_key(Some("test-setup-key")).await
+    }
+
+    async fn start_with_setup_key(setup_key: Option<&str>) -> Self {
         let tmp = TempDir::new().expect("tempdir");
         let data_dir = tmp.path().to_path_buf();
         std::fs::create_dir_all(data_dir.join("photos")).unwrap();
@@ -32,7 +36,7 @@ impl TestApp {
         let config = Config {
             bind: "127.0.0.1:0".to_string(),
             data_dir: data_dir.clone(),
-            setup_key: "test-setup-key".to_string(),
+            setup_key: setup_key.map(str::to_string),
             token_secret: b"0123456789abcdef0123456789abcdef".to_vec(),
             history_days: 30,
             stale_minutes: 15,
@@ -773,4 +777,50 @@ async fn chat_messages_json_multipart_and_ws() {
     assert_eq!(page2["items"].as_array().unwrap().len(), 1);
     assert_eq!(page2["items"][0]["id"], m1_id);
     assert!(page2["next_before"].is_null());
+}
+
+#[tokio::test]
+async fn pairing_without_setup_key_when_unset() {
+    let app = TestApp::start_with_setup_key(None).await;
+
+    // Create first user without X-Setup-Key header
+    let res = app
+        .client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .json(&json!({"name": "Dewantoro", "email": "dewantoro@gmail.com"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let body1: Value = res.json().await.unwrap();
+    let code = body1["invite_code"].as_str().unwrap().to_string();
+
+    // Second create still refused (409 already_set_up)
+    let dup = app
+        .client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .json(&json!({"name": "Other"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(dup.status(), StatusCode::CONFLICT);
+
+    // Join works and caps at 2 users
+    let join = app
+        .client
+        .post(format!("{}/api/pair/join", app.base_url))
+        .json(&json!({"code": code, "name": "Marchanda", "email": "marchanda@gmail.com"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(join.status(), StatusCode::CREATED);
+
+    let third = app
+        .client
+        .post(format!("{}/api/pair/join", app.base_url))
+        .json(&json!({"code": code, "name": "Intruder"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(third.status(), StatusCode::CONFLICT);
 }

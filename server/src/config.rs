@@ -7,7 +7,7 @@ use rand::RngCore;
 pub struct Config {
     pub bind: String,
     pub data_dir: PathBuf,
-    pub setup_key: String,
+    pub setup_key: Option<String>,
     pub token_secret: Vec<u8>,
     pub history_days: i64,
     pub stale_minutes: i64,
@@ -21,10 +21,9 @@ impl Config {
             std::env::var("OURS_DATA_DIR").unwrap_or_else(|_| "./data".to_string()),
         );
         let setup_key = std::env::var("OURS_SETUP_KEY")
-            .map_err(|_| "OURS_SETUP_KEY environment variable is required".to_string())?;
-        if setup_key.trim().is_empty() {
-            return Err("OURS_SETUP_KEY must not be empty".to_string());
-        }
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
 
         fs::create_dir_all(&data_dir)
             .map_err(|e| format!("failed to create data dir {}: {e}", data_dir.display()))?;

@@ -35,12 +35,14 @@ pub async fn create_pair(
     headers: HeaderMap,
     Json(req): Json<CreatePairRequest>,
 ) -> AppResult<(StatusCode, Json<CreatePairResponse>)> {
-    let provided_key = headers
-        .get("X-Setup-Key")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    if provided_key != state.config.setup_key {
-        return Err(AppError::forbidden("invalid or missing X-Setup-Key"));
+    if let Some(ref expected_key) = state.config.setup_key {
+        let provided_key = headers
+            .get("X-Setup-Key")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if provided_key != expected_key {
+            return Err(AppError::forbidden("invalid or missing X-Setup-Key"));
+        }
     }
 
     let name = req.name.trim().to_string();
