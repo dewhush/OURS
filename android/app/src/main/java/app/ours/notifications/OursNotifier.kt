@@ -8,6 +8,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.Typeface
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -16,6 +21,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import app.ours.MainActivity
 import app.ours.R
 import app.ours.data.api.EventChatMessageData
@@ -45,7 +51,7 @@ object OursNotifier {
         val updatesChannel = NotificationChannel(
             CHANNEL_UPDATES,
             "Check-ins, replies & places",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Partner check-ins, replies, highlights, and place alerts."
         }
@@ -173,15 +179,21 @@ object OursNotifier {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val sender = Person.Builder().setName(senderName).build()
+        val avatar = createAvatarBitmap(senderName, 0xFFD95D39.toInt())
+        val sender = Person.Builder()
+            .setName(senderName)
+            .setIcon(IconCompat.createWithBitmap(avatar))
+            .build()
         val style = NotificationCompat.MessagingStyle(sender)
             .addMessage(text, System.currentTimeMillis(), sender)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_UPDATES)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setLargeIcon(avatar)
             .setColor(0xFFD95D39.toInt())
             .setSubText("OURS")
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setStyle(style)
             .setAutoCancel(true)
             .setContentIntent(pi)
@@ -206,20 +218,44 @@ object OursNotifier {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val badgeColor = if (channelId == CHANNEL_NUDGE) 0xFFD95D39.toInt() else 0xFF2E7D5B.toInt()
+        val avatar = createAvatarBitmap(title, badgeColor)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setColor(0xFFD95D39.toInt())
+            .setLargeIcon(avatar)
+            .setColor(badgeColor)
             .setSubText("OURS")
             .setCategory(
                 if (channelId == CHANNEL_NUDGE) NotificationCompat.CATEGORY_SOCIAL
                 else NotificationCompat.CATEGORY_STATUS
             )
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
             .setContentIntent(pi)
         applyShortCriticalTextIfSupported(builder, title.take(16))
         NotificationManagerCompat.from(context).notify(id, builder.build())
+    }
+
+    private fun createAvatarBitmap(label: String, bgColor: Int): Bitmap {
+        val size = 128
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = bgColor }
+        canvas.drawCircle(size / 2f, size / 2f, size / 2f, bgPaint)
+
+        val ch = label.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "O"
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFAF8F4.toInt()
+            textSize = 56f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+        }
+        val bounds = Rect()
+        textPaint.getTextBounds(ch, 0, ch.length, bounds)
+        canvas.drawText(ch, size / 2f, size / 2f - bounds.exactCenterY(), textPaint)
+        return bmp
     }
 
     private fun applyShortCriticalTextIfSupported(
