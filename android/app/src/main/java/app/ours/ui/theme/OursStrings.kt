@@ -58,6 +58,7 @@ data class OursStrings(
     val onboardingReadyBadge: String,
     // Search & Filters (Airbnb)
     val searchPlaceholder: String,
+    val chatSearchPlaceholder: String,
     val filterAll: String,
     val filterPhotos: String,
     val filterPlaces: String,
@@ -167,6 +168,7 @@ val OursEnglishStrings = OursStrings(
     startUsingOurs = "Start using OURS",
     onboardingReadyBadge = "You're paired & ready",
     searchPlaceholder = "Search notes or places...",
+    chatSearchPlaceholder = "Search messages...",
     filterAll = "All",
     filterPhotos = "Photos",
     filterPlaces = "Places",
@@ -272,6 +274,7 @@ val OursIndonesianStrings = OursStrings(
     startUsingOurs = "Mulai gunakan OURS",
     onboardingReadyBadge = "Sudah berpasangan & siap",
     searchPlaceholder = "Cari catatan atau tempat...",
+    chatSearchPlaceholder = "Cari pesan...",
     filterAll = "Semua",
     filterPhotos = "Foto",
     filterPlaces = "Tempat",

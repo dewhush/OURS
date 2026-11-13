@@ -588,7 +588,7 @@ fun LanguagePillToggle(
                         text = label,
                         style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
                         color = if (selected) colors.onAction else colors.inkSecondary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                     )
                 }
             }

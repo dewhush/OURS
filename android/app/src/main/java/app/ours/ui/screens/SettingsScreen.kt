@@ -68,7 +68,12 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(colors.canvas)
             .statusBarsPadding(),
-        contentPadding = PaddingValues(OursSpacing.md),
+        contentPadding = PaddingValues(
+            start = OursSpacing.md,
+            top = OursSpacing.md,
+            end = OursSpacing.md,
+            bottom = 108.dp,
+        ),
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
     ) {
         item {
@@ -98,14 +103,14 @@ fun SettingsScreen(
                     Text(
                         "${strings.signedInAs} ${state.me?.name ?: "You"}$meEmail",
                         style = OursTypography.body,
-                        color = colors.inkSecondary,
+                        color = colors.ink,
                     )
                     if (state.partner != null) {
                         val pEmail = state.partner.email?.let { " ($it)" } ?: ""
                         Text(
                             "${strings.pairedWith} ${state.partner.name}$pEmail",
                             style = OursTypography.body,
-                            color = colors.live,
+                            color = colors.inkSecondary,
                         )
                     } else {
                         Spacer(Modifier.height(OursSpacing.xs))
@@ -421,7 +426,7 @@ private fun ThemePillToggle(
                         text = label,
                         style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
                         color = if (selected) colors.onAction else colors.inkSecondary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
                     )
                 }
             }

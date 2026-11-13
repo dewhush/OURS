@@ -163,16 +163,19 @@ fun ChatScreen(
             .fillMaxSize()
             .background(colors.canvas),
     ) {
-        // Frosted top header
+        // Floating frosted top header
         Surface(
+            shape = RoundedCornerShape(OursRadius.card),
             color = colors.glassSurfaceStrong,
             border = BorderStroke(1.dp, colors.glassBorder),
-            shadowElevation = 2.dp,
-            modifier = Modifier.fillMaxWidth(),
+            shadowElevation = 4.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
         ) {
             Row(
                 modifier = Modifier
-                    .statusBarsPadding()
                     .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm)
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -200,20 +203,13 @@ fun ChatScreen(
                         color = colors.paused,
                     )
                 }
-                IconButton(onClick = onLaunchCameraCheckIn) {
-                    Icon(
-                        imageVector = OursIcons.Camera,
-                        contentDescription = "Photo check-in",
-                        tint = colors.action,
-                    )
-                }
             }
         }
 
         OursSearchFilterBar(
             query = searchQuery,
             onQueryChange = { searchQuery = it },
-            placeholder = strings.searchPlaceholder,
+            placeholder = strings.chatSearchPlaceholder,
             filters = listOf(
                 ChatFilter.All to strings.filterAll,
                 ChatFilter.Photos to strings.filterPhotos,
@@ -231,8 +227,13 @@ fun ChatScreen(
                     OursLoadingState("Loading conversation...")
                 }
                 threadItems.isEmpty() -> {
+                    val emptyGreeting = if (strings.langCode == "id") {
+                        "Sapa $partnerName"
+                    } else {
+                        "Say hello to $partnerName"
+                    }
                     OursEmptyState(
-                        title = "${strings.sayHelloTitle} ($partnerName)",
+                        title = emptyGreeting,
                         detail = strings.sayHelloDetail,
                         actionLabel = strings.takePhoto,
                         onAction = onLaunchCameraCheckIn,
@@ -317,12 +318,15 @@ fun ChatScreen(
             }
         }
 
-        // Sticky frosted bottom composer
+        // Floating frosted bottom composer
         Surface(
+            shape = RoundedCornerShape(OursRadius.card),
             color = colors.glassSurfaceStrong,
             border = BorderStroke(1.dp, colors.glassBorder),
-            shadowElevation = 6.dp,
-            modifier = Modifier.fillMaxWidth(),
+            shadowElevation = 4.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
         ) {
             Column(
                 modifier = Modifier

@@ -176,9 +176,14 @@ fun OursMapView(
         }
     }
 
-    LaunchedEffect(styleReady, recenterTrigger) {
+    var lastRecenterTrigger by remember { mutableStateOf(recenterTrigger) }
+    LaunchedEffect(styleReady, partnerLocation, places, highlights, recenterTrigger) {
         val map = mapRef ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
+        val manualRecenter = recenterTrigger != lastRecenterTrigger
+        lastRecenterTrigger = recenterTrigger
+        if (hasMovedInitialCamera && !manualRecenter) return@LaunchedEffect
+
         val target = when {
             partnerLocation != null && !partnerLocation.paused &&
                 partnerLocation.lat != null && partnerLocation.lon != null ->
@@ -195,7 +200,7 @@ fun OursMapView(
             if (!hasMovedInitialCamera) {
                 hasMovedInitialCamera = true
                 map.moveCamera(update)
-            } else {
+            } else if (manualRecenter) {
                 map.animateCamera(update)
             }
         }
