@@ -39,6 +39,7 @@ fun OursMapView(
     val mapView = remember { MapView(context) }
     var mapRef by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
+    var hasMovedInitialCamera by remember { mutableStateOf(false) }
 
     DisposableEffect(lifecycleOwner, mapView) {
         val observer = LifecycleEventObserver { _, event ->
@@ -113,7 +114,13 @@ fun OursMapView(
             else -> null
         }
         if (target != null) {
-            map.animateCamera(CameraUpdateFactory.newLatLngZoom(target, 14.5))
+            val update = CameraUpdateFactory.newLatLngZoom(target, 14.5)
+            if (!hasMovedInitialCamera) {
+                hasMovedInitialCamera = true
+                map.moveCamera(update)
+            } else {
+                map.animateCamera(update)
+            }
         }
     }
 

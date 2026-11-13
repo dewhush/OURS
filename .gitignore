@@ -3,5 +3,5 @@ target/
 build/
 local.properties
 *.apk
-data/
+/data/
 .idea/
