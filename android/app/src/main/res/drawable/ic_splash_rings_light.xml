@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="4"
+        android:translateY="4">
+        <!-- Base Left Ring (Jet Black) -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M21,50 A18,18 0 1,0 57,50 A18,18 0 1,0 21,50 Z"
+            android:strokeWidth="6.5"
+            android:strokeColor="#0F0F0E" />
+        <!-- Base Right Ring (Charcoal Stone) -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M43,50 A18,18 0 1,0 79,50 A18,18 0 1,0 43,50 Z"
+            android:strokeWidth="6.5"
+            android:strokeColor="#5A5853" />
+        <!-- Negative-space weave cut at top crossing (Left over Right) -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M42.74,32.39 A18,18 0 0,1 55.18,42.11"
+            android:strokeWidth="10.5"
+            android:strokeLineCap="butt"
+            android:strokeColor="#FAF8F4" />
+        <!-- Foreground Left Ring over-arc at top crossing -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M42.74,32.39 A18,18 0 0,1 55.18,42.11"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round"
+            android:strokeColor="#0F0F0E" />
+        <!-- Negative-space weave cut at bottom crossing (Right over Left) -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M57.26,67.61 A18,18 0 0,1 44.82,57.89"
+            android:strokeWidth="10.5"
+            android:strokeLineCap="butt"
+            android:strokeColor="#FAF8F4" />
+        <!-- Foreground Right Ring over-arc at bottom crossing -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M57.26,67.61 A18,18 0 0,1 44.82,57.89"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round"
+            android:strokeColor="#5A5853" />
+    </group>
+</vector>

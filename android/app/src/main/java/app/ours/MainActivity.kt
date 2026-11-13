@@ -50,6 +50,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +62,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -117,6 +120,14 @@ class MainActivity : ComponentActivity() {
                 "dark" -> true
                 else -> isSystemInDarkTheme()
             }
+            val view = LocalView.current
+            if (!view.isInEditMode) {
+                SideEffect {
+                    val controller = WindowCompat.getInsetsController(window, view)
+                    controller.isAppearanceLightStatusBars = !darkTheme
+                    controller.isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
             OursTheme(darkTheme = darkTheme, language = state.language) {
                 var showSplash by remember { mutableStateOf(true) }
                 LaunchedEffect(Unit) {
@@ -141,6 +152,9 @@ class MainActivity : ComponentActivity() {
 private fun OursSplashOverlay() {
     val colors = OursTheme.colors
     val strings = OursTheme.strings
+    val isDark = OursTheme.isDark
+    val leftRingColor = if (isDark) Color(0xFFFAF8F4) else Color(0xFF0F0F0E)
+    val rightRingColor = if (isDark) Color(0xFFC8C2B6) else Color(0xFF5A5853)
 
     val iconScale = remember { Animatable(0.88f) }
     val iconOffsetY = remember { Animatable(12f) }
@@ -192,7 +206,7 @@ private fun OursSplashOverlay() {
                 )
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = Color(0xFF0F0F0E),
+                    color = colors.canvas,
                     modifier = Modifier
                         .size(88.dp)
                         .graphicsLayer {
@@ -203,9 +217,9 @@ private fun OursSplashOverlay() {
                 ) {
                     OursInterlockedRingsMark(
                         modifier = Modifier.fillMaxSize().padding(6.dp),
-                        leftRingColor = Color(0xFFFAF8F4),
-                        rightRingColor = Color(0xFFC8C2B6),
-                        backgroundColor = Color(0xFF0F0F0E),
+                        leftRingColor = leftRingColor,
+                        rightRingColor = rightRingColor,
+                        backgroundColor = colors.canvas,
                         progress = ringDraw.value,
                     )
                 }
