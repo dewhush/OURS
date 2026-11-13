@@ -156,7 +156,7 @@ Issues a fresh invite code (old ones stop working) while the partner has not joi
 
 ### `POST /api/pair/join`
 ```json
-{"code": "K7M3QX", "name": "Nadia"}
+{"code": "K7M3QX", "name": "Marchanda"}
 ```
 -> `201 {"user": User, "tokens": Tokens}`
 Errors: `404 invite_not_found`, `409 pair_full` (two users already exist; there can never be more).
@@ -299,7 +299,7 @@ All messages are **data-only, high priority**; every value is a string:
 | `checkin` | `event_id`, `title`, `body`, `checkin_id` | partner posted a check-in |
 | `reply` | `event_id`, `title`, `body`, `checkin_id` | partner replied |
 | `nudge` | `event_id`, `title`, `body` | thinking of you |
-| `place` | `event_id`, `title`, `body`, `place_id`, `transition` | "Nadia arrived at Home" / "Nadia left Home" |
+| `place` | `event_id`, `title`, `body`, `place_id`, `transition` | "Marchanda arrived at Home" / "Marchanda left Home" |
 | `highlight` | `event_id`, `title`, `body`, `checkin_id` | partner saved a highlight |
 
 `wake` is sent at most once per stale window, and never to a paused phone.

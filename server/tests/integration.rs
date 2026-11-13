@@ -79,7 +79,7 @@ impl TestApp {
         let r2: Value = self
             .client
             .post(format!("{}/api/pair/join", self.base_url))
-            .json(&json!({"code": code, "name": "Nadia"}))
+            .json(&json!({"code": code, "name": "Marchanda"}))
             .send()
             .await
             .unwrap()
@@ -170,7 +170,7 @@ async fn pairing_and_refresh_flow() {
         let old_join = app
             .client
             .post(format!("{}/api/pair/join", app.base_url))
-            .json(&json!({"code": old_code, "name": "Nadia"}))
+            .json(&json!({"code": old_code, "name": "Marchanda"}))
             .send()
             .await
             .unwrap();
@@ -181,7 +181,7 @@ async fn pairing_and_refresh_flow() {
     let join_res = app
         .client
         .post(format!("{}/api/pair/join", app.base_url))
-        .json(&json!({"code": format!("  {} ", new_code.to_lowercase()), "name": "Nadia"}))
+        .json(&json!({"code": format!("  {} ", new_code.to_lowercase()), "name": "Marchanda"}))
         .send()
         .await
         .unwrap();
@@ -209,7 +209,7 @@ async fn pairing_and_refresh_flow() {
         .await
         .unwrap();
     assert_eq!(me["me"]["name"], "Dewa");
-    assert_eq!(me["partner"]["name"], "Nadia");
+    assert_eq!(me["partner"]["name"], "Marchanda");
 
     // Refresh token rotation
     let ref_res = app
