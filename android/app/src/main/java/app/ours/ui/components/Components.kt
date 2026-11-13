@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.composed
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,6 +44,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
@@ -464,5 +469,90 @@ fun Modifier.oursPressScale(
     this.graphicsLayer {
         scaleX = scale
         scaleY = scale
+    }
+}
+
+@Composable
+fun OursInterlockedRingsMark(
+    modifier: Modifier = Modifier,
+    leftRingColor: Color = OursTheme.colors.ink,
+    rightRingColor: Color = OursTheme.colors.inkMuted,
+    backgroundColor: Color = OursTheme.colors.canvas,
+    progress: Float = 1f,
+) {
+    Canvas(modifier = modifier) {
+        val s = size.minDimension / 100f
+        val r = 18f * s
+        val stroke = 6.5f * s
+        val cutStroke = 10.5f * s
+        val sweep = (360f * progress.coerceIn(0f, 1f))
+
+        val leftCenter = Offset(39f * s, 50f * s)
+        val rightCenter = Offset(61f * s, 50f * s)
+        val leftTopLeft = Offset(leftCenter.x - r, leftCenter.y - r)
+        val rightTopLeft = Offset(rightCenter.x - r, rightCenter.y - r)
+        val arcSize = Size(r * 2f, r * 2f)
+
+        // Base rings
+        drawArc(
+            color = leftRingColor,
+            startAngle = -90f,
+            sweepAngle = sweep,
+            useCenter = false,
+            topLeft = leftTopLeft,
+            size = arcSize,
+            style = Stroke(width = stroke, cap = StrokeCap.Round),
+        )
+        drawArc(
+            color = rightRingColor,
+            startAngle = 90f,
+            sweepAngle = sweep,
+            useCenter = false,
+            topLeft = rightTopLeft,
+            size = arcSize,
+            style = Stroke(width = stroke, cap = StrokeCap.Round),
+        )
+
+        if (progress > 0.7f) {
+            // Top crossing: Left Ring OVER Right Ring
+            drawArc(
+                color = backgroundColor,
+                startAngle = -78f,
+                sweepAngle = 52f,
+                useCenter = false,
+                topLeft = leftTopLeft,
+                size = arcSize,
+                style = Stroke(width = cutStroke, cap = StrokeCap.Butt),
+            )
+            drawArc(
+                color = leftRingColor,
+                startAngle = -78f,
+                sweepAngle = 52f,
+                useCenter = false,
+                topLeft = leftTopLeft,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+
+            // Bottom crossing: Right Ring OVER Left Ring
+            drawArc(
+                color = backgroundColor,
+                startAngle = 102f,
+                sweepAngle = 52f,
+                useCenter = false,
+                topLeft = rightTopLeft,
+                size = arcSize,
+                style = Stroke(width = cutStroke, cap = StrokeCap.Butt),
+            )
+            drawArc(
+                color = rightRingColor,
+                startAngle = 102f,
+                sweepAngle = 52f,
+                useCenter = false,
+                topLeft = rightTopLeft,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+        }
     }
 }

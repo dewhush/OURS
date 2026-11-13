@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,6 +54,7 @@ import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
+import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
@@ -164,11 +166,22 @@ fun OnboardingScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = "OURS",
-                style = OursTypography.label.copy(fontWeight = FontWeight.Bold),
-                color = colors.action,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+            ) {
+                OursInterlockedRingsMark(
+                    modifier = Modifier.size(28.dp),
+                    leftRingColor = colors.ink,
+                    rightRingColor = colors.inkMuted,
+                    backgroundColor = colors.canvas,
+                )
+                Text(
+                    text = "OURS",
+                    style = OursTypography.label.copy(fontWeight = FontWeight.Bold),
+                    color = colors.action,
+                )
+            }
             LanguagePillToggle(
                 current = state.language,
                 onSelect = { vm.setLanguage(it) },

@@ -77,6 +77,7 @@ import app.ours.ui.OursViewModel
 import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursIcons
+import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursSendConfirmation
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.screens.ChatScreen
@@ -136,6 +137,7 @@ private fun OursSplashOverlay() {
 
     val iconScale = remember { Animatable(0.88f) }
     val iconOffsetY = remember { Animatable(12f) }
+    val ringDraw = remember { Animatable(0.15f) }
     val pulseScale = remember { Animatable(0.92f) }
     val pulseAlpha = remember { Animatable(0.55f) }
     val textAlpha = remember { Animatable(0f) }
@@ -145,6 +147,9 @@ private fun OursSplashOverlay() {
     }
     LaunchedEffect(Unit) {
         iconOffsetY.animateTo(0f, OursMotion.enterSpec(240))
+    }
+    LaunchedEffect(Unit) {
+        ringDraw.animateTo(1f, OursMotion.enterSpec(380))
     }
     LaunchedEffect(Unit) {
         pulseScale.animateTo(1.28f, OursMotion.enterSpec(480))
@@ -189,10 +194,12 @@ private fun OursSplashOverlay() {
                             translationY = iconOffsetY.value * density
                         },
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                        contentDescription = "OURS",
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                    OursInterlockedRingsMark(
+                        modifier = Modifier.fillMaxSize().padding(6.dp),
+                        leftRingColor = Color(0xFFFAF8F4),
+                        rightRingColor = Color(0xFFC8C2B6),
+                        backgroundColor = Color(0xFF0F0F0E),
+                        progress = ringDraw.value,
                     )
                 }
             }
