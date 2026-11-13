@@ -33,20 +33,23 @@ import app.ours.data.api.OursJson
 import kotlinx.serialization.json.decodeFromJsonElement
 
 object OursNotifier {
-    const val CHANNEL_LOCATION = "ours_location_service"
+    private const val LEGACY_CHANNEL_LOCATION = "ours_location_service"
+    const val CHANNEL_LOCATION = "ours_location_quiet"
     const val CHANNEL_UPDATES = "ours_updates"
     const val CHANNEL_NUDGE = "ours_nudge"
     const val FOREGROUND_NOTIFICATION_ID = 1001
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.deleteNotificationChannel(LEGACY_CHANNEL_LOCATION)
         val locationChannel = NotificationChannel(
             CHANNEL_LOCATION,
-            "Live location sharing",
-            NotificationManager.IMPORTANCE_LOW
+            "Background location",
+            NotificationManager.IMPORTANCE_MIN
         ).apply {
-            description = "Keeps your live location updated for your partner."
+            description = "Quietly keeps location sharing active."
             setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_SECRET
         }
         val updatesChannel = NotificationChannel(
             CHANNEL_UPDATES,
@@ -79,12 +82,16 @@ object OursNotifier {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val text = if (paused) "Location sharing is paused" else "Sharing live location with your partner"
+        val text = if (paused) "Location paused" else "Location active"
         return NotificationCompat.Builder(context, CHANNEL_LOCATION)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("OURS")
             .setContentText(text)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setLocalOnly(true)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
             .setContentIntent(pi)
             .setSilent(true)
             .build()
@@ -97,15 +104,15 @@ object OursNotifier {
                 context,
                 CHANNEL_UPDATES,
                 event.id.toInt(),
-                "New check-in from $partner",
-                "Tap to see what they shared."
+                partner,
+                "Shared a photo check-in"
             )
             "reply" -> notify(
                 context,
                 CHANNEL_UPDATES,
                 event.id.toInt(),
-                "$partner replied",
-                "Tap to read their reply."
+                partner,
+                "Replied to your check-in"
             )
             "chat_message" -> {
                 val data = runCatching { OursJson.decodeFromJsonElement<EventChatMessageData>(event.data) }.getOrNull()
@@ -124,29 +131,29 @@ object OursNotifier {
                         context,
                         CHANNEL_UPDATES,
                         event.id.toInt(),
-                        "$partner saved a highlight",
-                        "Added to your shared memories."
+                        partner,
+                        "Saved a memory"
                     )
                 }
             }
             "place" -> {
                 val data = runCatching { OursJson.decodeFromJsonElement<EventPlaceData>(event.data) }.getOrNull()
                 if (data != null) {
-                    val verb = if (data.transition == "enter") "arrived at" else "left"
+                    val verb = if (data.transition == "enter") "Arrived at" else "Left"
                     notify(
                         context,
                         CHANNEL_UPDATES,
                         event.id.toInt(),
-                        "$partner $verb ${data.placeName}",
-                        "Place alert"
+                        partner,
+                        "$verb ${data.placeName}"
                     )
                 }
             }
             "sharing" -> {
                 val data = runCatching { OursJson.decodeFromJsonElement<EventSharingData>(event.data) }.getOrNull()
                 if (data != null) {
-                    val msg = if (data.paused) "$partner paused location sharing" else "$partner resumed location sharing"
-                    notify(context, CHANNEL_UPDATES, event.id.toInt(), "OURS", msg)
+                    val msg = if (data.paused) "Paused location sharing" else "Resumed location sharing"
+                    notify(context, CHANNEL_UPDATES, event.id.toInt(), partner, msg)
                 }
             }
             "nudge" -> {
@@ -155,8 +162,8 @@ object OursNotifier {
                     context,
                     CHANNEL_NUDGE,
                     event.id.toInt(),
-                    "Thinking of you",
-                    "$partner sent a nudge."
+                    partner,
+                    "Thinking of you"
                 )
             }
         }
