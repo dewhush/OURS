@@ -63,6 +63,7 @@ data class OursUiState(
     val memoriesError: String? = null,
     val places: List<PlaceDto> = emptyList(),
     val pendingUploads: Int = 0,
+    val unreadChatCount: Int = 0,
     val wsConnected: Boolean = false,
     val activeTab: MainTab = MainTab.Map,
     val busy: Boolean = false,
@@ -126,7 +127,12 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectTab(tab: MainTab) {
-        _state.update { it.copy(activeTab = tab) }
+        _state.update {
+            it.copy(
+                activeTab = tab,
+                unreadChatCount = if (tab == MainTab.Chat) 0 else it.unreadChatCount,
+            )
+        }
         when (tab) {
             MainTab.Map -> refreshPartnerLocation()
             MainTab.Memories -> if (_state.value.memories.isEmpty()) refreshMemories()
@@ -700,9 +706,12 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { OursJson.decodeFromJsonElement<EventCheckInData>(event.data) }
                     .onSuccess { data ->
                         _state.update { cur ->
+                            val isNew = cur.checkIns.none { it.id == data.checkin.id }
+                            val fromPartner = data.checkin.authorId != prefs.userId
+                            val unreadBump = if (isNew && fromPartner && cur.activeTab != MainTab.Chat) 1 else 0
                             val next = listOf(data.checkin) + cur.checkIns.filterNot { it.id == data.checkin.id }
                             db.replaceCheckInsCache(next)
-                            cur.copy(checkIns = next)
+                            cur.copy(checkIns = next, unreadChatCount = cur.unreadChatCount + unreadBump)
                         }
                     }
             }
@@ -724,8 +733,11 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                 runCatching { OursJson.decodeFromJsonElement<EventChatMessageData>(event.data) }
                     .onSuccess { data ->
                         _state.update { cur ->
+                            val isNew = cur.chatMessages.none { it.id == data.message.id }
+                            val fromPartner = data.message.authorId != prefs.userId
+                            val unreadBump = if (isNew && fromPartner && cur.activeTab != MainTab.Chat) 1 else 0
                             val next = (listOf(data.message) + cur.chatMessages).distinctBy { it.id }
-                            cur.copy(chatMessages = next)
+                            cur.copy(chatMessages = next, unreadChatCount = cur.unreadChatCount + unreadBump)
                         }
                     }
             }

@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -306,6 +307,7 @@ private fun OursRoot(vm: OursViewModel) {
             OursFloatingBottomNav(
                 activeTab = state.activeTab,
                 strings = strings,
+                unreadChatCount = state.unreadChatCount,
                 onSelect = vm::selectTab,
             )
         },
@@ -474,6 +476,7 @@ private fun OursRoot(vm: OursViewModel) {
 private fun OursFloatingBottomNav(
     activeTab: MainTab,
     strings: OursStrings,
+    unreadChatCount: Int = 0,
     onSelect: (MainTab) -> Unit,
 ) {
     val colors = OursTheme.colors
@@ -541,12 +544,24 @@ private fun OursFloatingBottomNav(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                tint = tint,
-                                modifier = Modifier.size(20.dp),
-                            )
+                            Box {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = label,
+                                    tint = tint,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                if (tab == MainTab.Chat && unreadChatCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 6.dp, y = (-3).dp)
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(colors.ink),
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(2.dp))
                             Text(
                                 text = label,

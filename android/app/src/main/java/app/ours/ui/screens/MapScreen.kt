@@ -1,5 +1,13 @@
 package app.ours.ui.screens
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.net.Uri
+import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -26,8 +34,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import app.ours.location.AdaptiveLocationPolicy
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.OursUiState
@@ -73,12 +84,29 @@ fun MapScreen(
         }
     }
 
+    val context = LocalContext.current
     val partnerName = state.partner?.name ?: "Partner"
     val loc = state.partnerLocation
     val isPaused = state.partnerPaused || loc?.paused == true
     val hasCoords = !isPaused && loc?.lat != null && loc.lon != null
     val nowMs = System.currentTimeMillis()
     val isStale = loc?.recordedAt?.let { nowMs - it > 15 * 60_000L } ?: true
+    val myLastCoords = remember(loc?.recordedAt, recenterTrigger) { readLastKnownCoords(context) }
+    val distanceText = remember(loc?.lat, loc?.lon, myLastCoords, strings.awaySuffix) {
+        if (hasCoords && loc != null && myLastCoords != null) {
+            val meters = AdaptiveLocationPolicy.distanceMeters(
+                myLastCoords.first,
+                myLastCoords.second,
+                loc.lat!!,
+                loc.lon!!,
+            )
+            if (meters < 1000.0) {
+                "${meters.toInt()} m ${strings.awaySuffix}"
+            } else {
+                String.format("%.1f km %s", meters / 1000.0, strings.awaySuffix)
+            }
+        } else null
+    }
 
     val statusTone = when {
         state.partner == null -> StatusTone.Muted
@@ -104,13 +132,17 @@ fun MapScreen(
             recenterTrigger = recenterTrigger,
         )
 
-        // Top floating partner status card
-        OursCard(
+        // Top floating partner status card + optional Pause Sharing reminder banner
+        Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()
                 .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm)
                 .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+        ) {
+        OursCard(
+            modifier = Modifier.fillMaxWidth(),
             frosted = true,
             onClick = { showPartnerSheet = true },
         ) {
@@ -153,8 +185,9 @@ fun MapScreen(
                             ?.replaceFirstChar { it.uppercase() }
                             ?.let { "$it · " } ?: ""
                         val updatedText = loc.recordedAt?.let { Formatters.relativeTime(it, nowMs) } ?: "--"
+                        val distPart = distanceText?.let { "  |  $it" } ?: ""
                         Text(
-                            text = "$activityPrefix$speedText  |  $batteryText  |  $updatedText",
+                            text = "$activityPrefix$speedText  |  $batteryText$distPart  |  $updatedText",
                             style = OursTypography.tabular,
                             color = colors.inkSecondary,
                         )
@@ -174,6 +207,21 @@ fun MapScreen(
                     }
                 }
             }
+        }
+
+        if (state.sharingPaused) {
+            OursCard(
+                modifier = Modifier.fillMaxWidth(),
+                frosted = true,
+                onClick = { vm.toggleSharingPaused(false) },
+            ) {
+                Text(
+                    text = strings.sharingPausedBanner,
+                    style = OursTypography.caption.copy(fontWeight = FontWeight.Medium),
+                    color = colors.ink,
+                )
+            }
+        }
         }
 
         // Bottom floating actions: Check-in CTA + Nudge + Recenter
@@ -249,6 +297,9 @@ fun MapScreen(
             OursStatusChip(label = statusLabel, tone = statusTone)
             Spacer(Modifier.height(OursSpacing.md))
             if (loc != null && hasCoords) {
+                if (distanceText != null) {
+                    DetailRow(strings.distanceLabel, distanceText)
+                }
                 DetailRow("Speed", Formatters.speedKmh(loc.speedMps))
                 DetailRow("Battery", loc.batteryPct?.let { "$it%${if (loc.charging == true) " (charging)" else ""}" } ?: "--")
                 DetailRow("Accuracy", loc.accuracyM?.let { "${it.toInt()} m" } ?: "--")
@@ -261,14 +312,31 @@ fun MapScreen(
                 )
             }
             Spacer(Modifier.height(OursSpacing.md))
-            OursButton(
-                text = "Send thinking-of-you nudge",
-                onClick = {
-                    vm.sendNudge()
-                    showPartnerSheet = false
-                },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
+                horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+            ) {
+                if (loc != null && hasCoords) {
+                    OursButton(
+                        text = strings.directionsCta,
+                        variant = OursButtonVariant.Secondary,
+                        onClick = {
+                            val uri = Uri.parse("geo:${loc.lat},${loc.lon}?q=${loc.lat},${loc.lon}(${Uri.encode(partnerName)})")
+                            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+                            showPartnerSheet = false
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                OursButton(
+                    text = strings.sendNudgeCta,
+                    onClick = {
+                        vm.sendNudge()
+                        showPartnerSheet = false
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
@@ -285,4 +353,24 @@ private fun DetailRow(label: String, value: String) {
         Text(label, style = OursTypography.body, color = colors.inkSecondary)
         Text(value, style = OursTypography.tabularLarge, color = colors.ink)
     }
+}
+
+@SuppressLint("MissingPermission")
+private fun readLastKnownCoords(context: Context): Pair<Double, Double>? {
+    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED
+    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED
+    if (!fine && !coarse) return null
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+    val providers = buildList {
+        if (Build.VERSION.SDK_INT >= 31 && lm.allProviders.contains(LocationManager.FUSED_PROVIDER)) {
+            add(LocationManager.FUSED_PROVIDER)
+        }
+        add(LocationManager.GPS_PROVIDER)
+        add(LocationManager.NETWORK_PROVIDER)
+    }
+    val best = providers.mapNotNull { runCatching { lm.getLastKnownLocation(it) }.getOrNull() }
+        .maxByOrNull { it.time } ?: return null
+    return best.latitude to best.longitude
 }

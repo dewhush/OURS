@@ -316,8 +316,11 @@ fun OnboardingScreen(
                 if (!pairModeCreate) {
                     OutlinedTextField(
                         value = inviteCodeInput,
-                        onValueChange = { inviteCodeInput = it.uppercase() },
+                        onValueChange = { raw ->
+                            inviteCodeInput = raw.filter { it.isLetterOrDigit() }.uppercase().take(6)
+                        },
                         label = { Text(strings.inviteCodeLabel) },
+                        placeholder = { Text("A1B2C3") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -522,6 +525,15 @@ fun OnboardingScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            val trimmedUrl = serverUrl.trim().lowercase()
+            val isNonLocalHttp = trimmedUrl.startsWith("http://") &&
+                !trimmedUrl.startsWith("http://127.0.0.1") &&
+                !trimmedUrl.startsWith("http://localhost") &&
+                !trimmedUrl.startsWith("http://10.0.2.2")
+            if (isNonLocalHttp) {
+                Spacer(Modifier.height(OursSpacing.xxs))
+                Text(strings.httpsRecommended, style = OursTypography.caption, color = colors.inkMuted)
+            }
             if (serverStatus != null) {
                 Spacer(Modifier.height(OursSpacing.xs))
                 Text(serverStatus!!, style = OursTypography.caption, color = colors.live)
