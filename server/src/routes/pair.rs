@@ -30,17 +30,30 @@ fn normalize_email(raw: Option<String>) -> AppResult<Option<String>> {
     Ok(Some(trimmed))
 }
 
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 pub async fn create_pair(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<CreatePairRequest>,
 ) -> AppResult<(StatusCode, Json<CreatePairResponse>)> {
     if let Some(ref expected_key) = state.config.setup_key {
+        state.check_create_rate_limit()?;
         let provided_key = headers
             .get("X-Setup-Key")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        if provided_key != expected_key {
+        if !constant_time_eq(provided_key.as_bytes(), expected_key.as_bytes()) {
+            state.record_create_failure();
             return Err(AppError::forbidden("invalid or missing X-Setup-Key"));
         }
     }
@@ -204,15 +217,18 @@ pub async fn refresh_auth(
     State(state): State<AppState>,
     Json(req): Json<RefreshRequest>,
 ) -> AppResult<Json<Tokens>> {
+    state.check_refresh_rate_limit()?;
+
     let raw = req.refresh_token.trim().to_string();
     if raw.is_empty() {
+        state.record_refresh_failure();
         return Err(AppError::invalid_refresh_token("missing refresh token"));
     }
     let token_hash = hash_refresh_token(&raw);
 
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
-    let tokens = tokio::task::spawn_blocking(move || -> AppResult<Tokens> {
+    let res = tokio::task::spawn_blocking(move || -> AppResult<Tokens> {
         let mut conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
@@ -251,9 +267,50 @@ pub async fn refresh_auth(
         tx.commit()?;
         Ok(tokens)
     })
+    .await?;
+
+    match res {
+        Ok(tokens) => Ok(Json(tokens)),
+        Err(err) => {
+            if err.code == "invalid_refresh_token" {
+                state.record_refresh_failure();
+            }
+            Err(err)
+        }
+    }
+}
+
+pub async fn logout(
+    AuthUser(user_id): AuthUser,
+    State(state): State<AppState>,
+    body: Option<Json<RefreshRequest>>,
+) -> AppResult<StatusCode> {
+    let db = state.db.clone();
+    let specific_hash = body
+        .map(|Json(r)| r.refresh_token.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .map(|s| hash_refresh_token(&s));
+
+    tokio::task::spawn_blocking(move || -> AppResult<()> {
+        let conn = db
+            .lock()
+            .map_err(|_| AppError::internal("database lock poisoned"))?;
+        if let Some(token_hash) = specific_hash {
+            conn.execute(
+                "DELETE FROM refresh_tokens WHERE user_id = ?1 AND token_hash = ?2",
+                params![user_id, token_hash],
+            )?;
+        } else {
+            conn.execute(
+                "DELETE FROM refresh_tokens WHERE user_id = ?1",
+                params![user_id],
+            )?;
+        }
+        Ok(())
+    })
     .await??;
 
-    Ok(Json(tokens))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn get_me(

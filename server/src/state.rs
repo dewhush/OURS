@@ -12,13 +12,41 @@ use crate::models::Event;
 
 pub type WsSenders = Arc<RwLock<HashMap<i64, Vec<mpsc::UnboundedSender<String>>>>>;
 
+#[derive(Clone, Default)]
+pub struct SlidingLimiter {
+    attempts: Arc<Mutex<Vec<Instant>>>,
+}
+
+impl SlidingLimiter {
+    pub fn check(&self, max_attempts: usize, window: Duration, msg: &str) -> AppResult<()> {
+        let now = Instant::now();
+        let mut guard = self
+            .attempts
+            .lock()
+            .map_err(|_| AppError::internal("rate limit lock poisoned"))?;
+        guard.retain(|t| now.duration_since(*t) < window);
+        if guard.len() >= max_attempts {
+            return Err(AppError::rate_limited(msg));
+        }
+        Ok(())
+    }
+
+    pub fn record(&self) {
+        if let Ok(mut guard) = self.attempts.lock() {
+            guard.push(Instant::now());
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: Config,
     pub db: Db,
     pub ws_senders: WsSenders,
     pub fcm: FcmClient,
-    join_failures: Arc<Mutex<Vec<Instant>>>,
+    join_failures: SlidingLimiter,
+    create_failures: SlidingLimiter,
+    refresh_failures: SlidingLimiter,
 }
 
 impl AppState {
@@ -28,30 +56,46 @@ impl AppState {
             db,
             ws_senders: Arc::new(RwLock::new(HashMap::new())),
             fcm,
-            join_failures: Arc::new(Mutex::new(Vec::new())),
+            join_failures: SlidingLimiter::default(),
+            create_failures: SlidingLimiter::default(),
+            refresh_failures: SlidingLimiter::default(),
         }
     }
 
     pub fn check_join_rate_limit(&self) -> AppResult<()> {
-        let now = Instant::now();
-        let window = Duration::from_secs(60);
-        let mut guard = self
-            .join_failures
-            .lock()
-            .map_err(|_| AppError::internal("rate limit lock poisoned"))?;
-        guard.retain(|t| now.duration_since(*t) < window);
-        if guard.len() >= 10 {
-            return Err(AppError::rate_limited(
-                "too many failed invite attempts; try again in a minute",
-            ));
-        }
-        Ok(())
+        self.join_failures.check(
+            10,
+            Duration::from_secs(60),
+            "too many failed invite attempts; try again in a minute",
+        )
     }
 
     pub fn record_join_failure(&self) {
-        if let Ok(mut guard) = self.join_failures.lock() {
-            guard.push(Instant::now());
-        }
+        self.join_failures.record();
+    }
+
+    pub fn check_create_rate_limit(&self) -> AppResult<()> {
+        self.create_failures.check(
+            10,
+            Duration::from_secs(60),
+            "too many failed setup key attempts; try again in a minute",
+        )
+    }
+
+    pub fn record_create_failure(&self) {
+        self.create_failures.record();
+    }
+
+    pub fn check_refresh_rate_limit(&self) -> AppResult<()> {
+        self.refresh_failures.check(
+            20,
+            Duration::from_secs(60),
+            "too many failed refresh attempts; try again in a minute",
+        )
+    }
+
+    pub fn record_refresh_failure(&self) {
+        self.refresh_failures.record();
     }
 
     pub async fn push_ws_event(&self, recipient_id: i64, event: &Event) {

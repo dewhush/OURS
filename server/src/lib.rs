@@ -33,6 +33,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/pair/invite", get(routes::pair::reissue_invite))
         .route("/api/pair/join", post(routes::pair::join_pair))
         .route("/api/auth/refresh", post(routes::pair::refresh_auth))
+        .route("/api/auth/logout", post(routes::pair::logout))
         .route("/api/me", get(routes::pair::get_me))
         .route("/api/push-token", post(routes::pair::set_push_token))
         .route("/api/locations", post(routes::locations::post_locations))

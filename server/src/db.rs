@@ -188,6 +188,12 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
     ensure_column(&conn, "location_history", "altitude_m", "REAL")?;
     ensure_column(&conn, "location_history", "vertical_speed_mps", "REAL")?;
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+
     Ok(Arc::new(Mutex::new(conn)))
 }
 

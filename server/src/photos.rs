@@ -105,6 +105,28 @@ pub async fn get_photo(
         _ => return Err(AppError::bad_request("size must be thumb or full")),
     };
 
+    let db = state.db.clone();
+    let pid_check = photo_id.clone();
+    let owned = tokio::task::spawn_blocking(move || -> AppResult<bool> {
+        let conn = db
+            .lock()
+            .map_err(|_| AppError::internal("database lock poisoned"))?;
+        let mut stmt = conn.prepare(
+            "SELECT 1 FROM checkins WHERE photo_id = ?1
+             UNION ALL
+             SELECT 1 FROM replies WHERE photo_id = ?1
+             UNION ALL
+             SELECT 1 FROM messages WHERE photo_id = ?1
+             LIMIT 1",
+        )?;
+        Ok(stmt.exists(rusqlite::params![pid_check])?)
+    })
+    .await??;
+
+    if !owned {
+        return Err(AppError::not_found("photo not found"));
+    }
+
     let path = state
         .config
         .data_dir

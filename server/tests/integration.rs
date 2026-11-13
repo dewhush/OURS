@@ -959,3 +959,81 @@ async fn checkin_photo_strips_exif_metadata() {
         "EXIF metadata must be stripped from stored JPEG"
     );
 }
+
+#[tokio::test]
+async fn logout_revokes_refresh_token_and_create_rate_limits() {
+    let app = TestApp::start().await;
+
+    // 10 bad setup key attempts -> 403, 11th -> 429 rate_limited
+    for _ in 0..10 {
+        let r = app
+            .client
+            .post(format!("{}/api/pair/create", app.base_url))
+            .header("X-Setup-Key", "wrong-key")
+            .json(&json!({"name": "Dewantoro"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    }
+    let blocked = app
+        .client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .header("X-Setup-Key", "wrong-key")
+        .json(&json!({"name": "Dewantoro"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Pair with valid key still succeeds on a fresh TestApp
+    let app2 = TestApp::start().await;
+    let create_res: Value = app2
+        .client
+        .post(format!("{}/api/pair/create", app2.base_url))
+        .header("X-Setup-Key", "test-setup-key")
+        .json(&json!({"name": "Dewantoro"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let access = create_res["tokens"]["access_token"].as_str().unwrap();
+    let refresh = create_res["tokens"]["refresh_token"].as_str().unwrap();
+
+    // Logout revokes refresh token
+    let out = app2
+        .client
+        .post(format!("{}/api/auth/logout", app2.base_url))
+        .bearer_auth(access)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(out.status(), StatusCode::NO_CONTENT);
+
+    let ref_after = app2
+        .client
+        .post(format!("{}/api/auth/refresh", app2.base_url))
+        .json(&json!({"refresh_token": refresh}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ref_after.status(), StatusCode::UNAUTHORIZED);
+
+    // Orphaned photo file on disk (not in DB) returns 404
+    let orphan_id = "abcdef0123456789abcdef0123456789";
+    std::fs::write(
+        app2._tmp.path().join("photos").join(format!("{orphan_id}_full.jpg")),
+        make_test_jpeg(50, 50),
+    )
+    .unwrap();
+    let orphan_res = app2
+        .client
+        .get(format!("{}/api/photos/{orphan_id}?size=full", app2.base_url))
+        .bearer_auth(access)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(orphan_res.status(), StatusCode::NOT_FOUND);
+}

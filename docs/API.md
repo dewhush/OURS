@@ -190,7 +190,12 @@ Errors: `404 invite_not_found`, `409 pair_full` (two users already exist; there 
 ```json
 {"refresh_token": "..."}
 ```
--> `200 Tokens`. Error: `401 invalid_refresh_token` (unknown, already used, or expired).
+-> `200 Tokens`. Error: `401 invalid_refresh_token` (unknown, already used, or expired), `429 rate_limited`.
+
+### `POST /api/auth/logout` (auth)
+Optional JSON body `{"refresh_token": "..."}` to revoke a specific refresh token, or empty body to
+revoke all refresh tokens for the caller.
+-> `204`.
 
 ### `GET /api/me` (auth)
 -> `200`
