@@ -548,11 +548,18 @@ fun SettingsScreen(
                                 text = "Pick contact",
                                 variant = OursButtonVariant.Secondary,
                                 onClick = {
-                                    val intent = Intent(
-                                        Intent.ACTION_PICK,
-                                        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                                    )
-                                    contactPickerLauncher.launch(intent)
+                                    val phoneIntent = Intent(Intent.ACTION_PICK).apply {
+                                        type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+                                    }
+                                    runCatching {
+                                        contactPickerLauncher.launch(phoneIntent)
+                                    }.onFailure {
+                                        val fallbackIntent = Intent(
+                                            Intent.ACTION_PICK,
+                                            ContactsContract.Contacts.CONTENT_URI,
+                                        )
+                                        runCatching { contactPickerLauncher.launch(fallbackIntent) }
+                                    }
                                 },
                                 modifier = Modifier.weight(1f),
                             )
