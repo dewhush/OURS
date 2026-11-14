@@ -127,7 +127,7 @@ fun Modifier.oursContentWidth(spec: OursLayoutSpec): Modifier =
  */
 fun Modifier.oursHeaderInsets(): Modifier = composed {
     windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
-        .padding(top = 4.dp)
+        .padding(top = 16.dp)
 }
 
 /**

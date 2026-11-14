@@ -234,6 +234,8 @@ fun ChatScreen(
             }
         }
 
+        Spacer(Modifier.height(OursSpacing.xs))
+
         OursSearchFilterBar(
             query = searchQuery,
             onQueryChange = { searchQuery = it },

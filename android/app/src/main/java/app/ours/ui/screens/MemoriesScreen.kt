@@ -145,7 +145,7 @@ fun MemoriesScreen(
                 }
             }
         }
-        Spacer(Modifier.height(OursSpacing.xs))
+        Spacer(Modifier.height(OursSpacing.sm))
 
         OursSearchFilterBar(
             query = searchQuery,

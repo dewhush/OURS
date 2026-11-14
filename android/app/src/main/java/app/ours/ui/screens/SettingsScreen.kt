@@ -154,7 +154,7 @@ fun SettingsScreen(
         modifier = Modifier.oursContentWidth(layoutSpec),
         contentPadding = PaddingValues(
             start = layoutSpec.horizontalPadding,
-            top = topHeaderInset + 84.dp,
+            top = topHeaderInset + 96.dp,
             end = layoutSpec.horizontalPadding,
             bottom = 140.dp,
         ),
