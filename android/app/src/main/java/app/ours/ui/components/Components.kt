@@ -115,12 +115,12 @@ fun Modifier.oursContentWidth(spec: OursLayoutSpec): Modifier =
     }
 
 /**
- * Shared top inset below the status bar and HyperIsland / display cutout (~60dp)
- * so Map, Memories, Chat, and Settings headers align identically.
+ * Shared top inset directly below the status bar and HyperIsland / display cutout
+ * so Map, Memories, Chat, and Settings headers sit close to the island and align identically.
  */
 fun Modifier.oursHeaderInsets(): Modifier = composed {
     windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
-        .padding(top = 12.dp)
+        .padding(top = 4.dp)
 }
 
 enum class OursButtonVariant { Primary, Secondary, Ghost, Destructive }

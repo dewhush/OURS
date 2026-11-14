@@ -363,6 +363,7 @@ private fun OursRoot(vm: OursViewModel) {
 
     Scaffold(
         containerColor = colors.canvas,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             AnimatedVisibility(
                 visible = !imeVisible,
