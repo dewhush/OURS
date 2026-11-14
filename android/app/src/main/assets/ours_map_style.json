@@ -1,6 +1,7 @@
 {
   "version": 8,
   "name": "OURS Warm Editorial",
+  "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
   "sources": {
     "openmaptiles": {
       "type": "vector",
@@ -175,6 +176,7 @@
       "filter": ["in", "class", "city", "town", "village", "suburb", "neighbourhood"],
       "layout": {
         "text-field": "{name}",
+        "text-font": ["Noto Sans Regular"],
         "text-size": ["interpolate", ["linear"], ["zoom"], 8, 11, 14, 15],
         "text-max-width": 8
       },
@@ -193,6 +195,7 @@
       "layout": {
         "symbol-placement": "line",
         "text-field": "{name}",
+        "text-font": ["Noto Sans Regular"],
         "text-size": 11
       },
       "paint": {
