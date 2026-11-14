@@ -11,6 +11,7 @@ import app.ours.data.api.CheckInDto
 import app.ours.data.api.EventAvatarData
 import app.ours.data.api.EventChatMessageData
 import app.ours.data.api.EventCheckInData
+import app.ours.data.api.EventCheckInDeletedData
 import app.ours.data.api.EventDto
 import app.ours.data.api.EventHighlightData
 import app.ours.data.api.EventReplyData
@@ -103,7 +104,7 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             partner = if (prefs.partnerId != null && prefs.partnerName != null) {
                 UserDto(id = prefs.partnerId!!, name = prefs.partnerName!!, email = prefs.partnerEmail, createdAt = 0L)
             } else null,
-            sharingPaused = false.also { prefs.sharingPaused = false },
+            sharingPaused = prefs.sharingPaused,
             partnerPaused = prefs.partnerPaused,
             partnerLocation = db.loadPartnerLocationCache(),
             myLocation = LocationTrackingService.latestMyLocation.value,
@@ -229,8 +230,6 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- Onboarding & Pairing ---
-
     suspend fun testServerHealth(url: String): Result<String> = runCatching {
         val resp = api.health(url)
         prefs.serverUrl = url
@@ -320,8 +319,6 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         if (isForeground) connectWebSocket()
         refreshAll()
     }
-
-    // --- Data refresh ---
 
     fun refreshAll() {
         if (!prefs.isPaired) return
@@ -488,8 +485,6 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                 }
         }
     }
-
-    // --- Actions ---
 
     fun sendCheckIn(photoUri: Uri, note: String?, placeName: String?) {
         viewModelScope.launch {
@@ -771,8 +766,13 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         disconnectWebSocket()
         LocationTrackingService.stop(app)
         WatchdogScheduler.cancel(app)
+        val accessSnapshot = prefs.accessToken
+        val refreshSnapshot = prefs.refreshToken
         prefs.clearSession()
         db.clearAll()
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { api.logout(accessSnapshot, refreshSnapshot) }
+        }
         _state.value = OursUiState(
             isPaired = false,
             onboardingDone = false,
@@ -783,8 +783,6 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun photoUrl(photoId: String, thumb: Boolean): String = api.photoUrl(photoId, thumb)
-
-    // --- WebSocket & Events ---
 
     private fun connectWebSocket() {
         if (webSocket != null || !prefs.isPaired) return
@@ -963,6 +961,27 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         }
                     }
+            }
+            "checkin_deleted" -> {
+                runCatching { OursJson.decodeFromJsonElement<EventCheckInDeletedData>(event.data) }
+                    .onSuccess { data ->
+                        _state.update { cur ->
+                            val next = cur.checkIns.filterNot { it.id == data.checkinId }
+                            db.replaceCheckInsCache(next)
+                            cur.copy(
+                                checkIns = next,
+                                memories = cur.memories.filterNot { it.id == data.checkinId },
+                            )
+                        }
+                    }
+            }
+            "places_changed" -> {
+                viewModelScope.launch {
+                    runCatching { api.getPlaces() }.onSuccess { placesResp ->
+                        db.replacePlacesCache(placesResp.places)
+                        _state.update { it.copy(places = placesResp.places) }
+                    }
+                }
             }
         }
         if (showNotification && event.id > 0) {

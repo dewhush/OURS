@@ -1,6 +1,10 @@
 package app.ours.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +33,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -63,12 +69,14 @@ import app.ours.ui.components.OursGlassBackdrop
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursLoadingState
 import app.ours.ui.components.OursMapView
+import app.ours.ui.components.OursSegmentedControl
 import app.ours.ui.components.OursStaggeredItem
 import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursHeaderInsets
 import app.ours.ui.components.oursLiquidGlass
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.rememberOursLayoutSpec
+import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -112,277 +120,299 @@ fun MemoriesScreen(
     }
 
     OursGlassBackdrop {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        if (showMapMode) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                OursMapView(
-                    modifier = Modifier.fillMaxSize(),
-                    partnerLocation = state.partnerLocation,
-                    myLocation = state.myLocation,
-                    highlights = filteredMemories,
-                    places = state.places,
-                    onHighlightClick = onOpenFullPhoto,
-                )
-                if (state.memories.isEmpty() && !state.memoriesLoading) {
-                    OursCard(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .navigationBarsPadding()
-                            .padding(start = OursSpacing.md, end = OursSpacing.md, bottom = 104.dp)
-                            .fillMaxWidth(),
-                        frosted = true,
-                    ) {
-                        Text("No pinned memories yet", style = OursTypography.title, color = colors.ink)
-                        Text(
-                            "Save a check-in as a highlight in Chat before its 24 hours expire.",
-                            style = OursTypography.caption,
-                            color = colors.inkSecondary,
-                        )
-                    }
-                }
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .oursContentWidth(layoutSpec)
-                    .fillMaxSize(),
-            ) {
-                when {
-                    state.memoriesLoading && state.memories.isEmpty() -> {
-                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
-                            OursLoadingState("Loading saved highlights...")
-                        }
-                    }
-                    state.memoriesError != null && state.memories.isEmpty() -> {
-                        Box(Modifier.padding(start = OursSpacing.md, end = OursSpacing.md, top = topHeaderInset + 88.dp)) {
-                            OursErrorState(state.memoriesError, onRetry = { vm.refreshMemories() })
-                        }
-                    }
-                    state.memories.isEmpty() -> {
-                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
-                            OursEmptyState(
-                                title = if (strings.langCode == "id") "Belum ada kenangan tersimpan" else "No saved memories yet",
-                                detail = "Check-ins expire after 24 hours. Tap Save on any check-in in Chat to keep it here forever.",
-                                illustrationRes = R.drawable.ic_ours_memories_empty,
-                                actionLabel = if (strings.langCode == "id") "Abadikan momen" else "Capture a moment",
-                                onAction = onQuickCheckIn,
-                            )
-                        }
-                    }
-                    filteredMemories.isEmpty() -> {
-                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
-                            OursEmptyState(
-                                title = if (strings.langCode == "id") "Tidak ada hasil" else "No results",
-                                detail = if (strings.langCode == "id") "Coba kata kunci atau filter lain." else "Try a different search or filter.",
-                                illustrationRes = R.drawable.ic_ours_memories_empty,
-                                actionLabel = if (strings.langCode == "id") "Hapus filter" else "Clear filters",
-                                onAction = {
-                                    searchQuery = ""
-                                    filter = MemoryFilter.All
-                                },
-                            )
-                        }
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                start = OursSpacing.md,
-                                top = topHeaderInset + 88.dp,
-                                end = OursSpacing.md,
-                                bottom = 148.dp,
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
-                        ) {
-                        itemsIndexed(filteredMemories, key = { _, it -> it.id }) { idx, item ->
-                            val authorName = if (item.authorId == state.me?.id) {
-                                state.me.name
-                            } else {
-                                state.partner?.name ?: "Partner"
-                            }
-                            OursStaggeredItem(index = idx) {
-                                OursCard(
-                                    radius = 22.dp,
-                                    padding = PaddingValues(12.dp),
-                                    onClick = { onOpenFullPhoto(item) },
-                                ) {
-                                AsyncImage(
-                                    model = vm.photoUrl(item.photoId, thumb = true),
-                                    contentDescription = item.note ?: "Saved memory photo",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(4f / 3f)
-                                        .clip(RoundedCornerShape(OursRadius.inner)),
-                                )
-                                Spacer(Modifier.height(OursSpacing.sm))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Text(
-                                        text = item.placeName ?: authorName,
-                                        style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
-                                        color = colors.ink,
-                                    )
-                                    Text(
-                                        text = Formatters.dateShort(item.createdAt),
-                                        style = OursTypography.tabular,
-                                        color = colors.inkMuted,
-                                    )
-                                }
-                                if (!item.note.isNullOrBlank()) {
-                                    Spacer(Modifier.height(OursSpacing.xxs))
-                                    Text(
-                                        text = item.note,
-                                        style = OursTypography.body,
-                                        color = colors.inkSecondary,
-                                    )
-                                }
-                                if (item.replies.isNotEmpty()) {
-                                    Spacer(Modifier.height(OursSpacing.xxs))
-                                    Text(
-                                        text = "${item.replies.size} ${if (item.replies.size == 1) "reply" else "replies"}",
-                                        style = OursTypography.caption,
-                                        color = colors.inkMuted,
-                                    )
-                                }
-                            }
-                            }
-                        }
-
-                        if (state.memoriesNextBefore != null) {
-                            item {
-                                OursButton(
-                                    text = "Load older memories",
-                                    variant = OursButtonVariant.Secondary,
-                                    loading = state.memoriesLoading,
-                                    onClick = { vm.refreshMemories(loadMore = true) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        }
-
-        // Floating glass top header + collapsible search bar
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .oursContentWidth(layoutSpec)
-                .oursHeaderInsets()
-                .padding(horizontal = layoutSpec.horizontalPadding),
-            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            Surface(
-                shape = RoundedCornerShape(OursRadius.card),
-                color = Color.Transparent,
-                shadowElevation = 0.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = OursSpacing.md, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = strings.memoriesTitle,
-                        style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.ink,
+            if (showMapMode) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    OursMapView(
+                        modifier = Modifier.fillMaxSize(),
+                        partnerLocation = state.partnerLocation,
+                        myLocation = state.myLocation,
+                        highlights = filteredMemories,
+                        places = state.places,
+                        onHighlightClick = onOpenFullPhoto,
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = colors.surfaceMuted.copy(alpha = 0.72f),
-                            border = BorderStroke(1.dp, colors.glassBorder),
+                    if (state.memories.isEmpty() && !state.memoriesLoading) {
+                        OursCard(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding()
+                                .padding(start = OursSpacing.md, end = OursSpacing.md, bottom = 104.dp)
+                                .fillMaxWidth(),
+                            frosted = true,
                         ) {
-                            Row(
-                                modifier = Modifier.height(36.dp).padding(3.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                            Text(strings.noPinnedMemoriesMap, style = OursTypography.title, color = colors.ink)
+                            Text(
+                                strings.noMemoriesDetail,
+                                style = OursTypography.caption,
+                                color = colors.inkSecondary,
+                            )
+                        }
+                    }
+                }
+            } else {
+                val searchBarOpen = showSearch || searchQuery.isNotEmpty() || filter != MemoryFilter.All
+                Box(
+                    modifier = Modifier
+                        .oursContentWidth(layoutSpec)
+                        .fillMaxSize(),
+                ) {
+                    when {
+                        state.memoriesLoading && state.memories.isEmpty() -> {
+                            Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 96.dp)) {
+                                OursLoadingState(strings.loadingMemories)
+                            }
+                        }
+                        state.memoriesError != null && state.memories.isEmpty() -> {
+                            Box(Modifier.padding(start = OursSpacing.md, end = OursSpacing.md, top = topHeaderInset + 96.dp)) {
+                                OursErrorState(state.memoriesError, onRetry = { vm.refreshMemories() })
+                            }
+                        }
+                        state.memories.isEmpty() -> {
+                            Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 96.dp)) {
+                                OursEmptyState(
+                                    title = strings.noMemoriesTitle,
+                                    detail = strings.noMemoriesDetail,
+                                    illustrationRes = R.drawable.ic_ours_memories_empty,
+                                    actionLabel = strings.takePhoto,
+                                    onAction = onQuickCheckIn,
+                                )
+                            }
+                        }
+                        filteredMemories.isEmpty() -> {
+                            Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 96.dp)) {
+                                OursEmptyState(
+                                    title = strings.noResultsTitle,
+                                    detail = strings.noResultsDetail,
+                                    illustrationRes = R.drawable.ic_ours_memories_empty,
+                                    actionLabel = strings.clearFiltersCta,
+                                    onAction = {
+                                        searchQuery = ""
+                                        filter = MemoryFilter.All
+                                    },
+                                )
+                            }
+                        }
+                        else -> {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    start = OursSpacing.md,
+                                    top = topHeaderInset + if (searchBarOpen) 188.dp else 100.dp,
+                                    end = OursSpacing.md,
+                                    bottom = 148.dp,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
                             ) {
-                                listOf(
-                                    false to strings.timelineTab,
-                                    true to strings.mapTab,
-                                ).forEach { (isMap, label) ->
-                                    val selected = showMapMode == isMap
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxHeight()
-                                            .clip(RoundedCornerShape(9.dp))
-                                            .clickable { showMapMode = isMap },
-                                        shape = RoundedCornerShape(9.dp),
-                                        color = if (selected) colors.action else Color.Transparent,
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.padding(horizontal = 12.dp),
-                                            contentAlignment = Alignment.Center,
+                                itemsIndexed(filteredMemories, key = { _, it -> it.id }) { idx, item ->
+                                    val authorName = if (item.authorId == state.me?.id) {
+                                        state.me.name
+                                    } else {
+                                        state.partner?.name ?: strings.partnerFallback
+                                    }
+                                    OursStaggeredItem(index = idx) {
+                                        OursCard(
+                                            radius = 22.dp,
+                                            padding = PaddingValues(12.dp),
+                                            onClick = { onOpenFullPhoto(item) },
                                         ) {
-                                            Text(
-                                                text = label,
-                                                style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
-                                                color = if (selected) colors.onAction else colors.inkSecondary,
+                                            AsyncImage(
+                                                model = vm.photoUrl(item.photoId, thumb = true),
+                                                contentDescription = item.note ?: strings.memoriesTitle,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(4f / 3f)
+                                                    .clip(RoundedCornerShape(OursRadius.inner)),
                                             )
+                                            Spacer(Modifier.height(OursSpacing.sm))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                            ) {
+                                                Text(
+                                                    text = item.placeName ?: authorName,
+                                                    style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = colors.ink,
+                                                )
+                                                Text(
+                                                    text = Formatters.dateShort(item.createdAt),
+                                                    style = OursTypography.tabular,
+                                                    color = colors.inkMuted,
+                                                )
+                                            }
+                                            if (!item.note.isNullOrBlank()) {
+                                                Spacer(Modifier.height(OursSpacing.xxs))
+                                                Text(
+                                                    text = item.note,
+                                                    style = OursTypography.body,
+                                                    color = colors.inkSecondary,
+                                                )
+                                            }
+                                            if (item.replies.isNotEmpty()) {
+                                                Spacer(Modifier.height(OursSpacing.xs))
+                                                Text(
+                                                    text = "${item.replies.size} ${if (item.replies.size == 1) strings.replySingular else strings.replyPlural}",
+                                                    style = OursTypography.caption,
+                                                    color = colors.inkMuted,
+                                                )
+                                                Spacer(Modifier.height(4.dp))
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(colors.surfaceMuted)
+                                                        .padding(8.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                ) {
+                                                    item.replies.forEach { reply ->
+                                                        val replyAuthor = if (reply.authorId == state.me?.id) {
+                                                            strings.youFallback
+                                                        } else {
+                                                            state.partner?.name ?: strings.partnerFallback
+                                                        }
+                                                        Text(
+                                                            text = buildString {
+                                                                append(replyAuthor)
+                                                                if (!reply.text.isNullOrBlank()) {
+                                                                    append(": ")
+                                                                    append(reply.text)
+                                                                }
+                                                            },
+                                                            style = OursTypography.caption,
+                                                            color = colors.inkSecondary,
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                            }
-                        }
 
-                        Box(
-                            modifier = Modifier
-                                .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    if (showSearch) {
-                                        showSearch = false
-                                        searchQuery = ""
-                                        filter = MemoryFilter.All
-                                    } else {
-                                        showSearch = true
+                                if (state.memoriesNextBefore != null) {
+                                    item {
+                                        OursButton(
+                                            text = strings.loadOlderMemories,
+                                            variant = OursButtonVariant.Secondary,
+                                            loading = state.memoriesLoading,
+                                            onClick = { vm.refreshMemories(loadMore = true) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
                                     }
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = if (showSearch) OursIcons.Close else OursIcons.Search,
-                                contentDescription = if (showSearch) "Close search" else "Search memories",
-                                tint = if (showSearch) colors.action else colors.ink,
-                                modifier = Modifier.size(20.dp),
-                            )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            AnimatedVisibility(visible = showSearch || searchQuery.isNotEmpty() || filter != MemoryFilter.All) {
-                OursSearchFilterBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    placeholder = strings.searchPlaceholder,
-                    filters = listOf(
-                        MemoryFilter.All to strings.filterAll,
-                        MemoryFilter.Photos to strings.filterPhotos,
-                        MemoryFilter.Places to strings.filterPlaces,
-                    ),
-                    selectedFilter = filter,
-                    onSelectFilter = { filter = it },
+            if (!showMapMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(topHeaderInset + 104.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                0.0f to colors.canvas,
+                                0.78f to colors.canvas,
+                                0.92f to colors.canvas.copy(alpha = 0.85f),
+                                1.0f to Color.Transparent,
+                            ),
+                        ),
                 )
             }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .oursContentWidth(layoutSpec)
+                    .oursHeaderInsets()
+                    .padding(horizontal = layoutSpec.horizontalPadding),
+                verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(OursRadius.card),
+                    color = Color.Transparent,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = OursSpacing.md, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = strings.memoriesTitle,
+                            style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.ink,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                        ) {
+                            OursSegmentedControl(
+                                options = listOf(
+                                    false to strings.timelineTab,
+                                    true to strings.mapTab,
+                                ),
+                                selected = showMapMode,
+                                onSelect = { showMapMode = it },
+                                modifier = Modifier.width(168.dp),
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        if (showSearch) {
+                                            showSearch = false
+                                            searchQuery = ""
+                                            filter = MemoryFilter.All
+                                        } else {
+                                            showSearch = true
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = if (showSearch) OursIcons.Close else OursIcons.Search,
+                                    contentDescription = strings.searchPlaceholder,
+                                    tint = if (showSearch) colors.action else colors.ink,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = showSearch || searchQuery.isNotEmpty() || filter != MemoryFilter.All,
+                    enter = fadeIn(OursMotion.enterSpec()) + expandVertically(OursMotion.springFluid()),
+                    exit = fadeOut(OursMotion.exitSpec()) + shrinkVertically(OursMotion.exitSpec()),
+                ) {
+                    OursSearchFilterBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        placeholder = strings.searchPlaceholder,
+                        filters = listOf(
+                            MemoryFilter.All to strings.filterAll,
+                            MemoryFilter.Photos to strings.filterPhotos,
+                            MemoryFilter.Places to strings.filterPlaces,
+                        ),
+                        selectedFilter = filter,
+                        onSelectFilter = { filter = it },
+                    )
+                }
+            }
         }
-    }
     }
 }
 

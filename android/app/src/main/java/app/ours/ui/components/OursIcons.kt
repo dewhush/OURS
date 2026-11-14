@@ -288,4 +288,14 @@ object OursIcons {
             }
         }
     }
+
+    val ChevronRight: ImageVector by lazy {
+        icon("ChevronRight") {
+            path(stroke = stroke, strokeLineWidth = 2.0f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(9f, 6f)
+                lineTo(15f, 12f)
+                lineTo(9f, 18f)
+            }
+        }
+    }
 }

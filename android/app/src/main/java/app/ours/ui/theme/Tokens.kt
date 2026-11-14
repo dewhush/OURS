@@ -1,6 +1,8 @@
 package app.ours.ui.theme
 
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -46,67 +48,67 @@ data class OursColors(
 )
 
 val OursLightColors = OursColors(
-    canvas = Color(0xFFF5F7FA),
+    canvas = Color(0xFFF2F2F7),
     surface = Color(0xFFFFFFFF),
-    surfaceMuted = Color(0xFFEBEEF3),
-    glassSurface = Color(0x99FFFFFF),
-    glassSurfaceStrong = Color(0xB8FFFFFF),
-    glassGradientStart = Color(0xBDFFFFFF),
-    glassGradientEnd = Color(0x85E8F1FF),
-    glassHighlightTopLeft = Color(0xF2FFFFFF),
-    glassRimBottomRight = Color(0x4D93C5FD),
-    glassInnerHighlight = Color(0xCCFFFFFF),
-    glassActionTint = Color(0x1F005EC4),
-    glassBorder = Color(0xCCFFFFFF),
-    border = Color(0xFFDCE2EC),
-    ink = Color(0xFF0F141C),
-    inkSecondary = Color(0xFF3E4856),
-    inkMuted = Color(0xFF525D6D),
-    action = Color(0xFF005EC4),
+    surfaceMuted = Color(0xFFE5E5EA),
+    glassSurface = Color(0xEBFAFAFD),
+    glassSurfaceStrong = Color(0xF5FFFFFF),
+    glassGradientStart = Color(0xF5FFFFFF),
+    glassGradientEnd = Color(0xEBFAFAFD),
+    glassHighlightTopLeft = Color(0x1C000000),
+    glassRimBottomRight = Color(0x14000000),
+    glassInnerHighlight = Color(0xD9FFFFFF),
+    glassActionTint = Color(0xFFE8F2FF),
+    glassBorder = Color(0x1C000000),
+    border = Color(0xFFE5E5EA),
+    ink = Color(0xFF1C1C1E),
+    inkSecondary = Color(0xFF545458),
+    inkMuted = Color(0xFF68686E),
+    action = Color(0xFF0066CC),
     onAction = Color(0xFFFFFFFF),
-    actionSoft = Color(0xFFE6F0FC),
-    live = Color(0xFF151B24),
-    liveSoft = Color(0xFFE6EBF2),
-    paused = Color(0xFF4B5563),
-    pausedSoft = Color(0xFFEBEEF3),
-    error = Color(0xFF1F2937),
-    errorSoft = Color(0xFFE5E9F0),
-    danger = Color(0xFFB83232),
-    dangerSoft = Color(0xFFFCECEC),
-    success = Color(0xFF196F43),
-    successSoft = Color(0xFFE8F5EE),
+    actionSoft = Color(0xFFE8F2FF),
+    live = Color(0xFF1C1C1E),
+    liveSoft = Color(0xFFE5E5EA),
+    paused = Color(0xFF545458),
+    pausedSoft = Color(0xFFE5E5EA),
+    error = Color(0xFFD70015),
+    errorSoft = Color(0xFFFFEBEA),
+    danger = Color(0xFFD70015),
+    dangerSoft = Color(0xFFFFEBEA),
+    success = Color(0xFF1D7A3B),
+    successSoft = Color(0xFFE3F6E9),
 )
 
 val OursDarkColors = OursColors(
-    canvas = Color(0xFF0B0E14),
-    surface = Color(0xFF131822),
-    surfaceMuted = Color(0xFF1C2330),
-    glassSurface = Color(0x80131C2E),
-    glassSurfaceStrong = Color(0x9E162033),
-    glassGradientStart = Color(0xA61E2B45),
-    glassGradientEnd = Color(0x730F172A),
-    glassHighlightTopLeft = Color(0x73FFFFFF),
-    glassRimBottomRight = Color(0x2660A5FA),
-    glassInnerHighlight = Color(0x40FFFFFF),
-    glassActionTint = Color(0x2E5EA8FF),
-    glassBorder = Color(0x29FFFFFF),
-    border = Color(0xFF262F3F),
-    ink = Color(0xFFF5F7FA),
-    inkSecondary = Color(0xFFB8C2D0),
-    inkMuted = Color(0xFF8E99AA),
-    action = Color(0xFF5EA8FF),
-    onAction = Color(0xFF08101C),
-    actionSoft = Color(0xFF122742),
-    live = Color(0xFFF5F7FA),
-    liveSoft = Color(0xFF1E2532),
-    paused = Color(0xFF9CA3AF),
-    pausedSoft = Color(0xFF1C2330),
-    error = Color(0xFFE2E8F0),
-    errorSoft = Color(0xFF242C3A),
-    danger = Color(0xFFE85D5D),
-    dangerSoft = Color(0xFF2E1616),
-    success = Color(0xFF45C486),
-    successSoft = Color(0xFF142E21),
+    canvas = Color(0xFF000000),
+    surface = Color(0xFF1C1C1E),
+    surfaceMuted = Color(0xFF2C2C2E),
+    glassSurface = Color(0xEB1C1C1E),
+    glassSurfaceStrong = Color(0xF5242426),
+    glassGradientStart = Color(0xF2262629),
+    glassGradientEnd = Color(0xEB1C1C1E),
+    glassHighlightTopLeft = Color(0x2EFFFFFF),
+    glassRimBottomRight = Color(0x1AFFFFFF),
+    glassInnerHighlight = Color(0x33FFFFFF),
+    glassActionTint = Color(0xFF132A46),
+    glassBorder = Color(0x26FFFFFF),
+    border = Color(0xFF2C2C2E),
+    ink = Color(0xFFFFFFFF),
+    inkSecondary = Color(0xFF98989F),
+    inkMuted = Color(0xFF8E8E93),
+    action = Color(0xFF006EE6),
+    onAction = Color(0xFFFFFFFF),
+    actionSoft = Color(0xFF132A46),
+    live = Color(0xFFFFFFFF),
+    liveSoft = Color(0xFF2C2C2E),
+    paused = Color(0xFF98989F),
+    pausedSoft = Color(0xFF2C2C2E),
+    error = Color(0xFFFF453A),
+    errorSoft = Color(0xFF2E1416),
+    danger = Color(0xFFFF453A),
+    dangerSoft = Color(0xFF2C1214),
+    success = Color(0xFF30D158),
+    successSoft = Color(0xFF112E1B),
 )
 
 object OursSpacing {
@@ -120,26 +122,33 @@ object OursSpacing {
 
 /**
  * Nested radius rule: outer = inner + padding.
- * Example: a card with 12.dp padding around a 12.dp photo uses 24.dp outer radius.
  */
 object OursRadius {
     val chip: Dp = 10.dp
     val inner: Dp = 12.dp
     val control: Dp = 14.dp
     val card: Dp = 20.dp
-    val mediaCard: Dp = inner + OursSpacing.sm // 24.dp
-    val sheet: Dp = 24.dp
+    val mediaCard: Dp = inner + OursSpacing.sm
+    val sheet: Dp = 26.dp
 }
 
 object OursMotion {
-    const val ENTER_MS = 220
-    const val EXIT_MS = 160 // ~27% shorter than entrances
-    const val STAGGER_MS = 30
-    const val PRESS_SCALE = 0.97f
+    const val ENTER_MS = 240
+    const val EXIT_MS = 175
+    const val STAGGER_MS = 28
+    const val PRESS_SCALE = 0.96f
 
-    // Apple fluid cubic-bezier(0.22, 1, 0.36, 1)
     val EaseOut = CubicBezierEasing(0.22f, 1.0f, 0.36f, 1.0f)
     val EaseInOut = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
+
+    fun <T> springSnappy(visibilityThreshold: T? = null): SpringSpec<T> =
+        spring(dampingRatio = 0.80f, stiffness = 520f, visibilityThreshold = visibilityThreshold)
+
+    fun <T> springFluid(visibilityThreshold: T? = null): SpringSpec<T> =
+        spring(dampingRatio = 0.86f, stiffness = 360f, visibilityThreshold = visibilityThreshold)
+
+    fun <T> springBouncy(visibilityThreshold: T? = null): SpringSpec<T> =
+        spring(dampingRatio = 0.62f, stiffness = 440f, visibilityThreshold = visibilityThreshold)
 
     fun <T> enterSpec(durationMs: Int = ENTER_MS) =
         tween<T>(durationMillis = durationMs, easing = EaseOut)
@@ -157,14 +166,14 @@ object OursTypography {
         fontWeight = FontWeight.SemiBold,
         fontSize = 26.sp,
         lineHeight = 31.sp,
-        letterSpacing = (-0.78).sp, // -0.03em Pentagram display tracking
+        letterSpacing = (-0.78).sp,
     )
     val headline = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
         lineHeight = 25.sp,
-        letterSpacing = (-0.6).sp, // -0.03em
+        letterSpacing = (-0.6).sp,
     )
     val title = TextStyle(
         fontFamily = FontFamily.SansSerif,

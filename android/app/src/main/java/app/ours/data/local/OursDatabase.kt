@@ -18,7 +18,7 @@ data class QueuedLocationRow(
 
 data class QueuedUploadRow(
     val id: Long,
-    val kind: String, // "checkin" or "reply"
+    val kind: String,
     val checkinId: Long?,
     val filePath: String?,
     val noteOrText: String?,
@@ -43,6 +43,9 @@ class OursDatabase(context: Context) :
                 accuracy_m REAL NOT NULL,
                 speed_mps REAL NOT NULL,
                 bearing REAL,
+                activity TEXT,
+                altitude_m REAL,
+                vertical_speed_mps REAL,
                 battery_pct INTEGER NOT NULL,
                 charging INTEGER NOT NULL,
                 recorded_at INTEGER NOT NULL
@@ -96,9 +99,13 @@ class OursDatabase(context: Context) :
         )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
-
-    // --- Location queue ---
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            runCatching { db.execSQL("ALTER TABLE location_queue ADD COLUMN activity TEXT") }
+            runCatching { db.execSQL("ALTER TABLE location_queue ADD COLUMN altitude_m REAL") }
+            runCatching { db.execSQL("ALTER TABLE location_queue ADD COLUMN vertical_speed_mps REAL") }
+        }
+    }
 
     fun enqueueLocation(point: LocationPointDto): Long {
         val cv = ContentValues().apply {
@@ -107,6 +114,13 @@ class OursDatabase(context: Context) :
             put("accuracy_m", point.accuracyM)
             put("speed_mps", point.speedMps)
             if (point.bearing != null) put("bearing", point.bearing) else putNull("bearing")
+            if (point.activity != null) put("activity", point.activity) else putNull("activity")
+            if (point.altitudeM != null) put("altitude_m", point.altitudeM) else putNull("altitude_m")
+            if (point.verticalSpeedMps != null) {
+                put("vertical_speed_mps", point.verticalSpeedMps)
+            } else {
+                putNull("vertical_speed_mps")
+            }
             put("battery_pct", point.batteryPct)
             put("charging", if (point.charging) 1 else 0)
             put("recorded_at", point.recordedAt)
@@ -117,12 +131,15 @@ class OursDatabase(context: Context) :
     fun peekLocations(limit: Int = 100): List<QueuedLocationRow> {
         val result = mutableListOf<QueuedLocationRow>()
         readableDatabase.rawQuery(
-            "SELECT id, lat, lon, accuracy_m, speed_mps, bearing, battery_pct, charging, recorded_at " +
-                "FROM location_queue ORDER BY recorded_at ASC, id ASC LIMIT ?",
+            "SELECT id, lat, lon, accuracy_m, speed_mps, bearing, activity, altitude_m, vertical_speed_mps, " +
+                "battery_pct, charging, recorded_at FROM location_queue ORDER BY recorded_at ASC, id ASC LIMIT ?",
             arrayOf(limit.toString())
         ).use { c ->
             while (c.moveToNext()) {
                 val bearing = if (c.isNull(5)) null else c.getDouble(5)
+                val activity = if (c.isNull(6)) null else c.getString(6)
+                val altitudeM = if (c.isNull(7)) null else c.getDouble(7)
+                val verticalSpeedMps = if (c.isNull(8)) null else c.getDouble(8)
                 result += QueuedLocationRow(
                     id = c.getLong(0),
                     point = LocationPointDto(
@@ -131,9 +148,12 @@ class OursDatabase(context: Context) :
                         accuracyM = c.getDouble(3),
                         speedMps = c.getDouble(4),
                         bearing = bearing,
-                        batteryPct = c.getInt(6),
-                        charging = c.getInt(7) != 0,
-                        recordedAt = c.getLong(8),
+                        activity = activity,
+                        altitudeM = altitudeM,
+                        verticalSpeedMps = verticalSpeedMps,
+                        batteryPct = c.getInt(9),
+                        charging = c.getInt(10) != 0,
+                        recordedAt = c.getLong(11),
                     )
                 )
             }
@@ -156,8 +176,6 @@ class OursDatabase(context: Context) :
             return if (c.moveToFirst()) c.getInt(0) else 0
         }
     }
-
-    // --- Upload queue (check-ins & replies with retry) ---
 
     fun enqueueUpload(
         kind: String,
@@ -228,8 +246,6 @@ class OursDatabase(context: Context) :
         writableDatabase.delete("upload_queue", "id = ?", arrayOf(id.toString()))
     }
 
-    // --- Caches ---
-
     fun replaceCheckInsCache(items: List<CheckInDto>) {
         val db = writableDatabase
         db.beginTransaction()
@@ -254,7 +270,7 @@ class OursDatabase(context: Context) :
     fun loadCheckInsCache(nowMs: Long = System.currentTimeMillis()): List<CheckInDto> {
         val items = mutableListOf<CheckInDto>()
         readableDatabase.rawQuery(
-            "SELECT json_payload FROM cached_checkins WHERE expires_at > ? ORDER BY created_at DESC",
+            "SELECT json_payload FROM cached_checkins WHERE highlighted = 1 OR expires_at > ? ORDER BY created_at DESC",
             arrayOf(nowMs.toString())
         ).use { c ->
             while (c.moveToNext()) {
@@ -323,6 +339,6 @@ class OursDatabase(context: Context) :
 
     companion object {
         private const val DB_NAME = "ours.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
     }
 }

@@ -10,8 +10,10 @@ import android.net.Uri
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -105,18 +107,18 @@ fun MapScreen(
             showNudgePill = true
             nudgeRingScale.snapTo(1f)
             nudgeRingAlpha.snapTo(0.75f)
-            nudgeRingScale.animateTo(1.22f, OursMotion.enterSpec(240))
+            nudgeRingScale.animateTo(1.22f, OursMotion.springBouncy())
             kotlinx.coroutines.delay(1500)
             showNudgePill = false
         }
     }
     LaunchedEffect(nudgePulseKey) {
         if (nudgePulseKey > 0) {
-            nudgeRingAlpha.animateTo(0f, OursMotion.enterSpec(240))
+            nudgeRingAlpha.animateTo(0f, OursMotion.enterSpec(280))
         }
     }
 
-    val partnerName = state.partner?.name ?: "Partner"
+    val partnerName = state.partner?.name ?: strings.partnerFallback
     val loc = state.partnerLocation
     val isPaused = state.partnerPaused || loc?.paused == true
     val hasCoords = !isPaused && loc?.lat != null && loc.lon != null
@@ -151,7 +153,7 @@ fun MapScreen(
         state.partner == null -> strings.waitingForPartner
         isPaused -> strings.sharingPaused
         hasCoords && !isStale -> strings.liveStatus
-        loc?.recordedAt != null -> Formatters.relativeTime(loc.recordedAt, nowMs)
+        loc?.recordedAt != null -> Formatters.relativeTime(loc.recordedAt, strings.langCode, nowMs)
         else -> strings.noFixYet
     }
 
@@ -183,14 +185,13 @@ fun MapScreen(
                     .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
             ) {
                 Text(
-                    text = if (strings.langCode == "id") "Sapaan terkirim" else "Nudge sent",
+                    text = strings.nudgeSentPill,
                     style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.action,
                 )
             }
         }
 
-        // Top floating partner status card + optional Pause Sharing reminder banner
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -199,85 +200,118 @@ fun MapScreen(
                 .padding(horizontal = layoutSpec.horizontalPadding),
             verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
         ) {
-        OursCard(
-            modifier = Modifier.fillMaxWidth(),
-            radius = 22.dp,
-            padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-            frosted = true,
-            elevation = 6.dp,
-            onClick = { showPartnerSheet = true },
-        ) {
-            Row(
+            OursCard(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
+                radius = 22.dp,
+                padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                frosted = true,
+                elevation = 6.dp,
+                onClick = { showPartnerSheet = true },
             ) {
-                OursAvatar(
-                    name = partnerName,
-                    photoUrl = state.partnerAvatarUrl,
-                    ringColor = if (statusTone == StatusTone.Live) colors.success else null,
-                    accent = true,
-                )
-                Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
+                ) {
+                    OursAvatar(
+                        name = partnerName,
+                        photoUrl = state.partnerAvatarUrl,
+                        ringColor = if (statusTone == StatusTone.Live) colors.success else null,
+                        accent = true,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                        ) {
+                            Text(
+                                text = partnerName,
+                                style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.ink,
+                            )
+                            OursStatusChip(label = statusLabel, tone = statusTone)
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        if (isPaused) {
+                            Text(
+                                text = strings.locationHiddenPaused,
+                                style = OursTypography.caption,
+                                color = colors.inkSecondary,
+                            )
+                        } else if (hasCoords && loc != null) {
+                            val batteryText = loc.batteryPct?.let { pct ->
+                                if (loc.charging == true) "$pct% ${strings.chargingSuffix}" else "$pct%"
+                            } ?: "--%"
+                            val speedText = Formatters.speedKmh(loc.speedMps)
+                            val activityPrefix = loc.activity
+                                ?.takeIf { it.isNotBlank() && it != "still" }
+                                ?.replaceFirstChar { it.uppercase() }
+                                ?.let { "$it · " } ?: ""
+                            val distPart = distanceText?.let { "  ·  $it" } ?: ""
+                            Text(
+                                text = "$activityPrefix$speedText  ·  $batteryText$distPart",
+                                style = OursTypography.tabular,
+                                color = colors.inkSecondary,
+                            )
+                        } else if (state.partner == null && !state.inviteCode.isNullOrBlank()) {
+                            Text(
+                                text = "${strings.inviteCodeLabel}: ${state.inviteCode}",
+                                style = OursTypography.tabular,
+                                color = colors.action,
+                            )
+                        } else {
+                            Text(
+                                text = loc?.lastSeenAt?.let { "${strings.seenPrefix} ${Formatters.relativeTime(it, strings.langCode, nowMs)}" }
+                                    ?: strings.waitingFirstLocation,
+                                style = OursTypography.caption,
+                                color = colors.inkSecondary,
+                            )
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = state.sharingPaused,
+                enter = fadeIn(OursMotion.enterSpec()) + expandVertically(OursMotion.springFluid()),
+                exit = fadeOut(OursMotion.exitSpec()) + shrinkVertically(OursMotion.exitSpec()),
+            ) {
+                OursCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    radius = 18.dp,
+                    padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    frosted = true,
+                    elevation = 4.dp,
+                    onClick = { vm.toggleSharingPaused(false) },
+                ) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(
-                            text = partnerName,
-                            style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
-                            color = colors.ink,
+                            text = strings.sharingPausedBanner,
+                            style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.paused,
                         )
-                        OursStatusChip(label = statusLabel, tone = statusTone)
-                    }
-                    Spacer(Modifier.height(2.dp))
-                    if (isPaused) {
-                        Text(
-                            text = strings.locationHiddenPaused,
-                            style = OursTypography.caption,
-                            color = colors.inkSecondary,
-                        )
-                    } else if (hasCoords && loc != null) {
-                        val batteryText = loc.batteryPct?.let { pct ->
-                            if (loc.charging == true) "$pct% charging" else "$pct%"
-                        } ?: "--%"
-                        val speedText = Formatters.speedKmh(loc.speedMps)
-                        val activityPrefix = loc.activity
-                            ?.takeIf { it.isNotBlank() && it != "still" }
-                            ?.replaceFirstChar { it.uppercase() }
-                            ?.let { "$it · " } ?: ""
-                        val distPart = distanceText?.let { "  |  $it" } ?: ""
-                        Text(
-                            text = "$activityPrefix$speedText  |  $batteryText$distPart",
-                            style = OursTypography.tabular,
-                            color = colors.inkSecondary,
-                        )
-                    } else if (state.partner == null && !state.inviteCode.isNullOrBlank()) {
-                        Text(
-                            text = "Invite code: ${state.inviteCode}",
-                            style = OursTypography.tabular,
-                            color = colors.action,
-                        )
-                    } else {
-                        Text(
-                            text = loc?.lastSeenAt?.let { "Last seen ${Formatters.relativeTime(it, nowMs)}" }
-                                ?: strings.waitingFirstLocation,
-                            style = OursTypography.caption,
-                            color = colors.inkSecondary,
+                        Icon(
+                            imageVector = OursIcons.ChevronRight,
+                            contentDescription = null,
+                            tint = colors.paused,
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }
             }
-        }
-        if (loc == null && !state.errorMessage.isNullOrBlank()) {
-            app.ours.ui.components.OursErrorState(
-                message = state.errorMessage!!,
-                onRetry = { vm.refreshAll() },
-            )
-        }
+
+            if (loc == null && !state.errorMessage.isNullOrBlank()) {
+                app.ours.ui.components.OursErrorState(
+                    message = state.errorMessage!!,
+                    onRetry = { vm.refreshAll() },
+                )
+            }
         }
 
-        // Bottom floating actions: Check-in CTA + Nudge + Recenter
         FlowRow(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -359,13 +393,13 @@ fun MapScreen(
                 if (distanceText != null) {
                     DetailRow(strings.distanceLabel, distanceText)
                 }
-                DetailRow("Speed", Formatters.speedKmh(loc.speedMps))
-                DetailRow("Battery", loc.batteryPct?.let { "$it%${if (loc.charging == true) " (charging)" else ""}" } ?: "--")
-                DetailRow("Accuracy", loc.accuracyM?.let { "${it.toInt()} m" } ?: "--")
-                DetailRow("Last fix", loc.recordedAt?.let { Formatters.dateShort(it) } ?: "--")
+                DetailRow(strings.speedLabel, Formatters.speedKmh(loc.speedMps))
+                DetailRow(strings.batteryLabel, loc.batteryPct?.let { "$it%${if (loc.charging == true) " (${strings.chargingSuffix})" else ""}" } ?: "--")
+                DetailRow(strings.accuracyLabel, loc.accuracyM?.let { "${it.toInt()} m" } ?: "--")
+                DetailRow(strings.lastFixLabel, loc.recordedAt?.let { Formatters.dateShort(it) } ?: "--")
             } else {
                 Text(
-                    if (isPaused) "$partnerName paused sharing." else "No coordinates available right now.",
+                    if (isPaused) "$partnerName · ${strings.partnerPausedSharing}" else strings.noCoordinatesAvailable,
                     style = OursTypography.body,
                     color = colors.inkSecondary,
                 )

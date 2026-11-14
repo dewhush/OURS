@@ -1,6 +1,10 @@
 package app.ours.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -53,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -81,6 +86,7 @@ import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursHeaderInsets
 import app.ours.ui.components.oursLiquidGlass
 import app.ours.ui.components.rememberOursLayoutSpec
+import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -124,7 +130,7 @@ fun ChatScreen(
     val colors = OursTheme.colors
     val strings = OursTheme.strings
     val layoutSpec = rememberOursLayoutSpec()
-    val partnerName = state.partner?.name ?: "Partner"
+    val partnerName = state.partner?.name ?: strings.partnerFallback
     val myId = state.me?.id ?: -1L
     val listState = rememberLazyListState()
     val clipboard = LocalClipboardManager.current
@@ -178,404 +184,447 @@ fun ChatScreen(
     val nowMs = System.currentTimeMillis()
     val isLive = !state.partnerPaused && loc?.recordedAt?.let { nowMs - it <= 15 * 60_000L } == true
     val statusText = when {
-        state.partner == null -> "Waiting for partner"
-        state.partnerPaused -> "Paused"
-        isLive -> "Live"
-        loc?.lastSeenAt != null -> "Seen ${Formatters.relativeTime(loc.lastSeenAt, nowMs)}"
-        else -> "Offline"
+        state.partner == null -> strings.waitingForPartner
+        state.partnerPaused -> strings.sharingPaused
+        isLive -> strings.liveStatus
+        loc?.lastSeenAt != null -> "${strings.seenPrefix} ${Formatters.relativeTime(loc.lastSeenAt, strings.langCode, nowMs)}"
+        else -> strings.offlineStatus
     }
     val statusTone = when {
         state.partnerPaused -> StatusTone.Paused
         isLive -> StatusTone.Live
         else -> StatusTone.Muted
     }
+    val searchBarOpen = showSearch || searchQuery.isNotEmpty() || filter != ChatFilter.All
 
     OursGlassBackdrop {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding(),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        // Chronological messenger thread (full-height so messages scroll under translucent chrome)
         Box(
             modifier = Modifier
-                .oursContentWidth(layoutSpec)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .imePadding(),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            when {
-                (state.checkInsLoading || state.messagesLoading) && threadItems.isEmpty() -> {
-                    Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
-                        OursLoadingState("Loading conversation...")
-                    }
-                }
-                !state.errorMessage.isNullOrBlank() && threadItems.isEmpty() -> {
-                    Box(Modifier.padding(start = OursSpacing.md, end = OursSpacing.md, top = topHeaderInset + 88.dp)) {
-                        app.ours.ui.components.OursErrorState(
-                            message = state.errorMessage!!,
-                            onRetry = { vm.refreshAll() },
-                        )
-                    }
-                }
-                threadItems.isEmpty() -> {
-                    val emptyGreeting = if (strings.langCode == "id") {
-                        "Sapa $partnerName"
-                    } else {
-                        "Say hello to $partnerName"
-                    }
-                    Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
-                        OursEmptyState(
-                            title = emptyGreeting,
-                            detail = strings.sayHelloDetail,
-                            illustrationRes = R.drawable.ic_ours_chat_empty,
-                            actionLabel = strings.takePhoto,
-                            onAction = onLaunchCameraCheckIn,
-                        )
-                    }
-                }
-                filteredThreadItems.isEmpty() -> {
-                    Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
-                        OursEmptyState(
-                            title = if (strings.langCode == "id") "Tidak ada hasil" else "No results",
-                            detail = if (strings.langCode == "id") "Coba kata kunci atau filter lain." else "Try a different search or filter.",
-                            illustrationRes = R.drawable.ic_ours_chat_empty,
-                            actionLabel = if (strings.langCode == "id") "Hapus filter" else "Clear filters",
-                            onAction = {
-                                searchQuery = ""
-                                filter = ChatFilter.All
-                            },
-                        )
-                    }
-                }
-                else -> {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            start = OursSpacing.md,
-                            top = topHeaderInset + 88.dp,
-                            end = OursSpacing.md,
-                            bottom = 160.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
-                    ) {
-                        if (state.messagesNextBefore != null) {
-                            item(key = "load_older") {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    OursButton(
-                                        text = "Load older messages",
-                                        variant = OursButtonVariant.Ghost,
-                                        loading = state.messagesLoading,
-                                        onClick = { vm.refreshMessages(loadMore = true) },
-                                    )
-                                }
-                            }
+            Box(
+                modifier = Modifier
+                    .oursContentWidth(layoutSpec)
+                    .fillMaxSize(),
+            ) {
+                when {
+                    (state.checkInsLoading || state.messagesLoading) && threadItems.isEmpty() -> {
+                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 96.dp)) {
+                            OursLoadingState(strings.loadingConversation)
                         }
-
-                        itemsIndexed(filteredThreadItems, key = { _, it -> it.key }) { idx, item ->
-                            val showDateDivider = idx == 0 ||
-                                Formatters.dayKey(item.createdAt) != Formatters.dayKey(filteredThreadItems[idx - 1].createdAt)
-                            if (showDateDivider) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = OursSpacing.xs),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(999.dp),
-                                        color = colors.surfaceMuted,
+                    }
+                    !state.errorMessage.isNullOrBlank() && threadItems.isEmpty() -> {
+                        Box(Modifier.padding(start = OursSpacing.md, end = OursSpacing.md, top = topHeaderInset + 96.dp)) {
+                            app.ours.ui.components.OursErrorState(
+                                message = state.errorMessage!!,
+                                onRetry = { vm.refreshAll() },
+                            )
+                        }
+                    }
+                    threadItems.isEmpty() -> {
+                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 96.dp)) {
+                            OursEmptyState(
+                                title = "${strings.sayHelloTitle} $partnerName",
+                                detail = strings.sayHelloDetail,
+                                illustrationRes = R.drawable.ic_ours_chat_empty,
+                                actionLabel = strings.takePhoto,
+                                onAction = onLaunchCameraCheckIn,
+                            )
+                        }
+                    }
+                    filteredThreadItems.isEmpty() -> {
+                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 96.dp)) {
+                            OursEmptyState(
+                                title = strings.noResultsTitle,
+                                detail = strings.noResultsDetail,
+                                illustrationRes = R.drawable.ic_ours_chat_empty,
+                                actionLabel = strings.clearFiltersCta,
+                                onAction = {
+                                    searchQuery = ""
+                                    filter = ChatFilter.All
+                                },
+                            )
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = OursSpacing.md,
+                                top = topHeaderInset + if (searchBarOpen) 196.dp else 108.dp,
+                                end = OursSpacing.md,
+                                bottom = 184.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
+                        ) {
+                            if (state.messagesNextBefore != null) {
+                                item(key = "load_older") {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.Center,
                                     ) {
-                                        Text(
-                                            text = Formatters.dayLabel(item.createdAt, strings.langCode),
-                                            style = OursTypography.caption,
-                                            color = colors.inkSecondary,
-                                            modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 4.dp),
+                                        OursButton(
+                                            text = strings.loadOlderMessages,
+                                            variant = OursButtonVariant.Ghost,
+                                            loading = state.messagesLoading,
+                                            onClick = { vm.refreshMessages(loadMore = true) },
                                         )
                                     }
                                 }
                             }
-                            when (item) {
-                                is ChatThreadItem.MessageItem -> {
-                                    val msg = item.msg
-                                    val isMine = msg.authorId == myId
-                                    val quoted = resolveQuotePreview(
-                                        replyToMessageId = msg.replyToMessageId,
-                                        replyToCheckInId = msg.replyToCheckInId,
-                                        messages = state.chatMessages,
-                                        checkIns = state.checkIns,
-                                    )
-                                    MessageBubble(
-                                        msg = msg,
-                                        isMine = isMine,
-                                        quotedPreview = quoted,
-                                        photoUrl = { pid -> vm.photoUrl(pid, thumb = true) },
-                                        onOpenPhoto = onOpenFullPhotoId,
-                                        onQuote = {
-                                            replyTarget = ReplyTarget(
-                                                messageId = msg.id,
-                                                senderName = if (isMine) (state.me?.name ?: "You") else partnerName,
-                                                preview = msg.text ?: "Photo",
-                                            )
-                                        },
-                                        onCopy = { txt ->
-                                            clipboard.setText(AnnotatedString(txt))
-                                            vm.notifyCopied(if (strings.langCode == "id") "Teks disalin" else "Copied text")
-                                        },
-                                    )
-                                }
 
-                                is ChatThreadItem.CheckInItem -> {
-                                    val c = item.checkIn
-                                    val isMine = c.authorId == myId
-                                    CheckInBubble(
-                                        checkIn = c,
-                                        isMine = isMine,
-                                        photoUrl = vm.photoUrl(c.photoId, thumb = true),
-                                        onOpenPhoto = { onOpenFullPhoto(c) },
-                                        onToggleHighlight = { vm.toggleHighlight(c) },
-                                        onQuote = {
-                                            replyTarget = ReplyTarget(
-                                                checkInId = c.id,
-                                                senderName = if (isMine) (state.me?.name ?: "You") else partnerName,
-                                                preview = c.note ?: c.placeName ?: "Photo check-in",
+                            itemsIndexed(filteredThreadItems, key = { _, it -> it.key }) { idx, item ->
+                                val prevItem = filteredThreadItems.getOrNull(idx - 1)
+                                val nextItem = filteredThreadItems.getOrNull(idx + 1)
+                                val showDateDivider = prevItem == null ||
+                                    Formatters.dayKey(item.createdAt) != Formatters.dayKey(prevItem.createdAt)
+                                if (showDateDivider) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = OursSpacing.sm, bottom = OursSpacing.xs),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(999.dp),
+                                            color = colors.surfaceMuted,
+                                        ) {
+                                            Text(
+                                                text = Formatters.dayLabel(item.createdAt, strings.langCode),
+                                                style = OursTypography.caption,
+                                                color = colors.inkSecondary,
+                                                modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 4.dp),
                                             )
-                                        },
-                                        onDelete = if (isMine) ({ vm.deleteCheckIn(c.id) }) else null,
-                                    )
+                                        }
+                                    }
+                                }
+                                when (item) {
+                                    is ChatThreadItem.MessageItem -> {
+                                        val msg = item.msg
+                                        val isMine = msg.authorId == myId
+                                        val prevSameSender = !showDateDivider &&
+                                            prevItem is ChatThreadItem.MessageItem &&
+                                            prevItem.msg.authorId == msg.authorId
+                                        val nextSameDay = nextItem != null &&
+                                            Formatters.dayKey(item.createdAt) == Formatters.dayKey(nextItem.createdAt)
+                                        val nextSameSender = nextSameDay &&
+                                            nextItem is ChatThreadItem.MessageItem &&
+                                            nextItem.msg.authorId == msg.authorId
+                                        val quoted = resolveQuotePreview(
+                                            replyToMessageId = msg.replyToMessageId,
+                                            replyToCheckInId = msg.replyToCheckInId,
+                                            messages = state.chatMessages,
+                                            checkIns = state.checkIns,
+                                        )
+                                        if (!prevSameSender && !showDateDivider) {
+                                            Spacer(Modifier.height(6.dp))
+                                        }
+                                        MessageBubble(
+                                            msg = msg,
+                                            isMine = isMine,
+                                            isFirstInGroup = !prevSameSender,
+                                            isLastInGroup = !nextSameSender,
+                                            quotedPreview = quoted,
+                                            langCode = strings.langCode,
+                                            photoUrl = { pid -> vm.photoUrl(pid, thumb = true) },
+                                            onOpenPhoto = onOpenFullPhotoId,
+                                            onQuote = {
+                                                replyTarget = ReplyTarget(
+                                                    messageId = msg.id,
+                                                    senderName = if (isMine) (state.me?.name ?: strings.youFallback) else partnerName,
+                                                    preview = msg.text ?: "Photo",
+                                                )
+                                            },
+                                            onCopy = { txt ->
+                                                clipboard.setText(AnnotatedString(txt))
+                                                vm.notifyCopied(strings.copiedTextToast)
+                                            },
+                                        )
+                                    }
+
+                                    is ChatThreadItem.CheckInItem -> {
+                                        val c = item.checkIn
+                                        val isMine = c.authorId == myId
+                                        Spacer(Modifier.height(6.dp))
+                                        CheckInBubble(
+                                            checkIn = c,
+                                            isMine = isMine,
+                                            myId = myId,
+                                            partnerName = partnerName,
+                                            photoUrl = vm.photoUrl(c.photoId, thumb = true),
+                                            replyPhotoUrl = { pid -> vm.photoUrl(pid, thumb = true) },
+                                            onOpenPhoto = { onOpenFullPhoto(c) },
+                                            onOpenReplyPhoto = onOpenFullPhotoId,
+                                            onToggleHighlight = { vm.toggleHighlight(c) },
+                                            onReplyCamera = { onLaunchCameraReply(c.id) },
+                                            onQuote = {
+                                                replyTarget = ReplyTarget(
+                                                    checkInId = c.id,
+                                                    senderName = if (isMine) (state.me?.name ?: strings.youFallback) else partnerName,
+                                                    preview = c.note ?: c.placeName ?: strings.checkIn,
+                                                )
+                                            },
+                                            onDelete = if (isMine) ({ vm.deleteCheckIn(c.id) }) else null,
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
 
-        // Floating frosted top header + collapsible search bar
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .oursContentWidth(layoutSpec)
-                .oursHeaderInsets()
-                .padding(horizontal = layoutSpec.horizontalPadding),
-            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(OursRadius.card),
-                color = Color.Transparent,
-                shadowElevation = 0.dp,
+            Box(
                 modifier = Modifier
+                    .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = OursSpacing.md, vertical = 10.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
-                ) {
-                    OursAvatar(
-                        name = partnerName,
-                        photoUrl = state.partnerAvatarUrl,
-                        size = 40.dp,
-                        ringColor = if (isLive) colors.success else null,
-                        accent = true,
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = partnerName,
-                            style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
-                            color = colors.ink,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        OursStatusChip(label = statusText, tone = statusTone)
-                    }
-                    if (state.pendingUploads > 0) {
-                        Text(
-                            text = "${state.pendingUploads} queued",
-                            style = OursTypography.tabular,
-                            color = colors.paused,
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            if (showSearch) {
-                                showSearch = false
-                                searchQuery = ""
-                                filter = ChatFilter.All
-                            } else {
-                                showSearch = true
-                            }
-                        },
-                        modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (showSearch) OursIcons.Close else OursIcons.Search,
-                            contentDescription = if (showSearch) "Close search" else "Search messages",
-                            tint = if (showSearch) colors.action else colors.ink,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
-            }
-
-            AnimatedVisibility(visible = showSearch || searchQuery.isNotEmpty() || filter != ChatFilter.All) {
-                OursSearchFilterBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    placeholder = strings.chatSearchPlaceholder,
-                    filters = listOf(
-                        ChatFilter.All to strings.filterAll,
-                        ChatFilter.Photos to strings.filterPhotos,
-                        ChatFilter.Saved to strings.filterSaved,
+                    .height(topHeaderInset + if (searchBarOpen) 196.dp else 108.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to colors.canvas,
+                            0.78f to colors.canvas,
+                            0.92f to colors.canvas.copy(alpha = 0.85f),
+                            1.0f to Color.Transparent,
+                        ),
                     ),
-                    selectedFilter = filter,
-                    onSelectFilter = { filter = it },
-                )
-            }
-        }
+            )
 
-        // Floating frosted bottom capsule composer
-        val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .oursContentWidth(layoutSpec)
-                .fillMaxWidth()
-                .then(if (imeOpen) Modifier else Modifier.navigationBarsPadding())
-                .padding(
-                    start = OursSpacing.md,
-                    end = OursSpacing.md,
-                    top = OursSpacing.xs,
-                    bottom = if (imeOpen) OursSpacing.xs else 84.dp,
-                ),
-            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
-        ) {
-            if (replyTarget != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .oursLiquidGlass(radius = 16.dp, colors = colors, elevation = 3.dp)
-                        .padding(horizontal = OursSpacing.sm, vertical = OursSpacing.xxs),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Replying to ${replyTarget!!.senderName}",
-                            style = OursTypography.label,
-                            color = colors.action,
-                        )
-                        Text(
-                            text = replyTarget!!.preview,
-                            style = OursTypography.caption,
-                            color = colors.inkSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    IconButton(
-                        onClick = { replyTarget = null },
-                        modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp),
-                    ) {
-                        Icon(
-                            imageVector = OursIcons.Close,
-                            contentDescription = "Cancel reply",
-                            tint = colors.inkMuted,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = Color.Transparent,
-                shadowElevation = 0.dp,
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 54.dp)
-                    .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 6.dp),
+                    .align(Alignment.TopCenter)
+                    .oursContentWidth(layoutSpec)
+                    .oursHeaderInsets()
+                    .padding(horizontal = layoutSpec.horizontalPadding),
+                verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
             ) {
-                Row(
+                Surface(
+                    shape = RoundedCornerShape(OursRadius.card),
+                    color = Color.Transparent,
+                    shadowElevation = 0.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                        .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
                 ) {
-                    IconButton(
-                        onClick = onLaunchCameraCheckIn,
+                    Row(
                         modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(colors.surfaceMuted.copy(alpha = 0.55f)),
+                            .padding(horizontal = OursSpacing.md, vertical = 10.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
                     ) {
-                        Icon(
-                            imageVector = OursIcons.Camera,
-                            contentDescription = "Camera check-in",
-                            tint = colors.inkSecondary,
-                            modifier = Modifier.size(20.dp),
+                        OursAvatar(
+                            name = partnerName,
+                            photoUrl = state.partnerAvatarUrl,
+                            size = 40.dp,
+                            ringColor = if (isLive) colors.success else null,
+                            accent = true,
                         )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = OursSpacing.xs, vertical = 8.dp),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        if (draft.isEmpty()) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = strings.messagePlaceholder,
-                                style = OursTypography.body,
-                                color = colors.inkMuted,
+                                text = partnerName,
+                                style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.ink,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            OursStatusChip(label = statusText, tone = statusTone)
+                        }
+                        if (state.pendingUploads > 0) {
+                            Text(
+                                text = "${state.pendingUploads} ${strings.queuedStatus}",
+                                style = OursTypography.tabular,
+                                color = colors.paused,
                             )
                         }
-                        BasicTextField(
-                            value = draft,
-                            onValueChange = { draft = it },
-                            textStyle = OursTypography.body.copy(color = colors.ink),
-                            cursorBrush = SolidColor(colors.action),
-                            maxLines = 4,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-
-                    val canSend = draft.isNotBlank() && !state.busy
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .padding(2.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(if (canSend) colors.action else colors.surfaceMuted.copy(alpha = 0.6f))
-                            .clickable(enabled = canSend) {
-                                val textToSend = draft.trim()
-                                val target = replyTarget
-                                draft = ""
-                                replyTarget = null
-                                vm.sendChatMessage(
-                                    text = textToSend,
-                                    replyToMessageId = target?.messageId,
-                                    replyToCheckInId = target?.checkInId,
-                                )
+                        IconButton(
+                            onClick = {
+                                if (showSearch) {
+                                    showSearch = false
+                                    searchQuery = ""
+                                    filter = ChatFilter.All
+                                } else {
+                                    showSearch = true
+                                }
                             },
-                        contentAlignment = Alignment.Center,
+                            modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (showSearch) OursIcons.Close else OursIcons.Search,
+                                contentDescription = strings.chatSearchPlaceholder,
+                                tint = if (showSearch) colors.action else colors.ink,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = searchBarOpen,
+                    enter = fadeIn(OursMotion.enterSpec()) + expandVertically(OursMotion.springFluid()),
+                    exit = fadeOut(OursMotion.exitSpec()) + shrinkVertically(OursMotion.exitSpec()),
+                ) {
+                    OursSearchFilterBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        placeholder = strings.chatSearchPlaceholder,
+                        filters = listOf(
+                            ChatFilter.All to strings.filterAll,
+                            ChatFilter.Photos to strings.filterPhotos,
+                            ChatFilter.Saved to strings.filterSaved,
+                        ),
+                        selectedFilter = filter,
+                        onSelectFilter = { filter = it },
+                    )
+                }
+            }
+
+            val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to Color.Transparent,
+                            0.18f to colors.canvas.copy(alpha = 0.94f),
+                            0.32f to colors.canvas,
+                            1.0f to colors.canvas,
+                        ),
+                    )
+                    .oursContentWidth(layoutSpec)
+                    .then(if (imeOpen) Modifier else Modifier.navigationBarsPadding())
+                    .padding(
+                        start = OursSpacing.md,
+                        end = OursSpacing.md,
+                        top = 18.dp,
+                        bottom = if (imeOpen) OursSpacing.xs else 84.dp,
+                    ),
+                verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+            ) {
+                if (replyTarget != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .oursLiquidGlass(radius = 16.dp, colors = colors, elevation = 3.dp)
+                            .padding(horizontal = OursSpacing.sm, vertical = OursSpacing.xxs),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            imageVector = OursIcons.Send,
-                            contentDescription = "Send",
-                            tint = if (canSend) colors.onAction else colors.inkMuted,
-                            modifier = Modifier.size(18.dp),
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${strings.replyingToPrefix} ${replyTarget!!.senderName}",
+                                style = OursTypography.label,
+                                color = colors.action,
+                            )
+                            Text(
+                                text = replyTarget!!.preview,
+                                style = OursTypography.caption,
+                                color = colors.inkSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        IconButton(
+                            onClick = { replyTarget = null },
+                            modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp),
+                        ) {
+                            Icon(
+                                imageVector = OursIcons.Close,
+                                contentDescription = strings.cancelLabel,
+                                tint = colors.inkMuted,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = Color.Transparent,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 54.dp)
+                        .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 6.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                    ) {
+                        IconButton(
+                            onClick = onLaunchCameraCheckIn,
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(colors.surfaceMuted),
+                        ) {
+                            Icon(
+                                imageVector = OursIcons.Camera,
+                                contentDescription = strings.takePhoto,
+                                tint = colors.inkSecondary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = OursSpacing.xs, vertical = 8.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            if (draft.isEmpty()) {
+                                Text(
+                                    text = strings.messagePlaceholder,
+                                    style = OursTypography.body,
+                                    color = colors.inkMuted,
+                                )
+                            }
+                            BasicTextField(
+                                value = draft,
+                                onValueChange = { draft = it },
+                                textStyle = OursTypography.body.copy(color = colors.ink),
+                                cursorBrush = SolidColor(colors.action),
+                                maxLines = 4,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+
+                        val canSend = draft.isNotBlank() && !state.busy
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .padding(2.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(if (canSend) colors.action else colors.surfaceMuted)
+                                .clickable(enabled = canSend) {
+                                    val textToSend = draft.trim()
+                                    val target = replyTarget
+                                    draft = ""
+                                    replyTarget = null
+                                    vm.sendChatMessage(
+                                        text = textToSend,
+                                        replyToMessageId = target?.messageId,
+                                        replyToCheckInId = target?.checkInId,
+                                    )
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = OursIcons.Send,
+                                contentDescription = strings.messagePlaceholder,
+                                tint = if (canSend) colors.onAction else colors.inkMuted,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
                     }
                 }
             }
         }
-    }
     }
 }
 
@@ -584,27 +633,37 @@ fun ChatScreen(
 private fun MessageBubble(
     msg: ChatMessageDto,
     isMine: Boolean,
+    isFirstInGroup: Boolean,
+    isLastInGroup: Boolean,
     quotedPreview: String?,
+    langCode: String,
     photoUrl: (String) -> String,
     onOpenPhoto: (String) -> Unit,
     onQuote: () -> Unit,
     onCopy: (String) -> Unit,
 ) {
     val colors = OursTheme.colors
-    val bubbleBg = if (isMine) colors.actionSoft else colors.surface
-    val bubbleBorder = if (isMine) colors.action.copy(alpha = 0.28f) else colors.border
+    val bubbleBg = if (isMine) colors.action else colors.surfaceMuted
+    val textColor = if (isMine) colors.onAction else colors.ink
+    val metaColor = if (isMine) colors.onAction.copy(alpha = 0.74f) else colors.inkMuted
+    val shape = RoundedCornerShape(
+        topStart = if (!isMine && !isFirstInGroup) 8.dp else 20.dp,
+        topEnd = if (isMine && !isFirstInGroup) 8.dp else 20.dp,
+        bottomStart = if (!isMine && isLastInGroup) 5.dp else if (!isMine) 8.dp else 20.dp,
+        bottomEnd = if (isMine && isLastInGroup) 5.dp else if (isMine) 8.dp else 20.dp,
+    )
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
     ) {
         Surface(
-            shape = RoundedCornerShape(18.dp),
+            shape = shape,
             color = bubbleBg,
-            border = BorderStroke(1.dp, bubbleBorder),
             shadowElevation = 0.dp,
             modifier = Modifier
-                .widthIn(max = 290.dp)
+                .widthIn(max = 288.dp)
+                .clip(shape)
                 .combinedClickable(
                     onClick = onQuote,
                     onLongClick = {
@@ -614,20 +673,23 @@ private fun MessageBubble(
                     },
                 ),
         ) {
-            Column(modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = OursSpacing.xs)) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
                 if (!quotedPreview.isNullOrBlank()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = OursSpacing.xxs)
-                            .clip(RoundedCornerShape(OursRadius.chip))
-                            .background(colors.surfaceMuted.copy(alpha = 0.7f))
-                            .padding(horizontal = OursSpacing.xs, vertical = 4.dp),
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (isMine) Color.White.copy(alpha = 0.16f)
+                                else colors.surface.copy(alpha = 0.75f)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
                     ) {
                         Text(
                             text = quotedPreview,
                             style = OursTypography.caption,
-                            color = colors.inkSecondary,
+                            color = if (isMine) colors.onAction.copy(alpha = 0.90f) else colors.inkSecondary,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -636,30 +698,30 @@ private fun MessageBubble(
                 if (!msg.photoId.isNullOrBlank()) {
                     AsyncImage(
                         model = photoUrl(msg.photoId),
-                        contentDescription = msg.text ?: "Photo message",
+                        contentDescription = msg.text ?: "Photo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(4f / 3f)
-                            .clip(RoundedCornerShape(OursRadius.inner))
+                            .clip(RoundedCornerShape(14.dp))
                             .clickable { onOpenPhoto(msg.photoId) },
                     )
                     if (!msg.text.isNullOrBlank()) {
-                        Spacer(Modifier.height(OursSpacing.xxs))
+                        Spacer(Modifier.height(6.dp))
                     }
                 }
                 if (!msg.text.isNullOrBlank()) {
                     Text(
                         text = msg.text,
                         style = OursTypography.body,
-                        color = colors.ink,
+                        color = textColor,
                     )
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = Formatters.relativeTime(msg.createdAt),
+                    text = Formatters.relativeTime(msg.createdAt, langCode = langCode),
                     style = OursTypography.tabular.copy(fontSize = OursTypography.label.fontSize),
-                    color = colors.inkMuted,
+                    color = metaColor,
                     modifier = Modifier.align(Alignment.End),
                 )
             }
@@ -671,15 +733,19 @@ private fun MessageBubble(
 private fun CheckInBubble(
     checkIn: CheckInDto,
     isMine: Boolean,
+    myId: Long,
+    partnerName: String,
     photoUrl: String,
+    replyPhotoUrl: (String) -> String,
     onOpenPhoto: () -> Unit,
+    onOpenReplyPhoto: (String) -> Unit,
     onToggleHighlight: () -> Unit,
+    onReplyCamera: () -> Unit,
     onQuote: () -> Unit,
     onDelete: (() -> Unit)?,
 ) {
     val colors = OursTheme.colors
-    val bubbleBg = if (isMine) colors.glassActionTint else colors.glassSurface
-    val bubbleBorder = if (isMine) colors.action.copy(alpha = 0.25f) else colors.glassBorder
+    val strings = OursTheme.strings
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -692,17 +758,17 @@ private fun CheckInBubble(
                 bottomStart = if (isMine) OursRadius.mediaCard else 6.dp,
                 bottomEnd = if (isMine) 6.dp else OursRadius.mediaCard,
             ),
-            color = bubbleBg,
-            border = BorderStroke(1.dp, bubbleBorder),
+            color = colors.surface,
+            border = BorderStroke(0.75.dp, colors.border),
             modifier = Modifier
-                .widthIn(max = 270.dp)
+                .widthIn(max = 284.dp)
                 .clickable(onClick = onQuote),
         ) {
-            Column(modifier = Modifier.padding(OursSpacing.xs)) {
+            Column(modifier = Modifier.padding(10.dp)) {
                 Box {
                     AsyncImage(
                         model = photoUrl,
-                        contentDescription = checkIn.note ?: "Check-in photo",
+                        contentDescription = checkIn.note ?: strings.checkIn,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -710,28 +776,32 @@ private fun CheckInBubble(
                             .clip(RoundedCornerShape(OursRadius.inner))
                             .clickable(onClick = onOpenPhoto),
                     )
-                    // Subtle 24h countdown pill or Saved badge on photo corner
-                    Surface(
-                        shape = RoundedCornerShape(OursRadius.chip),
-                        color = colors.glassSurfaceStrong,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(6.dp),
-                    ) {
-                        Text(
-                            text = if (checkIn.highlighted) "Saved" else Formatters.countdown24h(checkIn.expiresAt),
-                            style = OursTypography.tabular,
-                            color = if (checkIn.highlighted) colors.live else colors.ink,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
+                    if (!checkIn.highlighted) {
+                        Surface(
+                            shape = RoundedCornerShape(OursRadius.chip),
+                            color = colors.glassSurfaceStrong,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(8.dp),
+                        ) {
+                            Text(
+                                text = Formatters.countdown24h(
+                                    expiresAtMs = checkIn.expiresAt,
+                                    langCode = strings.langCode,
+                                ),
+                                style = OursTypography.tabular,
+                                color = colors.ink,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
                     }
                 }
 
                 if (!checkIn.placeName.isNullOrBlank()) {
-                    Spacer(Modifier.height(OursSpacing.xxs))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         text = checkIn.placeName,
-                        style = OursTypography.label,
+                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
                         color = colors.action,
                         modifier = Modifier.padding(horizontal = 4.dp),
                     )
@@ -747,18 +817,64 @@ private fun CheckInBubble(
                     )
                 }
 
-                Spacer(Modifier.height(OursSpacing.xxs))
+                if (checkIn.replies.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surfaceMuted)
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        checkIn.replies.forEach { reply ->
+                            val replyAuthor = if (reply.authorId == myId) strings.youFallback else partnerName
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (!reply.photoId.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = replyPhotoUrl(reply.photoId),
+                                        contentDescription = reply.text ?: strings.replyLabel,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { onOpenReplyPhoto(reply.photoId) },
+                                    )
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = replyAuthor,
+                                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
+                                        color = colors.inkSecondary,
+                                    )
+                                    if (!reply.text.isNullOrBlank()) {
+                                        Text(
+                                            text = reply.text,
+                                            style = OursTypography.caption,
+                                            color = colors.ink,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
+                        .padding(horizontal = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         val saveInteraction = remember { MutableInteractionSource() }
                         Surface(
@@ -768,7 +884,11 @@ private fun CheckInBubble(
                                 .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                                 .oursPressScale(saveInteraction)
                                 .clip(RoundedCornerShape(OursRadius.chip))
-                                .clickable(interactionSource = saveInteraction, indication = null, onClick = onToggleHighlight),
+                                .clickable(
+                                    interactionSource = saveInteraction,
+                                    indication = null,
+                                    onClick = onToggleHighlight,
+                                ),
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
@@ -777,14 +897,47 @@ private fun CheckInBubble(
                             ) {
                                 Icon(
                                     imageVector = OursIcons.Memories,
-                                    contentDescription = "Save highlight",
+                                    contentDescription = strings.saveLabel,
                                     tint = if (checkIn.highlighted) colors.action else colors.inkSecondary,
                                     modifier = Modifier.size(14.dp),
                                 )
                                 Text(
-                                    text = if (checkIn.highlighted) "Saved" else "Save",
-                                    style = OursTypography.label,
+                                    text = if (checkIn.highlighted) strings.savedLabel else strings.saveLabel,
+                                    style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
                                     color = if (checkIn.highlighted) colors.action else colors.inkSecondary,
+                                )
+                            }
+                        }
+
+                        val replyInteraction = remember { MutableInteractionSource() }
+                        Surface(
+                            shape = RoundedCornerShape(OursRadius.chip),
+                            color = colors.surfaceMuted,
+                            modifier = Modifier
+                                .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+                                .oursPressScale(replyInteraction)
+                                .clip(RoundedCornerShape(OursRadius.chip))
+                                .clickable(
+                                    interactionSource = replyInteraction,
+                                    indication = null,
+                                    onClick = onReplyCamera,
+                                ),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = OursIcons.Camera,
+                                    contentDescription = strings.replyLabel,
+                                    tint = colors.inkSecondary,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Text(
+                                    text = strings.replyLabel,
+                                    style = OursTypography.label,
+                                    color = colors.inkSecondary,
                                 )
                             }
                         }
@@ -799,7 +952,7 @@ private fun CheckInBubble(
                             ) {
                                 Icon(
                                     imageVector = OursIcons.Trash,
-                                    contentDescription = "Delete check-in",
+                                    contentDescription = strings.deleteCheckInLabel,
                                     tint = colors.inkMuted,
                                     modifier = Modifier.size(16.dp),
                                 )
@@ -808,7 +961,7 @@ private fun CheckInBubble(
                     }
 
                     Text(
-                        text = Formatters.relativeTime(checkIn.createdAt),
+                        text = Formatters.relativeTime(checkIn.createdAt, langCode = strings.langCode),
                         style = OursTypography.tabular,
                         color = colors.inkMuted,
                     )

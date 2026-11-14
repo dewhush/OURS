@@ -272,6 +272,11 @@ data class EventCheckInData(
 )
 
 @Serializable
+data class EventCheckInDeletedData(
+    @SerialName("checkin_id") val checkinId: Long,
+)
+
+@Serializable
 data class EventReplyData(
     val reply: ReplyDto,
 )

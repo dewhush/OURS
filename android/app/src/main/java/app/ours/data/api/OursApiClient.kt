@@ -159,6 +159,24 @@ class OursApiClient(
         return executeAuthed(req) { body -> OursJson.decodeFromString(body) }
     }
 
+    suspend fun logout(
+        accessToken: String? = prefs.accessToken,
+        refreshToken: String? = prefs.refreshToken,
+    ) = withContext(Dispatchers.IO) {
+        val access = accessToken ?: return@withContext
+        val body = if (!refreshToken.isNullOrBlank()) {
+            OursJson.encodeToString(RefreshRequest(refreshToken)).toRequestBody(jsonMediaType)
+        } else {
+            ByteArray(0).toRequestBody(null)
+        }
+        val req = Request.Builder()
+            .url("${base()}/api/auth/logout")
+            .header("Authorization", "Bearer $access")
+            .post(body)
+            .build()
+        okHttp.newCall(req).execute().close()
+    }
+
     suspend fun registerPushToken(token: String) {
         val payload = OursJson.encodeToString(PushTokenRequest(token))
         val req = Request.Builder()

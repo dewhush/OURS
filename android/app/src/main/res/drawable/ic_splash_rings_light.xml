@@ -7,45 +7,39 @@
     <group
         android:translateX="4"
         android:translateY="4">
-        <!-- Base Left Ring (Jet Black) -->
         <path
             android:fillColor="#00000000"
-            android:pathData="M21,50 A18,18 0 1,0 57,50 A18,18 0 1,0 21,50 Z"
+            android:pathData="M39,32 A18,18 0 0,1 57,50 A18,18 0 0,1 39,68 A18,18 0 0,1 21,50 A18,18 0 0,1 39,32 Z"
             android:strokeWidth="6.5"
-            android:strokeColor="#0B0E14" />
-        <!-- Base Right Ring (Charcoal Stone) -->
+            android:strokeColor="#1C1C1E" />
         <path
             android:fillColor="#00000000"
-            android:pathData="M43,50 A18,18 0 1,0 79,50 A18,18 0 1,0 43,50 Z"
+            android:pathData="M61,32 A18,18 0 0,1 79,50 A18,18 0 0,1 61,68 A18,18 0 0,1 43,50 A18,18 0 0,1 61,32 Z"
             android:strokeWidth="6.5"
-            android:strokeColor="#5A5853" />
-        <!-- Negative-space weave cut at top crossing (Left over Right) -->
+            android:strokeColor="#0066CC" />
         <path
             android:fillColor="#00000000"
             android:pathData="M42.74,32.39 A18,18 0 0,1 55.18,42.11"
             android:strokeWidth="10.5"
             android:strokeLineCap="butt"
-            android:strokeColor="#F5F7FA" />
-        <!-- Foreground Left Ring over-arc at top crossing -->
+            android:strokeColor="#F2F2F7" />
         <path
             android:fillColor="#00000000"
             android:pathData="M42.74,32.39 A18,18 0 0,1 55.18,42.11"
             android:strokeWidth="6.5"
             android:strokeLineCap="round"
-            android:strokeColor="#0B0E14" />
-        <!-- Negative-space weave cut at bottom crossing (Right over Left) -->
+            android:strokeColor="#1C1C1E" />
         <path
             android:fillColor="#00000000"
             android:pathData="M57.26,67.61 A18,18 0 0,1 44.82,57.89"
             android:strokeWidth="10.5"
             android:strokeLineCap="butt"
-            android:strokeColor="#F5F7FA" />
-        <!-- Foreground Right Ring over-arc at bottom crossing -->
+            android:strokeColor="#F2F2F7" />
         <path
             android:fillColor="#00000000"
             android:pathData="M57.26,67.61 A18,18 0 0,1 44.82,57.89"
             android:strokeWidth="6.5"
             android:strokeLineCap="round"
-            android:strokeColor="#5A5853" />
+            android:strokeColor="#0066CC" />
     </group>
 </vector>

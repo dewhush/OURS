@@ -26,9 +26,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +50,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -60,6 +65,7 @@ import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
 import app.ours.ui.components.OursGlassBackdrop
 import app.ours.ui.components.OursInterlockedRingsMark
+import app.ours.ui.components.OursSegmentedControl
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursContentWidth
@@ -185,21 +191,18 @@ fun OnboardingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(
-                    modifier = Modifier
-                        .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 3.dp)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_ours_pair_rings),
                         contentDescription = null,
-                        modifier = Modifier.size(22.dp),
+                        modifier = Modifier.size(26.dp),
                     )
                     Text(
-                        text = "OURS · ${step + 1}/4",
-                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.action,
+                        text = "OURS",
+                        style = OursTypography.title.copy(fontWeight = FontWeight.Bold),
+                        color = colors.ink,
                     )
                 }
                 LanguagePillToggle(
@@ -208,110 +211,109 @@ fun OnboardingScreen(
                 )
             }
 
-        OnboardingProgressBar(step = step, totalSteps = 4)
+            OnboardingProgressBar(step = step, totalSteps = 4)
 
-        AnimatedContent(
-            targetState = step,
-            transitionSpec = {
-                val forward = targetState >= initialState
-                (fadeIn(OursMotion.enterSpec()) + slideInHorizontally(OursMotion.enterSpec()) { w ->
-                    if (forward) w / 6 else -w / 6
-                }).togetherWith(
-                    fadeOut(OursMotion.exitSpec()) + slideOutHorizontally(OursMotion.exitSpec()) { w ->
-                        if (forward) -w / 6 else w / 6
-                    }
-                )
-            },
-            label = "onboardingStep",
-        ) { currentStep ->
-            Column(verticalArrangement = Arrangement.spacedBy(OursSpacing.md)) {
-                when (currentStep) {
-                    0 -> {
-                Text(strings.connectGmailTitle, style = OursTypography.display, color = colors.ink)
-                Text(
-                    strings.connectGmailSubtitle,
-                    style = OursTypography.body,
-                    color = colors.inkSecondary,
-                )
-
-                OursCard(modifier = Modifier.fillMaxWidth()) {
-                    OursButton(
-                        text = strings.continueWithGoogle,
-                        variant = OursButtonVariant.Secondary,
-                        onClick = {
-                            @Suppress("DEPRECATION")
-                            val intent = AccountManager.newChooseAccountIntent(
-                                null,
-                                null,
-                                arrayOf("com.google"),
-                                null,
-                                null,
-                                null,
-                                null,
+            AnimatedContent(
+                targetState = step,
+                transitionSpec = {
+                    val forward = targetState >= initialState
+                    (fadeIn(OursMotion.enterSpec(220)) + slideInHorizontally(OursMotion.springFluid()) { w ->
+                        if (forward) w / 5 else -w / 5
+                    }).togetherWith(
+                        fadeOut(OursMotion.exitSpec(150)) + slideOutHorizontally(OursMotion.exitSpec(150)) { w ->
+                            if (forward) -w / 5 else w / 5
+                        }
+                    )
+                },
+                label = "onboardingStep",
+            ) { currentStep ->
+                Column(verticalArrangement = Arrangement.spacedBy(OursSpacing.md)) {
+                    when (currentStep) {
+                        0 -> {
+                            Text(strings.connectGmailTitle, style = OursTypography.display, color = colors.ink)
+                            Text(
+                                strings.connectGmailSubtitle,
+                                style = OursTypography.body,
+                                color = colors.inkSecondary,
                             )
-                            runCatching { googlePickerLauncher.launch(intent) }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
 
-                    Spacer(Modifier.height(OursSpacing.sm))
+                            OursButton(
+                                text = strings.continueWithGoogle,
+                                variant = OursButtonVariant.Secondary,
+                                onClick = {
+                                    @Suppress("DEPRECATION")
+                                    val intent = AccountManager.newChooseAccountIntent(
+                                        null,
+                                        null,
+                                        arrayOf("com.google"),
+                                        null,
+                                        null,
+                                        null,
+                                        null,
+                                    )
+                                    runCatching { googlePickerLauncher.launch(intent) }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
 
-                    OutlinedTextField(
-                        value = gmailAddress,
-                        onValueChange = { gmailAddress = it },
-                        label = { Text(strings.gmailAddressLabel) },
-                        placeholder = { Text("you@gmail.com") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                            Text(
+                                text = strings.orEnterGmailManually,
+                                style = OursTypography.caption,
+                                color = colors.inkMuted,
+                            )
 
-                    Spacer(Modifier.height(OursSpacing.md))
+                            OutlinedTextField(
+                                value = gmailAddress,
+                                onValueChange = { gmailAddress = it },
+                                label = { Text(strings.gmailAddressLabel) },
+                                placeholder = { Text("you@gmail.com") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(OursRadius.control),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
 
-                    OursButton(
-                        text = strings.continueLabel,
-                        onClick = {
-                            if (myName.isBlank() && gmailAddress.contains("@")) {
-                                myName = gmailAddress.substringBefore("@").replaceFirstChar { it.uppercase() }
+                            OursButton(
+                                text = strings.continueLabel,
+                                onClick = {
+                                    if (myName.isBlank() && gmailAddress.contains("@")) {
+                                        myName = gmailAddress.substringBefore("@").replaceFirstChar { it.uppercase() }
+                                    }
+                                    step = 1
+                                },
+                                enabled = gmailAddress.contains("@"),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .heightIn(min = 44.dp)
+                                    .semantics { role = Role.Button }
+                                    .clip(RoundedCornerShape(OursRadius.control))
+                                    .clickable { showServerSheet = true }
+                                    .padding(horizontal = OursSpacing.xs),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
+                                Text(
+                                    text = "${strings.serverSettingsLink} · ${serverUrl.removePrefix("http://").removePrefix("https://")}",
+                                    style = OursTypography.caption.copy(fontWeight = FontWeight.Medium),
+                                    color = colors.action,
+                                )
                             }
-                            step = 1
-                        },
-                        enabled = gmailAddress.contains("@"),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                        }
 
-                Text(
-                    text = strings.serverSettingsLink,
-                    style = OursTypography.caption.copy(fontWeight = FontWeight.Medium),
-                    color = colors.inkMuted,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(OursRadius.chip))
-                        .clickable { showServerSheet = true }
-                        .padding(vertical = OursSpacing.xxs),
-                )
-            }
-
-            1 -> {
-                Text(strings.pairTitle, style = OursTypography.display, color = colors.ink)
-                Text(
-                    strings.pairSubtitle,
-                    style = OursTypography.body,
-                    color = colors.inkSecondary,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {
-                    OursButton(
-                        text = strings.createPair,
-                        variant = if (pairModeCreate) OursButtonVariant.Primary else OursButtonVariant.Secondary,
-                        onClick = { pairModeCreate = true },
-                        modifier = Modifier.weight(1f),
-                    )
-                    OursButton(
-                        text = strings.joinWithCode,
-                        variant = if (!pairModeCreate) OursButtonVariant.Primary else OursButtonVariant.Secondary,
-                        onClick = { pairModeCreate = false },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                        1 -> {
+                            Text(strings.pairTitle, style = OursTypography.display, color = colors.ink)
+                            Text(
+                                strings.pairSubtitle,
+                                style = OursTypography.body,
+                                color = colors.inkSecondary,
+                            )
+                            OursSegmentedControl(
+                                options = listOf(true to strings.createPair, false to strings.joinWithCode),
+                                selected = pairModeCreate,
+                                onSelect = { pairModeCreate = it },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
 
                 OutlinedTextField(
                     value = myName,
@@ -592,65 +594,37 @@ fun LanguagePillToggle(
     current: String,
     onSelect: (String) -> Unit,
 ) {
-    val colors = OursTheme.colors
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = colors.surfaceMuted.copy(alpha = 0.72f),
-        border = BorderStroke(1.dp, colors.glassBorder),
-    ) {
-        Row(
-            modifier = Modifier.padding(2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            listOf("en" to "EN", "id" to "ID").forEach { (code, label) ->
-                val selected = current == code
-                val interactionSource = remember { MutableInteractionSource() }
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (selected) colors.action else colors.surfaceMuted,
-                    modifier = Modifier
-                        .oursPressScale(interactionSource)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(interactionSource = interactionSource, indication = null) {
-                            onSelect(code)
-                        },
-                ) {
-                    Text(
-                        text = label,
-                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (selected) colors.onAction else colors.inkSecondary,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                    )
-                }
-            }
-        }
-    }
+    OursSegmentedControl(
+        options = listOf("en" to "EN", "id" to "ID"),
+        selected = current,
+        onSelect = onSelect,
+        modifier = Modifier.width(108.dp),
+    )
 }
 
 @Composable
 fun XiaomiStepsCard() {
     val colors = OursTheme.colors
+    val strings = OursTheme.strings
     val context = LocalContext.current
     OursCard(modifier = Modifier.fillMaxWidth()) {
-        Text("Poco / HyperOS checklist", style = OursTypography.title, color = colors.ink)
+        Text(strings.xiaomiChecklistHint, style = OursTypography.title, color = colors.ink)
         Spacer(Modifier.height(OursSpacing.xs))
         Text(
-            "1. Turn on Autostart for OURS.\n" +
-                "2. In App info > Battery saver, choose \"No restrictions\".\n" +
-                "3. Open Recents, long-press OURS, and tap the Lock icon.",
+            "${strings.xiaomiStep1}\n${strings.xiaomiStep2}\n${strings.xiaomiStep3}\n${strings.xiaomiStep4}",
             style = OursTypography.body,
             color = colors.inkSecondary,
         )
         Spacer(Modifier.height(OursSpacing.sm))
         Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {
             OursButton(
-                text = "Open Autostart",
+                text = strings.xiaomiOpenAutostart,
                 variant = OursButtonVariant.Secondary,
                 onClick = { XiaomiGuideHelper.openAutostartSettings(context) },
                 modifier = Modifier.weight(1f),
             )
             OursButton(
-                text = "App battery info",
+                text = strings.xiaomiAppBatteryInfo,
                 variant = OursButtonVariant.Secondary,
                 onClick = {
                     runCatching { context.startActivity(XiaomiGuideHelper.openAppDetailsIntent(context)) }
@@ -675,13 +649,13 @@ private fun OnboardingProgressBar(
             val targetFill = if (index <= step) 1f else 0f
             val fill by animateFloatAsState(
                 targetValue = targetFill,
-                animationSpec = OursMotion.enterSpec(),
+                animationSpec = OursMotion.springFluid(),
                 label = "onboarding-step-$index",
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .height(5.dp)
+                    .height(4.dp)
                     .clip(RoundedCornerShape(OursRadius.chip))
                     .background(colors.surfaceMuted),
             ) {
@@ -689,7 +663,7 @@ private fun OnboardingProgressBar(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth(fill)
-                            .height(5.dp)
+                            .height(4.dp)
                             .clip(RoundedCornerShape(OursRadius.chip))
                             .background(colors.action),
                     )

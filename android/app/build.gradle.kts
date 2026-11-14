@@ -37,9 +37,20 @@ android {
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$bakedServerUrl\"")
     }
 
+    signingConfigs {
+        val keystorePath = System.getenv("OURS_KEYSTORE_PATH") ?: cfg("ours.keystore.path")
+        if (keystorePath.isNotBlank() && file(keystorePath).exists()) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("OURS_KEYSTORE_PASSWORD") ?: cfg("ours.keystore.password")
+                keyAlias = System.getenv("OURS_KEY_ALIAS") ?: cfg("ours.key.alias")
+                keyPassword = System.getenv("OURS_KEY_PASSWORD") ?: cfg("ours.key.password")
+            }
+        }
+    }
+
     buildTypes {
         debug {
-            // Include x86_64 for emulator smoke tests alongside arm64-v8a
             ndk {
                 abiFilters += listOf("arm64-v8a", "x86_64")
             }
@@ -47,7 +58,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

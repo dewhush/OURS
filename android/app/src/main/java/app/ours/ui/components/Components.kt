@@ -1,15 +1,14 @@
 package app.ours.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.composed
-import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -21,6 +20,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,21 +29,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
-import coil3.compose.AsyncImage
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,29 +51,34 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -85,6 +88,8 @@ import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
 import app.ours.ui.theme.OursTypography
+import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
 
 enum class OursBreakpoint { Compact, Standard, Expanded }
 
@@ -105,7 +110,7 @@ fun rememberOursLayoutSpec(): OursLayoutSpec {
         )
         widthDp < 600 -> OursLayoutSpec(
             breakpoint = OursBreakpoint.Standard,
-            horizontalPadding = 20.dp,
+            horizontalPadding = 16.dp,
             maxContentWidth = Dp.Unspecified,
         )
         else -> OursLayoutSpec(
@@ -123,19 +128,11 @@ fun Modifier.oursContentWidth(spec: OursLayoutSpec): Modifier =
         this.fillMaxWidth()
     }
 
-/**
- * Shared top inset directly below the status bar and HyperIsland / display cutout
- * so Map, Memories, Chat, and Settings headers sit close to the island and align identically.
- */
 fun Modifier.oursHeaderInsets(): Modifier = composed {
     windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout))
-        .padding(top = 16.dp)
+        .padding(top = 12.dp)
 }
 
-/**
- * Lightweight GPU-cached subtle vertical atmospheric backdrop (R-01):
- * clean architectural tone without generic radial blobs.
- */
 @Composable
 fun OursGlassBackdrop(
     modifier: Modifier = Modifier,
@@ -145,27 +142,16 @@ fun OursGlassBackdrop(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .drawWithCache {
-                val bgBrush = Brush.verticalGradient(
-                    colors = listOf(
-                        colors.canvas,
-                        colors.surfaceMuted.copy(alpha = 0.55f),
-                        colors.canvas,
-                    ),
-                )
-                onDrawBehind {
-                    drawRect(brush = bgBrush)
-                }
-            },
+            .background(colors.canvas),
         content = content,
     )
 }
 
 /**
- * iOS 26+ Liquid Glass surface modifier (GPU-cached via drawWithCache):
- * outer soft ambient shadow clipped outside via ClipOp.Difference,
- * translucent diagonal refractive gradient, top-left radial specular sheen,
- * 1.dp top-edge inner highlight, and directional top-left-to-bottom-right rim border.
+ * Apple HIG translucent material surface (GPU-cached via drawWithCache):
+ * clean vertical material fill without artificial diagonal white spotlight fog,
+ * subtle ambient shadow clipped outside, 0.75.dp top-edge specular hairline,
+ * and a crisp perimeter hairline border.
  */
 fun Modifier.oursLiquidGlass(
     radius: Dp,
@@ -182,29 +168,18 @@ fun Modifier.oursLiquidGlass(
                 addRoundRect(RoundRect(0f, 0f, size.width, size.height, CornerRadius(rPx, rPx)))
             }
             val surfaceBrush = if (tinted) {
-                Brush.linearGradient(
-                    colors = listOf(colors.actionSoft.copy(alpha = 0.78f), colors.glassGradientEnd),
-                    start = Offset.Zero,
-                    end = Offset(size.width, size.height),
+                Brush.verticalGradient(
+                    colors = listOf(colors.actionSoft, colors.glassGradientEnd),
                 )
             } else {
-                Brush.linearGradient(
+                Brush.verticalGradient(
                     colors = listOf(colors.glassGradientStart, colors.glassGradientEnd),
-                    start = Offset.Zero,
-                    end = Offset(size.width, size.height),
                 )
             }
-            val sheenBrush = Brush.radialGradient(
-                colors = listOf(colors.glassInnerHighlight.copy(alpha = 0.24f), Color.Transparent),
-                center = Offset(size.width * 0.18f, 0f),
-                radius = (size.maxDimension * 0.7f).coerceAtLeast(1f),
-            )
-            val rimBrush = Brush.linearGradient(
+            val rimBrush = Brush.verticalGradient(
                 colors = listOf(colors.glassHighlightTopLeft, colors.glassRimBottomRight),
-                start = Offset.Zero,
-                end = Offset(size.width, size.height),
             )
-            val strokePx = 1.dp.toPx()
+            val strokePx = 0.75.dp.toPx()
 
             onDrawWithContent {
                 if (elevPx > 0f) {
@@ -212,12 +187,12 @@ fun Modifier.oursLiquidGlass(
                         val steps = 3
                         for (i in 1..steps) {
                             val spread = (elevPx * i) / steps
-                            val alpha = (0.045f * (steps - i + 1)) / steps
+                            val alpha = (0.04f * (steps - i + 1)) / steps
                             drawRoundRect(
                                 color = Color.Black.copy(alpha = alpha),
-                                topLeft = Offset(-spread * 0.5f, spread * 0.35f),
-                                size = Size(size.width + spread, size.height + spread),
-                                cornerRadius = CornerRadius(rPx + spread * 0.5f, rPx + spread * 0.5f),
+                                topLeft = Offset(-spread * 0.4f, spread * 0.35f),
+                                size = Size(size.width + spread * 0.8f, size.height + spread),
+                                cornerRadius = CornerRadius(rPx + spread * 0.4f, rPx + spread * 0.4f),
                             )
                         }
                     }
@@ -227,22 +202,18 @@ fun Modifier.oursLiquidGlass(
                     cornerRadius = CornerRadius(rPx, rPx),
                 )
                 drawContent()
-                drawRoundRect(
-                    brush = sheenBrush,
-                    cornerRadius = CornerRadius(rPx, rPx),
-                )
-                if (size.width > rPx * 1.1f) {
+                if (size.width > rPx * 1.2f) {
                     drawLine(
                         color = colors.glassInnerHighlight,
-                        start = Offset(rPx * 0.55f, strokePx),
-                        end = Offset(size.width - rPx * 0.55f, strokePx),
+                        start = Offset(rPx * 0.6f, strokePx),
+                        end = Offset(size.width - rPx * 0.6f, strokePx),
                         strokeWidth = strokePx,
                     )
                 }
                 drawRoundRect(
                     brush = rimBrush,
                     cornerRadius = CornerRadius(rPx, rPx),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx),
+                    style = Stroke(width = strokePx),
                 )
             }
         }
@@ -286,13 +257,13 @@ fun OursButton(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed && enabled && !loading) OursMotion.PRESS_SCALE else 1f,
-        animationSpec = OursMotion.enterSpec(150),
+        animationSpec = OursMotion.springSnappy(),
         label = "buttonScale",
     )
 
     val containerColor = when (variant) {
         OursButtonVariant.Primary -> colors.action
-        OursButtonVariant.Secondary -> colors.glassSurfaceStrong
+        OursButtonVariant.Secondary -> colors.surfaceMuted
         OursButtonVariant.Ghost -> Color.Transparent
         OursButtonVariant.Destructive -> colors.dangerSoft
     }
@@ -302,14 +273,7 @@ fun OursButton(
         OursButtonVariant.Ghost -> colors.inkSecondary
         OursButtonVariant.Destructive -> colors.danger
     }
-    val border = when (variant) {
-        OursButtonVariant.Secondary -> BorderStroke(1.dp, colors.glassBorder)
-        OursButtonVariant.Destructive -> BorderStroke(1.dp, colors.danger.copy(alpha = 0.25f))
-        else -> null
-    }
-
-    val isSecondaryGlass = variant == OursButtonVariant.Secondary
-    val effectiveAlpha = if (enabled) 1f else 0.45f
+    val effectiveAlpha = if (enabled) 1f else 0.42f
     val buttonShape = RoundedCornerShape(OursRadius.control)
 
     Surface(
@@ -320,13 +284,7 @@ fun OursButton(
                 scaleY = scale
                 alpha = effectiveAlpha
             }
-            .then(
-                if (isSecondaryGlass) {
-                    Modifier.oursLiquidGlass(radius = OursRadius.control, colors = colors, elevation = 3.dp)
-                } else {
-                    Modifier.clip(buttonShape)
-                }
-            )
+            .clip(buttonShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -335,9 +293,9 @@ fun OursButton(
                 onClick = onClick,
             ),
         shape = buttonShape,
-        color = if (isSecondaryGlass) Color.Transparent else containerColor,
+        color = containerColor,
         contentColor = contentColor,
-        border = if (isSecondaryGlass) null else border,
+        border = null,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
@@ -377,11 +335,12 @@ fun OursCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = OursTheme.colors
+    val isDark = OursTheme.isDark
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed && onClick != null) OursMotion.PRESS_SCALE else 1f,
-        animationSpec = OursMotion.enterSpec(150),
+        animationSpec = OursMotion.springSnappy(),
         label = "cardScale",
     )
 
@@ -395,6 +354,7 @@ fun OursCard(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                role = Role.Button,
                 onClick = onClick,
             )
     } else {
@@ -411,10 +371,95 @@ fun OursCard(
             .then(clickModifier),
         shape = shape,
         color = if (frosted) Color.Transparent else colors.surface,
-        border = if (frosted) null else BorderStroke(1.dp, colors.border),
+        border = when {
+            frosted -> null
+            isDark -> BorderStroke(0.5.dp, colors.border)
+            else -> BorderStroke(0.75.dp, colors.border)
+        },
         shadowElevation = 0.dp,
     ) {
         Column(modifier = Modifier.padding(padding), content = content)
+    }
+}
+
+/**
+ * Authentic Apple iOS segmented control with a physics-driven sliding pill indicator
+ * and 44.dp minimum touch height (R-03, R-32).
+ */
+@Composable
+fun <T> OursSegmentedControl(
+    options: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    minSegmentWidth: Dp = 54.dp,
+) {
+    val colors = OursTheme.colors
+    val selectedIndex = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
+    val count = options.size.coerceAtLeast(1)
+
+    BoxWithConstraints(
+        modifier = modifier
+            .heightIn(min = 44.dp)
+            .widthIn(min = minSegmentWidth * count + 6.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(colors.surfaceMuted)
+            .padding(3.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        val segmentWidth = maxWidth / count
+        val thumbOffset by animateDpAsState(
+            targetValue = segmentWidth * selectedIndex,
+            animationSpec = OursMotion.springSnappy(),
+            label = "segmentThumbOffset",
+        )
+
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .width(segmentWidth)
+                .height(38.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(colors.action),
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            options.forEach { (value, label) ->
+                val isSelected = value == selected
+                val textColor by animateColorAsState(
+                    targetValue = if (isSelected) colors.onAction else colors.inkSecondary,
+                    animationSpec = OursMotion.springSnappy(),
+                    label = "segmentTextColor",
+                )
+                Box(
+                    modifier = Modifier
+                        .width(segmentWidth)
+                        .heightIn(min = 38.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .semantics {
+                            role = Role.Tab
+                            this.selected = isSelected
+                        }
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            role = Role.Tab,
+                            onClick = { onSelect(value) },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = label,
+                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
+                        color = textColor,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -430,7 +475,7 @@ fun OursBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = OursRadius.sheet, topEnd = OursRadius.sheet),
-        containerColor = colors.glassSurfaceStrong,
+        containerColor = colors.surface,
         contentColor = colors.ink,
     ) {
         Column(
@@ -463,8 +508,8 @@ fun OursAvatar(
             .clip(CircleShape)
             .background(bg)
             .then(
-                if (ringColor != null) Modifier.border(2.dp, ringColor, CircleShape)
-                else Modifier.border(1.dp, colors.border, CircleShape)
+                if (ringColor != null) Modifier.border(1.5.dp, ringColor, CircleShape)
+                else Modifier.border(0.75.dp, colors.border, CircleShape)
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -682,9 +727,10 @@ fun OursErrorState(
     modifier: Modifier = Modifier,
 ) {
     val colors = OursTheme.colors
-    OursCard(modifier = modifier.fillMaxWidth(), frosted = true) {
+    val strings = OursTheme.strings
+    OursCard(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = "Could not load",
+            text = strings.couldNotLoadTitle,
             style = OursTypography.title,
             color = colors.danger,
         )
@@ -696,7 +742,7 @@ fun OursErrorState(
         )
         Spacer(Modifier.height(OursSpacing.sm))
         OursButton(
-            text = "Try again",
+            text = strings.tryAgainCta,
             onClick = onRetry,
             variant = OursButtonVariant.Secondary,
         )
@@ -714,11 +760,11 @@ fun OursSendConfirmation(
         visible = visible,
         modifier = modifier,
         enter = fadeIn(OursMotion.enterSpec()) + scaleIn(
-            initialScale = 0.95f,
-            animationSpec = OursMotion.enterSpec(),
+            initialScale = 0.92f,
+            animationSpec = OursMotion.springSnappy(),
         ),
         exit = fadeOut(OursMotion.exitSpec()) + scaleOut(
-            targetScale = 0.95f,
+            targetScale = 0.92f,
             animationSpec = OursMotion.exitSpec(),
         ),
     ) {
@@ -755,7 +801,7 @@ fun OursStaggeredItem(
     content: @Composable () -> Unit,
 ) {
     val alpha = remember { Animatable(0f) }
-    val offsetY = remember { Animatable(12f) }
+    val offsetY = remember { Animatable(14f) }
 
     LaunchedEffect(Unit) {
         val delayMs = (index.coerceIn(0, 6) * OursMotion.STAGGER_MS).toLong()
@@ -765,7 +811,7 @@ fun OursStaggeredItem(
     LaunchedEffect(Unit) {
         val delayMs = (index.coerceIn(0, 6) * OursMotion.STAGGER_MS).toLong()
         if (delayMs > 0) delay(delayMs)
-        offsetY.animateTo(0f, OursMotion.enterSpec())
+        offsetY.animateTo(0f, OursMotion.springFluid())
     }
 
     Box(
@@ -785,7 +831,7 @@ fun Modifier.oursPressScale(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed && enabled) OursMotion.PRESS_SCALE else 1f,
-        animationSpec = OursMotion.enterSpec(150),
+        animationSpec = OursMotion.springSnappy(),
         label = "pressScale",
     )
     this.graphicsLayer {
@@ -798,7 +844,7 @@ fun Modifier.oursPressScale(
 fun OursInterlockedRingsMark(
     modifier: Modifier = Modifier,
     leftRingColor: Color = OursTheme.colors.ink,
-    rightRingColor: Color = OursTheme.colors.inkMuted,
+    rightRingColor: Color = OursTheme.colors.action,
     backgroundColor: Color = OursTheme.colors.canvas,
     progress: Float = 1f,
     convergeProgress: Float = 1f,
@@ -810,7 +856,7 @@ fun OursInterlockedRingsMark(
         val cutStroke = 10.5f * s
         val sweep = (360f * progress.coerceIn(0f, 1f))
         val c = convergeProgress.coerceIn(0f, 1f)
-        val sep = 5f * (1f - c) // Gently converges rings into interlocked position
+        val sep = 5f * (1f - c)
 
         val leftCenter = Offset((39f - sep) * s, 50f * s)
         val rightCenter = Offset((61f + sep) * s, 50f * s)
@@ -818,7 +864,6 @@ fun OursInterlockedRingsMark(
         val rightTopLeft = Offset(rightCenter.x - r, rightCenter.y - r)
         val arcSize = Size(r * 2f, r * 2f)
 
-        // Base rings
         drawArc(
             color = leftRingColor,
             startAngle = -90f,
@@ -839,7 +884,6 @@ fun OursInterlockedRingsMark(
         )
 
         if (progress > 0.7f) {
-            // Top crossing: Left Ring OVER Right Ring
             drawArc(
                 color = backgroundColor,
                 startAngle = -78f,
@@ -859,7 +903,6 @@ fun OursInterlockedRingsMark(
                 style = Stroke(width = stroke, cap = StrokeCap.Round),
             )
 
-            // Bottom crossing: Right Ring OVER Left Ring
             drawArc(
                 color = backgroundColor,
                 startAngle = 102f,
@@ -867,7 +910,7 @@ fun OursInterlockedRingsMark(
                 useCenter = false,
                 topLeft = rightTopLeft,
                 size = arcSize,
-                style = Stroke(width = cutStroke, cap = StrokeCap.Butt),
+                style = Stroke(width = stroke + 4f * s, cap = StrokeCap.Butt),
             )
             drawArc(
                 color = rightRingColor,

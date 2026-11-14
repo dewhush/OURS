@@ -16,8 +16,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
@@ -75,6 +77,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -146,17 +152,19 @@ class MainActivity : ComponentActivity() {
                 }
             }
             OursTheme(darkTheme = darkTheme, language = state.language) {
-                var showSplash by remember { mutableStateOf(true) }
+                var showSplash by rememberSaveable { mutableStateOf(true) }
                 LaunchedEffect(Unit) {
-                    delay(820)
-                    showSplash = false
+                    if (showSplash) {
+                        delay(760)
+                        showSplash = false
+                    }
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
                     OursRoot(vm = vm)
                     AnimatedVisibility(
                         visible = showSplash,
                         exit = fadeOut(OursMotion.exitSpec(220)) +
-                            scaleOut(targetScale = 1.04f, animationSpec = OursMotion.exitSpec(220)),
+                            scaleOut(targetScale = 1.03f, animationSpec = OursMotion.exitSpec(220)),
                     ) {
                         OursSplashOverlay()
                     }
@@ -170,140 +178,83 @@ class MainActivity : ComponentActivity() {
 private fun OursSplashOverlay() {
     val colors = OursTheme.colors
     val strings = OursTheme.strings
-    val isDark = OursTheme.isDark
-    val leftRingColor = if (isDark) Color(0xFFFAF8F4) else Color(0xFF0F0F0E)
-    val rightRingColor = if (isDark) Color(0xFFC8C2B6) else Color(0xFF5A5853)
 
-    val iconScale = remember { Animatable(0.86f) }
-    val iconOffsetY = remember { Animatable(14f) }
-    val ringDraw = remember { Animatable(0.10f) }
+    val iconScale = remember { Animatable(0.84f) }
+    val iconOffsetY = remember { Animatable(12f) }
     val ringConverge = remember { Animatable(0f) }
-    val pulseScale = remember { Animatable(0.92f) }
-    val pulseAlpha = remember { Animatable(0.45f) }
     val wordmarkAlpha = remember { Animatable(0f) }
     val wordmarkOffsetY = remember { Animatable(8f) }
     val subtitleAlpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        iconScale.animateTo(1f, OursMotion.enterSpec(280))
+        iconScale.animateTo(1f, OursMotion.springBouncy())
     }
     LaunchedEffect(Unit) {
-        iconOffsetY.animateTo(0f, OursMotion.enterSpec(280))
+        iconOffsetY.animateTo(0f, OursMotion.springFluid())
     }
     LaunchedEffect(Unit) {
-        ringDraw.animateTo(1f, OursMotion.enterSpec(420))
+        ringConverge.animateTo(1f, OursMotion.springFluid())
     }
     LaunchedEffect(Unit) {
-        delay(120)
-        ringConverge.animateTo(1f, OursMotion.enterSpec(380))
+        delay(80)
+        wordmarkAlpha.animateTo(1f, OursMotion.enterSpec(220))
     }
     LaunchedEffect(Unit) {
-        delay(180)
-        pulseScale.animateTo(1.32f, OursMotion.enterSpec(520))
+        delay(80)
+        wordmarkOffsetY.animateTo(0f, OursMotion.springFluid())
     }
     LaunchedEffect(Unit) {
-        delay(180)
-        pulseAlpha.animateTo(0f, OursMotion.enterSpec(520))
+        delay(140)
+        subtitleAlpha.animateTo(1f, OursMotion.enterSpec(220))
     }
-    LaunchedEffect(Unit) {
-        delay(160)
-        wordmarkAlpha.animateTo(1f, OursMotion.enterSpec(240))
-    }
-    LaunchedEffect(Unit) {
-        delay(160)
-        wordmarkOffsetY.animateTo(0f, OursMotion.enterSpec(240))
-    }
-    LaunchedEffect(Unit) {
-        delay(260)
-        subtitleAlpha.animateTo(1f, OursMotion.enterSpec(240))
-    }
-
-    val emblemFill = Brush.linearGradient(
-        colors = if (isDark) {
-            listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.06f))
-        } else {
-            listOf(Color.White.copy(alpha = 0.86f), Color.White.copy(alpha = 0.54f))
-        },
-        start = Offset.Zero,
-        end = Offset(260f, 260f),
-    )
-    val emblemRim = Brush.linearGradient(
-        colors = if (isDark) {
-            listOf(Color.White.copy(alpha = 0.42f), Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.22f))
-        } else {
-            listOf(Color.White.copy(alpha = 0.95f), Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.72f))
-        },
-        start = Offset.Zero,
-        end = Offset(260f, 260f),
-    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        colors.canvas,
-                        colors.surfaceMuted.copy(alpha = 0.55f),
-                        colors.canvas,
-                    ),
-                ),
-            ),
+            .background(colors.canvas),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .size(92.dp)
-                        .graphicsLayer {
-                            scaleX = pulseScale.value
-                            scaleY = pulseScale.value
-                            alpha = pulseAlpha.value
-                        }
-                        .border(1.5.dp, colors.action.copy(alpha = 0.45f), RoundedCornerShape(26.dp)),
-                )
-                Box(
-                    modifier = Modifier
-                        .size(92.dp)
-                        .graphicsLayer {
-                            scaleX = iconScale.value
-                            scaleY = iconScale.value
-                            translationY = iconOffsetY.value * density
-                        }
-                        .shadow(
-                            elevation = 16.dp,
-                            shape = RoundedCornerShape(26.dp),
-                            ambientColor = colors.action.copy(alpha = 0.16f),
-                            spotColor = colors.action.copy(alpha = 0.16f),
-                        )
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(emblemFill)
-                        .border(1.5.dp, emblemRim, RoundedCornerShape(26.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    OursInterlockedRingsMark(
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
-                        leftRingColor = leftRingColor,
-                        rightRingColor = rightRingColor,
-                        backgroundColor = colors.surface,
-                        progress = ringDraw.value,
-                        convergeProgress = ringConverge.value,
+            Box(
+                modifier = Modifier
+                    .size(92.dp)
+                    .graphicsLayer {
+                        scaleX = iconScale.value
+                        scaleY = iconScale.value
+                        translationY = iconOffsetY.value * density
+                    }
+                    .shadow(
+                        elevation = 12.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        ambientColor = Color.Black.copy(alpha = 0.14f),
+                        spotColor = Color.Black.copy(alpha = 0.18f),
                     )
-                }
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(colors.surface)
+                    .border(0.75.dp, colors.glassBorder, RoundedCornerShape(24.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                OursInterlockedRingsMark(
+                    modifier = Modifier.fillMaxSize().padding(10.dp),
+                    leftRingColor = colors.ink,
+                    rightRingColor = colors.action,
+                    backgroundColor = colors.surface,
+                    progress = 1f,
+                    convergeProgress = ringConverge.value,
+                )
             }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                verticalArrangement = Arrangement.spacedBy(OursSpacing.xxs),
             ) {
                 Text(
                     text = "OURS",
                     style = OursTypography.display.copy(
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 4.sp,
+                        letterSpacing = 3.sp,
                     ),
                     color = colors.ink,
                     modifier = Modifier.graphicsLayer {
@@ -438,7 +389,8 @@ private fun OursRoot(vm: OursViewModel) {
             AnimatedContent(
                 targetState = state.activeTab,
                 transitionSpec = {
-                    fadeIn(OursMotion.enterSpec()).togetherWith(fadeOut(OursMotion.exitSpec()))
+                    (fadeIn(OursMotion.enterSpec(200)) + scaleIn(initialScale = 0.985f, animationSpec = OursMotion.springFluid()))
+                        .togetherWith(fadeOut(OursMotion.exitSpec(150)))
                 },
                 label = "mainTabTransition",
             ) { tab ->
@@ -514,28 +466,26 @@ private fun OursRoot(vm: OursViewModel) {
     if (state.sosCountdownSec != null) {
         OursBottomSheet(onDismiss = { vm.cancelSosCountdown() }) {
             Text(
-                text = if (state.sosKind == "crash") "Crash detected" else "Sending SOS",
+                text = if (state.sosKind == "crash") strings.sosCrashDetectedTitle else strings.sosSendingTitle,
                 style = OursTypography.headline,
                 color = colors.danger,
             )
             Spacer(Modifier.height(OursSpacing.xs))
             Text(
-                text = "Alerting ${state.partner?.name ?: "your partner"}${
-                    if (state.emergencyContactPhone.isNotBlank()) " and calling ${state.emergencyContactName.ifBlank { state.emergencyContactPhone }} on WhatsApp" else ""
-                } in ${state.sosCountdownSec}s.",
+                text = "${strings.sosCountdownDetail} (${state.sosCountdownSec}s)",
                 style = OursTypography.body,
                 color = colors.inkSecondary,
             )
             Spacer(Modifier.height(OursSpacing.md))
             OursButton(
-                text = "Send SOS now",
+                text = strings.sosSendNowCta,
                 variant = OursButtonVariant.Destructive,
                 onClick = { vm.triggerSosNow() },
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(OursSpacing.xs))
             OursButton(
-                text = "I'm okay · Cancel",
+                text = strings.sosCancelCta,
                 variant = OursButtonVariant.Secondary,
                 onClick = { vm.cancelSosCountdown() },
                 modifier = Modifier.fillMaxWidth(),
@@ -543,16 +493,15 @@ private fun OursRoot(vm: OursViewModel) {
         }
     }
 
-    // Check-in note & send bottom sheet (completes the <=3-tap check-in flow)
     if (capturedCheckInUri != null) {
         var note by remember { mutableStateOf("") }
         var placeName by remember { mutableStateOf("") }
         OursBottomSheet(onDismiss = { capturedCheckInUriStr = null }) {
-            Text("Send check-in", style = OursTypography.headline, color = colors.ink)
+            Text(strings.sendCheckInTitle, style = OursTypography.headline, color = colors.ink)
             Spacer(Modifier.height(OursSpacing.sm))
             AsyncImage(
                 model = capturedCheckInUri,
-                contentDescription = "Captured photo",
+                contentDescription = strings.sendCheckInTitle,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -563,8 +512,7 @@ private fun OursRoot(vm: OursViewModel) {
             OutlinedTextField(
                 value = note,
                 onValueChange = { note = it },
-                label = { Text("Note (optional)") },
-                placeholder = { Text("I'm here") },
+                label = { Text(strings.noteOptional) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -572,13 +520,13 @@ private fun OursRoot(vm: OursViewModel) {
             OutlinedTextField(
                 value = placeName,
                 onValueChange = { placeName = it },
-                label = { Text("Place name (optional)") },
+                label = { Text(strings.placeOptional) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(OursSpacing.md))
             OursButton(
-                text = "Send check-in",
+                text = strings.sendCheckInCta,
                 loading = state.busy,
                 onClick = {
                     val uri = capturedCheckInUri ?: return@OursButton
@@ -590,7 +538,6 @@ private fun OursRoot(vm: OursViewModel) {
         }
     }
 
-    // Full-screen photo viewer
     if (fullPhotoId != null) {
         Dialog(
             onDismissRequest = {
@@ -682,26 +629,45 @@ private fun OursFloatingBottomNav(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (activeTab != MainTab.Map) {
+                    Modifier.background(
+                        Brush.verticalGradient(
+                            0.0f to Color.Transparent,
+                            0.22f to colors.canvas.copy(alpha = 0.95f),
+                            0.38f to colors.canvas,
+                            1.0f to colors.canvas,
+                        ),
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .navigationBarsPadding()
-            .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.xs),
+            .padding(
+                start = layoutSpec.horizontalPadding,
+                end = layoutSpec.horizontalPadding,
+                top = if (activeTab != MainTab.Map) 16.dp else OursSpacing.xs,
+                bottom = OursSpacing.xs,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .widthIn(max = 300.dp)
-                .height(58.dp)
+                .widthIn(max = 336.dp)
+                .height(60.dp)
                 .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 7.dp, vertical = 7.dp),
+                    .padding(horizontal = 6.dp, vertical = 5.dp),
             ) {
                 val tabWidth = maxWidth / items.size
                 val indicatorOffset by animateDpAsState(
                     targetValue = tabWidth * selectedIndex,
-                    animationSpec = OursMotion.enterSpec(),
+                    animationSpec = OursMotion.springSnappy(),
                     label = "nav-pill-x",
                 )
 
@@ -709,10 +675,9 @@ private fun OursFloatingBottomNav(
                     modifier = Modifier
                         .offset(x = indicatorOffset)
                         .width(tabWidth)
-                        .height(44.dp)
+                        .height(50.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(colors.actionSoft)
-                        .border(1.dp, colors.action.copy(alpha = 0.35f), RoundedCornerShape(999.dp)),
+                        .background(colors.actionSoft),
                 )
 
                 Row(modifier = Modifier.fillMaxWidth()) {
@@ -721,13 +686,22 @@ private fun OursFloatingBottomNav(
                         val interactionSource = remember { MutableInteractionSource() }
                         val tint by animateColorAsState(
                             targetValue = if (selected) colors.action else colors.inkMuted,
-                            animationSpec = OursMotion.enterSpec(),
+                            animationSpec = OursMotion.enterSpec(180),
                             label = "nav-tint-${tab.name}",
                         )
-                        Box(
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (selected) 1.07f else 1f,
+                            animationSpec = OursMotion.springBouncy(),
+                            label = "nav-scale-${tab.name}",
+                        )
+                        Column(
                             modifier = Modifier
                                 .width(tabWidth)
-                                .height(44.dp)
+                                .height(50.dp)
+                                .semantics {
+                                    role = Role.Tab
+                                    this.selected = selected
+                                }
                                 .oursPressScale(interactionSource)
                                 .clip(RoundedCornerShape(999.dp))
                                 .clickable(
@@ -735,14 +709,20 @@ private fun OursFloatingBottomNav(
                                     indication = null,
                                     onClick = { onSelect(tab) },
                                 ),
-                            contentAlignment = Alignment.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                         ) {
                             Box {
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = label,
                                     tint = tint,
-                                    modifier = Modifier.size(22.dp),
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .graphicsLayer {
+                                            scaleX = iconScale
+                                            scaleY = iconScale
+                                        },
                                 )
                                 if (tab == MainTab.Chat && unreadChatCount > 0) {
                                     Box(
@@ -755,6 +735,18 @@ private fun OursFloatingBottomNav(
                                     )
                                 }
                             }
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = label,
+                                style = OursTypography.caption.copy(
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                ),
+                                color = tint,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }

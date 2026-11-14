@@ -6,23 +6,45 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 object Formatters {
-    fun relativeTime(timestampMs: Long, nowMs: Long = System.currentTimeMillis()): String {
+    fun relativeTime(
+        timestampMs: Long,
+        langCode: String = "en",
+        nowMs: Long = System.currentTimeMillis(),
+    ): String {
         val diffSec = ((nowMs - timestampMs) / 1000L).coerceAtLeast(0L)
-        return when {
-            diffSec < 15 -> "Just now"
-            diffSec < 60 -> "${diffSec}s ago"
-            diffSec < 3600 -> "${diffSec / 60}m ago"
-            diffSec < 86_400 -> "${diffSec / 3600}h ago"
-            else -> "${diffSec / 86_400}d ago"
+        return if (langCode == "id") {
+            when {
+                diffSec < 15 -> "Baru saja"
+                diffSec < 60 -> "${diffSec}d lalu"
+                diffSec < 3600 -> "${diffSec / 60}m lalu"
+                diffSec < 86_400 -> "${diffSec / 3600}j lalu"
+                else -> "${diffSec / 86_400}h lalu"
+            }
+        } else {
+            when {
+                diffSec < 15 -> "Just now"
+                diffSec < 60 -> "${diffSec}s ago"
+                diffSec < 3600 -> "${diffSec / 60}m ago"
+                diffSec < 86_400 -> "${diffSec / 3600}h ago"
+                else -> "${diffSec / 86_400}d ago"
+            }
         }
     }
 
-    fun countdown24h(expiresAtMs: Long, nowMs: Long = System.currentTimeMillis()): String {
+    fun countdown24h(
+        expiresAtMs: Long,
+        langCode: String = "en",
+        nowMs: Long = System.currentTimeMillis(),
+    ): String {
         val remMs = (expiresAtMs - nowMs).coerceAtLeast(0L)
         val totalMinutes = remMs / 60_000L
         val hours = totalMinutes / 60L
         val minutes = totalMinutes % 60L
-        return String.format(Locale.US, "%02dh %02dm left", hours, minutes)
+        return if (langCode == "id") {
+            String.format(Locale.US, "%02dj %02dm tersisa", hours, minutes)
+        } else {
+            String.format(Locale.US, "%02dh %02dm left", hours, minutes)
+        }
     }
 
     fun speedKmh(speedMps: Double?): String {
