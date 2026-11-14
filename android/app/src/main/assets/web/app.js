@@ -74,7 +74,15 @@
       today: "Today",
       yesterday: "Yesterday",
       repliesCount: "replies",
-      replyingTo: "Replying to check-in"
+      replyingTo: "Replying to check-in",
+      continueGoogle: "Continue with Google",
+      googleVerified: "Google verified",
+      googleSignedInAs: "Signed in as",
+      googleSwitch: "Switch",
+      orManual: "or continue with name",
+      googleModalTitle: "Continue with Google",
+      googleModalSub: "Enter your Google account email to sign in or restore your OURS session.",
+      googleEmailRequired: "Valid Google email is required"
     },
     id: {
       tabMap: "Peta",
@@ -148,7 +156,15 @@
       today: "Hari ini",
       yesterday: "Kemarin",
       repliesCount: "balasan",
-      replyingTo: "Membalas check-in"
+      replyingTo: "Membalas check-in",
+      continueGoogle: "Lanjutkan dengan Google",
+      googleVerified: "Terverifikasi Google",
+      googleSignedInAs: "Masuk sebagai",
+      googleSwitch: "Ganti",
+      orManual: "atau lanjutkan dengan nama",
+      googleModalTitle: "Lanjutkan dengan Google",
+      googleModalSub: "Masukkan email akun Google untuk masuk atau memulihkan sesi OURS.",
+      googleEmailRequired: "Email Google yang valid wajib diisi"
     }
   };
 
@@ -184,6 +200,7 @@
     replyToCheckInId: null,
     onboardingMode: "create",
     inviteCode: "",
+    googleAuth: null,
     serverStatusText: "",
     serverStatusOk: null,
     photoUrls: new Map()
@@ -624,6 +641,109 @@
     return icons[name] || "";
   }
 
+  function googleGIcon() {
+    return `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"/><path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"/></svg>`;
+  }
+
+  async function submitGoogleAuthPayload(payload, options = {}) {
+    const serverInput = document.getElementById("ob-server");
+    if (serverInput && serverInput.value.trim()) {
+      state.serverUrl = serverInput.value.trim();
+    }
+    const email = (payload?.email || "").trim();
+    if (!email) {
+      showToast(t("googleEmailRequired"));
+      return;
+    }
+    const body = {
+      email,
+      name: (payload?.name || "").trim() || null,
+      id_token: payload?.id_token || payload?.idToken || null,
+      invite_code: options.inviteCode || null,
+      auto_create: options.autoCreate === true ? true : null,
+      setup_key: options.setupKey || null
+    };
+    const headers = { "Content-Type": "application/json" };
+    if (options.setupKey) headers["X-Setup-Key"] = options.setupKey;
+    const resp = await fetch(`${apiBase()}/api/auth/google`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body)
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.message || "Google sign-in failed");
+
+    if (data.status === "authenticated" && data.tokens) {
+      state.accessToken = data.tokens.access_token;
+      state.refreshToken = data.tokens.refresh_token;
+      state.me = data.user;
+      state.partner = data.partner || null;
+      state.inviteCode = data.invite_code || "";
+      state.googleAuth = {
+        email: data.user?.email || email,
+        name: data.user?.name || body.name || "",
+        idToken: body.id_token || null,
+        provider: payload?.provider || "google"
+      };
+      persistAndSyncNative();
+      connectWebSocket();
+      startBrowserLocationWatch();
+      if (state.inviteCode && !state.partner) {
+        render();
+      } else {
+        await syncAllData();
+      }
+      return;
+    }
+
+    state.googleAuth = {
+      email: data.email || email,
+      name: data.name || body.name || email.split("@")[0],
+      idToken: body.id_token || null,
+      provider: payload?.provider || "google"
+    };
+    render();
+  }
+
+  function openBrowserGoogleModal() {
+    const preEmail = state.googleAuth?.email || "";
+    const preName = state.googleAuth?.name || "";
+    openSheet(`
+      <div style="font-size:18px;font-weight:700;">${escapeHtml(t("googleModalTitle"))}</div>
+      <div class="row-sub">${escapeHtml(t("googleModalSub"))}</div>
+      <input class="input" id="gm-email" type="email" placeholder="name@gmail.com" value="${escapeHtml(preEmail)}" />
+      <input class="input" id="gm-name" placeholder="${escapeHtml(t("yourName"))}" value="${escapeHtml(preName)}" />
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-secondary" id="gm-cancel" style="flex:1;">${escapeHtml(t("cancel"))}</button>
+        <button class="btn btn-primary" id="gm-submit" style="flex:1;">${escapeHtml(t("confirm"))}</button>
+      </div>
+    `);
+    document.getElementById("gm-cancel").onclick = closeSheet;
+    document.getElementById("gm-submit").onclick = async () => {
+      const email = document.getElementById("gm-email").value.trim();
+      const name = document.getElementById("gm-name").value.trim();
+      if (!email || !email.includes("@")) return showToast(t("googleEmailRequired"));
+      try {
+        await submitGoogleAuthPayload({ email, name, provider: "google-web" });
+        closeSheet();
+      } catch (err) {
+        showToast(err.message);
+      }
+    };
+  }
+
+  window.onOursGoogleAuth = async (payload) => {
+    try {
+      await submitGoogleAuthPayload(payload || {});
+    } catch (err) {
+      showToast(err.message);
+    }
+  };
+
+  window.onOursGoogleAuthFallback = () => {
+    openBrowserGoogleModal();
+  };
+
   function renderOnboarding() {
     const app = document.getElementById("app");
     if (state.inviteCode && !state.partner) {
@@ -643,6 +763,10 @@
       return;
     }
 
+    const g = state.googleAuth;
+    const prefillName = g?.name || "";
+    const prefillEmail = g?.email || "";
+
     app.innerHTML = `
       <div class="onboarding-wrap">
         <div style="text-align:center;display:flex;flex-direction:column;gap:6px;">
@@ -651,6 +775,19 @@
           <div class="row-sub">${escapeHtml(t("welcomeSub"))}</div>
         </div>
 
+        ${g ? `
+          <div class="google-pill">
+            <div class="google-pill-meta">
+              <div class="google-pill-email">${escapeHtml(t("googleSignedInAs"))} ${escapeHtml(g.email)}</div>
+              <div class="google-verified-badge">${googleGIcon()}<span>${escapeHtml(t("googleVerified"))}</span></div>
+            </div>
+            <button class="google-switch-btn" id="ob-google-switch">${escapeHtml(t("googleSwitch"))}</button>
+          </div>
+        ` : `
+          <button class="btn-google" id="ob-google-btn">${googleGIcon()}<span>${escapeHtml(t("continueGoogle"))}</span></button>
+          <div class="or-divider"><span>${escapeHtml(t("orManual"))}</span></div>
+        `}
+
         <div class="segmented">
           <button class="seg-btn ${state.onboardingMode === "create" ? "active" : ""}" id="ob-mode-create">${escapeHtml(t("createPair"))}</button>
           <button class="seg-btn ${state.onboardingMode === "join" ? "active" : ""}" id="ob-mode-join">${escapeHtml(t("joinPair"))}</button>
@@ -658,8 +795,8 @@
 
         <div class="card" style="display:flex;flex-direction:column;gap:10px;">
           <input class="input" id="ob-server" placeholder="${escapeHtml(t("serverUrl"))}" value="${escapeHtml(state.serverUrl)}" />
-          <input class="input" id="ob-name" placeholder="${escapeHtml(t("yourName"))}" />
-          <input class="input" id="ob-email" type="email" placeholder="${escapeHtml(t("yourEmail"))}" />
+          <input class="input" id="ob-name" placeholder="${escapeHtml(t("yourName"))}" value="${escapeHtml(prefillName)}" />
+          <input class="input" id="ob-email" type="email" placeholder="${escapeHtml(t("yourEmail"))}" value="${escapeHtml(prefillEmail)}" ${g ? "readonly" : ""} />
           ${
             state.onboardingMode === "create"
               ? `<input class="input" id="ob-key" placeholder="${escapeHtml(t("setupKey"))}" />`
@@ -670,6 +807,39 @@
       </div>
     `;
 
+    const googleBtn = document.getElementById("ob-google-btn");
+    if (googleBtn) {
+      googleBtn.onclick = () => {
+        haptic();
+        state.serverUrl = document.getElementById("ob-server").value.trim() || window.location.origin;
+        persistAndSyncNative();
+        if (native?.signInWithGoogle) {
+          try {
+            native.signInWithGoogle();
+          } catch (_) {
+            openBrowserGoogleModal();
+          }
+        } else {
+          openBrowserGoogleModal();
+        }
+      };
+    }
+    const switchBtn = document.getElementById("ob-google-switch");
+    if (switchBtn) {
+      switchBtn.onclick = () => {
+        haptic();
+        if (native?.signInWithGoogle) {
+          try {
+            native.signInWithGoogle();
+          } catch (_) {
+            openBrowserGoogleModal();
+          }
+        } else {
+          openBrowserGoogleModal();
+        }
+      };
+    }
+
     document.getElementById("ob-mode-create").onclick = () => { state.onboardingMode = "create"; render(); };
     document.getElementById("ob-mode-join").onclick = () => { state.onboardingMode = "join"; render(); };
     document.getElementById("ob-submit").onclick = async () => {
@@ -679,6 +849,22 @@
       const email = document.getElementById("ob-email").value.trim() || null;
       if (!name) return showToast("Name is required");
       try {
+        if (state.googleAuth && email) {
+          if (state.onboardingMode === "create") {
+            const setupKey = document.getElementById("ob-key").value.trim();
+            await submitGoogleAuthPayload(
+              { email, name, id_token: state.googleAuth.idToken, provider: state.googleAuth.provider },
+              { autoCreate: true, setupKey }
+            );
+          } else {
+            const code = document.getElementById("ob-code").value.trim().toUpperCase();
+            await submitGoogleAuthPayload(
+              { email, name, id_token: state.googleAuth.idToken, provider: state.googleAuth.provider },
+              { inviteCode: code }
+            );
+          }
+          return;
+        }
         if (state.onboardingMode === "create") {
           const setupKey = document.getElementById("ob-key").value.trim();
           const headers = { "Content-Type": "application/json" };
