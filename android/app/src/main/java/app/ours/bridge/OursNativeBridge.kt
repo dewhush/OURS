@@ -25,6 +25,7 @@ class OursNativeBridge(
     private val onReloadFromServer: (String) -> Unit,
     private val onReloadUpdatingUi: () -> Unit,
     private val onHapticTick: () -> Unit,
+    private val onSignInWithGoogle: () -> Unit = {},
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -170,5 +171,10 @@ class OursNativeBridge(
     @JavascriptInterface
     fun hapticTick() {
         mainHandler.post { onHapticTick() }
+    }
+
+    @JavascriptInterface
+    fun signInWithGoogle() {
+        mainHandler.post { onSignInWithGoogle() }
     }
 }

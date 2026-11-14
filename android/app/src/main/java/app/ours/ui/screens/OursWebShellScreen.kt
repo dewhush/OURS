@@ -1,6 +1,7 @@
 package app.ours.ui.screens
 
 import android.Manifest
+import android.accounts.AccountManager
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
@@ -41,6 +42,7 @@ import app.ours.bridge.OursNativeBridge
 import app.ours.data.local.PrefsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -123,6 +125,43 @@ fun OursWebShellScreen(
         pendingGeoCallback = null
     }
 
+    val googleAccountLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val email = if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)?.trim().orEmpty()
+        } else {
+            ""
+        }
+        if (email.isNotBlank()) {
+            val displayName = prefs.userName?.takeIf { it.isNotBlank() }
+                ?: email.substringBefore('@')
+                    .replace('.', ' ')
+                    .replace('_', ' ')
+                    .split(' ')
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { part -> part.replaceFirstChar { it.uppercaseChar() } }
+            prefs.userEmail = email
+            if (prefs.userName.isNullOrBlank() && displayName.isNotBlank()) {
+                prefs.userName = displayName
+            }
+            val payload = JSONObject().apply {
+                put("email", email)
+                put("name", displayName)
+                put("provider", "google-android")
+            }.toString()
+            webViewRef?.evaluateJavascript(
+                "window.onOursGoogleAuth && window.onOursGoogleAuth($payload)",
+                null,
+            )
+        } else {
+            webViewRef?.evaluateJavascript(
+                "window.onOursGoogleAuthFallback && window.onOursGoogleAuthFallback()",
+                null,
+            )
+        }
+    }
+
     fun newCameraCaptureUri(): Uri {
         val dir = File(context.cacheDir, "captures").apply { mkdirs() }
         val file = File(dir, "web_cap_${System.currentTimeMillis()}.jpg")
@@ -150,6 +189,25 @@ fun OursWebShellScreen(
             },
             onHapticTick = {
                 view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            },
+            onSignInWithGoogle = {
+                runCatching {
+                    val intent = AccountManager.newChooseAccountIntent(
+                        null,
+                        null,
+                        arrayOf("com.google"),
+                        null,
+                        null,
+                        null,
+                        null,
+                    )
+                    googleAccountLauncher.launch(intent)
+                }.onFailure {
+                    webViewRef?.evaluateJavascript(
+                        "window.onOursGoogleAuthFallback && window.onOursGoogleAuthFallback()",
+                        null,
+                    )
+                }
             },
         )
     }
