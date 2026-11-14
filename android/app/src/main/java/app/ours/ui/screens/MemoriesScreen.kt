@@ -104,6 +104,16 @@ fun MemoriesScreen(
             .background(colors.canvas),
         contentAlignment = Alignment.TopCenter,
     ) {
+        if (showMapMode) {
+            OursMapView(
+                modifier = Modifier.fillMaxSize(),
+                partnerLocation = state.partnerLocation,
+                myLocation = state.myLocation,
+                highlights = filteredMemories,
+                places = state.places,
+                onHighlightClick = onOpenFullPhoto,
+            )
+        }
     Column(
         modifier = Modifier
             .oursContentWidth(layoutSpec)
@@ -163,12 +173,6 @@ fun MemoriesScreen(
 
         if (showMapMode) {
             Box(modifier = Modifier.fillMaxSize()) {
-                OursMapView(
-                    modifier = Modifier.fillMaxSize(),
-                    highlights = filteredMemories,
-                    places = state.places,
-                    onHighlightClick = onOpenFullPhoto,
-                )
                 if (state.memories.isEmpty() && !state.memoriesLoading) {
                     OursCard(
                         modifier = Modifier
