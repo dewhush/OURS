@@ -62,7 +62,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -219,14 +218,11 @@ private fun OursSplashOverlay() {
         subtitleAlpha.animateTo(1f, OursMotion.enterSpec(240))
     }
 
-    val orb1 = if (isDark) Color(0xFF1D4ED8) else Color(0xFF38BDF8)
-    val orb2 = if (isDark) Color(0xFF0284C7) else Color(0xFF2563EB)
-    val orb3 = if (isDark) Color(0xFF4338CA) else Color(0xFF6366F1)
     val emblemFill = Brush.linearGradient(
         colors = if (isDark) {
             listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.06f))
         } else {
-            listOf(Color.White.copy(alpha = 0.82f), Color.White.copy(alpha = 0.48f))
+            listOf(Color.White.copy(alpha = 0.86f), Color.White.copy(alpha = 0.54f))
         },
         start = Offset.Zero,
         end = Offset(260f, 260f),
@@ -240,52 +236,21 @@ private fun OursSplashOverlay() {
         start = Offset.Zero,
         end = Offset(260f, 260f),
     )
-    val badgeFill = Brush.linearGradient(
-        colors = if (isDark) {
-            listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.05f))
-        } else {
-            listOf(Color.White.copy(alpha = 0.74f), Color.White.copy(alpha = 0.44f))
-        },
-    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.canvas),
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        colors.canvas,
+                        colors.surfaceMuted.copy(alpha = 0.55f),
+                        colors.canvas,
+                    ),
+                ),
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(orb1.copy(alpha = if (isDark) 0.28f else 0.26f), Color.Transparent),
-                    center = Offset(w * 0.20f, h * 0.24f),
-                    radius = w * 0.68f,
-                ),
-                radius = w * 0.68f,
-                center = Offset(w * 0.20f, h * 0.24f),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(orb2.copy(alpha = if (isDark) 0.24f else 0.20f), Color.Transparent),
-                    center = Offset(w * 0.82f, h * 0.38f),
-                    radius = w * 0.62f,
-                ),
-                radius = w * 0.62f,
-                center = Offset(w * 0.82f, h * 0.38f),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(orb3.copy(alpha = if (isDark) 0.24f else 0.18f), Color.Transparent),
-                    center = Offset(w * 0.44f, h * 0.78f),
-                    radius = w * 0.72f,
-                ),
-                radius = w * 0.72f,
-                center = Offset(w * 0.44f, h * 0.78f),
-            )
-        }
-
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
@@ -312,8 +277,8 @@ private fun OursSplashOverlay() {
                         .shadow(
                             elevation = 16.dp,
                             shape = RoundedCornerShape(26.dp),
-                            ambientColor = orb2.copy(alpha = 0.25f),
-                            spotColor = orb2.copy(alpha = 0.25f),
+                            ambientColor = colors.action.copy(alpha = 0.16f),
+                            spotColor = colors.action.copy(alpha = 0.16f),
                         )
                         .clip(RoundedCornerShape(26.dp))
                         .background(emblemFill)
@@ -324,7 +289,7 @@ private fun OursSplashOverlay() {
                         modifier = Modifier.fillMaxSize().padding(8.dp),
                         leftRingColor = leftRingColor,
                         rightRingColor = rightRingColor,
-                        backgroundColor = if (isDark) Color(0xFF151926) else Color(0xFFEAF2FC),
+                        backgroundColor = colors.surface,
                         progress = ringDraw.value,
                         convergeProgress = ringConverge.value,
                     )
@@ -346,34 +311,12 @@ private fun OursSplashOverlay() {
                         translationY = wordmarkOffsetY.value * density
                     },
                 )
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                Text(
+                    text = strings.splashTagline,
+                    style = OursTypography.caption,
+                    color = colors.inkMuted,
                     modifier = Modifier.graphicsLayer { alpha = subtitleAlpha.value },
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(badgeFill)
-                            .border(
-                                1.dp,
-                                Color.White.copy(alpha = if (isDark) 0.24f else 0.80f),
-                                RoundedCornerShape(999.dp),
-                            )
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
-                    ) {
-                        Text(
-                            text = "PRIVATE SPACE FOR TWO",
-                            style = OursTypography.label.copy(letterSpacing = 2.0.sp),
-                            color = colors.inkSecondary,
-                        )
-                    }
-                    Text(
-                        text = strings.splashTagline,
-                        style = OursTypography.caption,
-                        color = colors.inkMuted,
-                    )
-                }
+                )
             }
         }
     }
