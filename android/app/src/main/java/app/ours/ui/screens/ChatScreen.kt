@@ -44,6 +44,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.ours.R
 import app.ours.data.api.ChatMessageDto
 import app.ours.data.api.CheckInDto
 import app.ours.ui.OursUiState
@@ -249,6 +250,7 @@ fun ChatScreen(
                     OursEmptyState(
                         title = emptyGreeting,
                         detail = strings.sayHelloDetail,
+                        illustrationRes = R.drawable.ic_ours_chat_empty,
                         actionLabel = strings.takePhoto,
                         onAction = onLaunchCameraCheckIn,
                     )

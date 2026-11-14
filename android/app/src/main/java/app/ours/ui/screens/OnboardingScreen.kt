@@ -43,11 +43,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import app.ours.R
 import app.ours.ui.OursUiState
 import app.ours.ui.OursViewModel
 import app.ours.ui.components.OursBottomSheet
@@ -179,11 +182,10 @@ fun OnboardingScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
             ) {
-                OursInterlockedRingsMark(
-                    modifier = Modifier.size(28.dp),
-                    leftRingColor = colors.ink,
-                    rightRingColor = colors.inkMuted,
-                    backgroundColor = colors.canvas,
+                Image(
+                    painter = painterResource(R.drawable.ic_ours_pair_rings),
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
                 )
                 Text(
                     text = "OURS",

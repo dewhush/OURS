@@ -43,9 +43,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.ours.R
 import app.ours.ui.OursUiState
 import app.ours.ui.OursViewModel
 import app.ours.ui.components.OursBottomSheet
@@ -395,13 +398,24 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = OursSpacing.sm)) {
-                        Text("Crash Detection", style = OursTypography.title, color = colors.ink)
-                        Text(
-                            "10s countdown + auto SOS & WhatsApp call on impact",
-                            style = OursTypography.caption,
-                            color = colors.inkSecondary,
+                    Row(
+                        modifier = Modifier.weight(1f).padding(end = OursSpacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_ours_safety_shield),
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp),
                         )
+                        Column {
+                            Text("Crash Detection", style = OursTypography.title, color = colors.ink)
+                            Text(
+                                "10s countdown + auto SOS & WhatsApp call on impact",
+                                style = OursTypography.caption,
+                                color = colors.inkSecondary,
+                            )
+                        }
                     }
                     Switch(
                         checked = state.crashDetectionEnabled,

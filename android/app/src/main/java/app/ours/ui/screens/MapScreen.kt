@@ -37,11 +37,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.ours.R
 import app.ours.location.AdaptiveLocationPolicy
 import app.ours.location.CompassSensorManager
 import app.ours.ui.theme.OursMotion
@@ -55,6 +59,7 @@ import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursMapView
+import app.ours.ui.components.OursNudgeWaveOverlay
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursContentWidth
@@ -82,7 +87,7 @@ fun MapScreen(
         onDispose { compassManager.stop() }
     }
     val azimuthDeg by compassManager.azimuthDeg.collectAsStateWithLifecycle()
-    var compassMode by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     var recenterTrigger by remember { mutableIntStateOf(0) }
     var showPartnerSheet by remember { mutableStateOf(false) }
     var nudgePulseKey by remember { mutableIntStateOf(0) }
@@ -146,10 +151,15 @@ fun MapScreen(
             partnerName = partnerName,
             myLocation = state.myLocation,
             myAzimuthDeg = azimuthDeg,
-            compassMode = compassMode,
+            compassMode = false,
             places = state.places,
             highlights = state.memories,
             recenterTrigger = recenterTrigger,
+        )
+
+        OursNudgeWaveOverlay(
+            nudgeKey = nudgePulseKey,
+            modifier = Modifier.fillMaxSize(),
         )
 
         // Top floating partner status card + optional Pause Sharing reminder banner
@@ -258,7 +268,7 @@ fun MapScreen(
                 onClick = onQuickCheckIn,
                 leadingIcon = {
                     Icon(
-                        imageVector = OursIcons.Camera,
+                        painter = painterResource(R.drawable.ic_ours_checkin_frame),
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
                     )
@@ -280,12 +290,13 @@ fun MapScreen(
                     text = strings.nudge,
                     variant = OursButtonVariant.Secondary,
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         nudgePulseKey++
                         vm.sendNudge()
                     },
                     leadingIcon = {
                         Icon(
-                            imageVector = OursIcons.Heart,
+                            painter = painterResource(R.drawable.ic_ours_nudge_wave),
                             contentDescription = strings.nudge,
                             modifier = Modifier.size(18.dp),
                         )
@@ -303,30 +314,6 @@ fun MapScreen(
                     Icon(
                         imageVector = OursIcons.Crosshair,
                         contentDescription = strings.center,
-                        modifier = Modifier.size(18.dp),
-                    )
-                },
-            )
-            OursButton(
-                text = "Compass",
-                variant = if (compassMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
-                onClick = { compassMode = !compassMode },
-                leadingIcon = {
-                    Icon(
-                        imageVector = OursIcons.Compass,
-                        contentDescription = "Compass",
-                        modifier = Modifier.size(18.dp),
-                    )
-                },
-            )
-            OursButton(
-                text = "SOS",
-                variant = OursButtonVariant.Destructive,
-                onClick = { vm.startSosCountdown(kind = "manual") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = OursIcons.Alert,
-                        contentDescription = "SOS",
                         modifier = Modifier.size(18.dp),
                     )
                 },
@@ -364,6 +351,13 @@ fun MapScreen(
                     OursButton(
                         text = strings.directionsCta,
                         variant = OursButtonVariant.Secondary,
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_ours_compass_rose),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
                         onClick = {
                             val uri = Uri.parse("geo:${loc.lat},${loc.lon}?q=${loc.lat},${loc.lon}(${Uri.encode(partnerName)})")
                             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }

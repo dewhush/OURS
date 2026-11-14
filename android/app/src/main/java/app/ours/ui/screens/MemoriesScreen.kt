@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.ours.R
 import app.ours.data.api.CheckInDto
 import app.ours.ui.OursUiState
 import app.ours.ui.OursViewModel
@@ -179,6 +180,7 @@ fun MemoriesScreen(
                     OursEmptyState(
                         title = "No saved memories yet",
                         detail = "Check-ins expire after 24 hours. Tap Save on any check-in in Chat to keep it here forever.",
+                        illustrationRes = R.drawable.ic_ours_memories_empty,
                         actionLabel = "Refresh",
                         onAction = { vm.refreshMemories() },
                     )
