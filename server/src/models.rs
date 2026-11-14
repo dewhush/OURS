@@ -5,6 +5,7 @@ pub struct User {
     pub id: i64,
     pub name: String,
     pub email: Option<String>,
+    pub avatar_photo_id: Option<String>,
     pub created_at: i64,
 }
 
@@ -39,6 +40,7 @@ pub struct PartnerLocation {
     pub user_id: i64,
     pub paused: bool,
     pub last_seen_at: Option<i64>,
+    pub server_ts: i64,
     pub lat: Option<f64>,
     pub lon: Option<f64>,
     pub accuracy_m: Option<f64>,
@@ -145,6 +147,36 @@ pub struct MeResponse {
     pub sharing_paused: bool,
     pub partner_paused: bool,
     pub server_time: i64,
+}
+
+#[derive(Serialize)]
+pub struct PairStateResponse {
+    pub me: User,
+    pub partner: Option<User>,
+    pub sharing_paused: bool,
+    pub partner_paused: bool,
+    pub me_location: Option<PartnerLocation>,
+    pub partner_location: Option<PartnerLocation>,
+    pub server_time: i64,
+}
+
+#[derive(Deserialize)]
+pub struct SosRequest {
+    #[serde(default = "default_sos_kind")]
+    pub kind: String,
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+    pub message: Option<String>,
+}
+
+fn default_sos_kind() -> String {
+    "manual".to_string()
+}
+
+#[derive(Serialize)]
+pub struct SosResponse {
+    pub ok: bool,
+    pub event_id: Option<i64>,
 }
 
 #[derive(Deserialize)]

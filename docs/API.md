@@ -36,9 +36,9 @@ commit is announced to `@android` on the board.
 
 **User**
 ```json
-{"id": 1, "name": "Dewantoro", "email": "dewantoro@gmail.com", "created_at": 1731500000000}
+{"id": 1, "name": "Dewantoro", "email": "dewantoro@gmail.com", "avatar_photo_id": null, "created_at": 1731500000000}
 ```
-`email` is `null` when not provided during pairing.
+`email` and `avatar_photo_id` are `null` when unset.
 
 **Tokens**
 ```json
@@ -78,6 +78,7 @@ refresh token is invalid once `/api/auth/refresh` succeeds, so persist the new o
   "user_id": 2,
   "paused": false,
   "last_seen_at": 1731500005000,
+  "server_ts": 1731500005000,
   "lat": -6.2, "lon": 106.8, "accuracy_m": 12.5, "speed_mps": 1.4, "bearing": 270.0,
   "activity": "walking", "altitude_m": 14.2, "vertical_speed_mps": 0.1,
   "battery_pct": 81, "charging": false, "recorded_at": 1731500000000
@@ -150,6 +151,8 @@ Inbox events are kept for 7 days.
 | `highlight` | `{"checkin_id": 5, "highlighted": true}` | yes |
 | `sharing` | `{"paused": true}` | yes |
 | `nudge` | `{}` | yes |
+| `sos` | `{"kind": "manual" \| "crash", "lat": -6.2 \| null, "lon": 106.8 \| null, "message": string \| null}` | yes |
+| `avatar` | `{"user_id": 1, "avatar_photo_id": "3f9c0a..."}` | yes |
 | `place` | `{"place_id": 3, "place_name": "Home", "transition": "enter" \| "exit", "lat": -6.2, "lon": 106.8}` | yes |
 
 ## Health
@@ -202,6 +205,24 @@ revoke all refresh tokens for the caller.
 ```json
 {"me": User, "partner": User | null, "sharing_paused": false, "partner_paused": false, "server_time": 1731500000000}
 ```
+
+### `GET /api/pair/state` (auth)
+-> `200`
+```json
+{
+  "me": User,
+  "partner": User | null,
+  "sharing_paused": false,
+  "partner_paused": false,
+  "me_location": PartnerLocation | null,
+  "partner_location": PartnerLocation | null,
+  "server_time": 1731500000000
+}
+```
+
+### `POST /api/me/avatar` (auth, `multipart/form-data`)
+Part: `photo` (JPEG, max 10 MB). Server strips EXIF and generates a 400px thumb.
+-> `200 User` (with updated `avatar_photo_id`). Emits an `avatar` event to partner.
 
 ### `POST /api/push-token` (auth)
 ```json
@@ -316,9 +337,16 @@ Messages ordered **newest first** (`created_at DESC, id DESC`), with `created_at
 `404 not_found` once the check-in is gone. Photos are never served without a valid token.
 Glide/Coil: add the `Authorization` header to image requests.
 
-## Nudge
+## Nudge & SOS
 
 `POST /api/nudge` (auth, empty body) -> `204`. Sends a `nudge` event ("thinking of you").
+
+`POST /api/sos` (auth)
+```json
+{"kind": "manual", "lat": -6.2, "lon": 106.8, "message": "Need help"}
+```
+`kind`: `"manual"` (default) or `"crash"`; `lat`, `lon`, `message` optional.
+-> `200 {"ok": true, "event_id": 43 | null}`. Sends an `sos` WS + FCM event to partner.
 
 ## Inbox
 

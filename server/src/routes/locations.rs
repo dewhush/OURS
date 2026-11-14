@@ -178,7 +178,7 @@ pub async fn post_locations(
                 )
                 .optional()?;
 
-            let updated_latest = existing_recorded_at.is_none_or(|prev| newest.recorded_at > prev);
+            let updated_latest = existing_recorded_at.is_none_or(|prev| newest.recorded_at >= prev);
             if updated_latest {
                 tx.execute(
                     "INSERT INTO latest_locations

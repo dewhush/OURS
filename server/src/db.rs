@@ -29,6 +29,7 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT,
+            avatar_photo_id TEXT,
             created_at INTEGER NOT NULL,
             sharing_paused INTEGER NOT NULL DEFAULT 0,
             last_seen_at INTEGER,
@@ -181,6 +182,7 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
             .map_err(|e| format!("failed to migrate users.email: {e}"))?;
     }
 
+    ensure_column(&conn, "users", "avatar_photo_id", "TEXT")?;
     ensure_column(&conn, "latest_locations", "activity", "TEXT")?;
     ensure_column(&conn, "latest_locations", "altitude_m", "REAL")?;
     ensure_column(&conn, "latest_locations", "vertical_speed_mps", "REAL")?;
@@ -215,14 +217,15 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, col_type: &str) -
 pub fn get_user(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
     Ok(conn
         .query_row(
-            "SELECT id, name, email, created_at FROM users WHERE id = ?1",
+            "SELECT id, name, email, avatar_photo_id, created_at FROM users WHERE id = ?1",
             params![user_id],
             |row| {
                 Ok(User {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     email: row.get(2)?,
-                    created_at: row.get(3)?,
+                    avatar_photo_id: row.get(3)?,
+                    created_at: row.get(4)?,
                 })
             },
         )
@@ -232,14 +235,15 @@ pub fn get_user(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
 pub fn get_partner(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
     Ok(conn
         .query_row(
-            "SELECT id, name, email, created_at FROM users WHERE id != ?1 ORDER BY id LIMIT 1",
+            "SELECT id, name, email, avatar_photo_id, created_at FROM users WHERE id != ?1 ORDER BY id LIMIT 1",
             params![user_id],
             |row| {
                 Ok(User {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     email: row.get(2)?,
-                    created_at: row.get(3)?,
+                    avatar_photo_id: row.get(3)?,
+                    created_at: row.get(4)?,
                 })
             },
         )
@@ -340,6 +344,7 @@ pub fn get_partner_location_for(
     conn: &Connection,
     partner_id: i64,
 ) -> AppResult<PartnerLocation> {
+    let server_ts = now_ms();
     let (paused_int, last_seen_at): (i64, Option<i64>) = conn.query_row(
         "SELECT sharing_paused, last_seen_at FROM users WHERE id = ?1",
         params![partner_id],
@@ -351,6 +356,7 @@ pub fn get_partner_location_for(
             user_id: partner_id,
             paused: true,
             last_seen_at,
+            server_ts,
             lat: None,
             lon: None,
             accuracy_m: None,
@@ -408,6 +414,7 @@ pub fn get_partner_location_for(
             user_id: partner_id,
             paused: false,
             last_seen_at,
+            server_ts,
             lat: Some(lat),
             lon: Some(lon),
             accuracy_m: Some(accuracy_m),
@@ -425,6 +432,7 @@ pub fn get_partner_location_for(
             user_id: partner_id,
             paused: false,
             last_seen_at,
+            server_ts,
             lat: None,
             lon: None,
             accuracy_m: None,

@@ -1,17 +1,21 @@
 use axum::{
     Json,
-    extract::State,
+    extract::{Multipart, State},
     http::{HeaderMap, StatusCode},
 };
 use rusqlite::{OptionalExtension, params};
 
 use crate::auth::{AuthUser, generate_invite_code, hash_refresh_token, issue_tokens};
-use crate::db::{get_partner, get_user, now_ms};
+use crate::db::{
+    get_partner, get_partner_id, get_partner_location_for, get_user, get_user_fcm_token,
+    get_user_name, insert_partner_event, now_ms,
+};
 use crate::error::{AppError, AppResult};
 use crate::models::{
     CreatePairRequest, CreatePairResponse, InviteResponse, JoinPairRequest, JoinPairResponse,
-    MeResponse, PushTokenRequest, RefreshRequest, Tokens,
+    MeResponse, PairStateResponse, PushTokenRequest, RefreshRequest, Tokens, User,
 };
+use crate::photos::{MAX_PHOTO_BYTES, delete_photo_files, save_jpeg_and_thumb};
 use crate::state::AppState;
 
 const INVITE_TTL_MS: i64 = 24 * 60 * 60 * 1000;
@@ -315,6 +319,157 @@ pub async fn logout(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn get_pair_state(
+    AuthUser(user_id): AuthUser,
+    State(state): State<AppState>,
+) -> AppResult<Json<PairStateResponse>> {
+    let db = state.db.clone();
+    let resp = tokio::task::spawn_blocking(move || -> AppResult<PairStateResponse> {
+        let conn = db
+            .lock()
+            .map_err(|_| AppError::internal("database lock poisoned"))?;
+        let me = get_user(&conn, user_id)?.ok_or_else(|| AppError::unauthorized("user missing"))?;
+        let partner = get_partner(&conn, user_id)?;
+        let sharing_paused_int: i64 = conn.query_row(
+            "SELECT sharing_paused FROM users WHERE id = ?1",
+            params![user_id],
+            |r| r.get(0),
+        )?;
+        let sharing_paused = sharing_paused_int != 0;
+        let partner_paused = if let Some(ref p) = partner {
+            let pp: i64 = conn.query_row(
+                "SELECT sharing_paused FROM users WHERE id = ?1",
+                params![p.id],
+                |r| r.get(0),
+            )?;
+            pp != 0
+        } else {
+            false
+        };
+        let me_location = Some(get_partner_location_for(&conn, user_id)?);
+        let partner_location = if let Some(ref p) = partner {
+            Some(get_partner_location_for(&conn, p.id)?)
+        } else {
+            None
+        };
+
+        Ok(PairStateResponse {
+            me,
+            partner,
+            sharing_paused,
+            partner_paused,
+            me_location,
+            partner_location,
+            server_time: now_ms(),
+        })
+    })
+    .await??;
+
+    Ok(Json(resp))
+}
+
+pub async fn upload_avatar(
+    AuthUser(user_id): AuthUser,
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> AppResult<Json<User>> {
+    let mut photo_bytes: Option<Vec<u8>> = None;
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::bad_request("malformed multipart body"))?
+    {
+        if field.name() == Some("photo") {
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|_| AppError::bad_request("failed to read photo field"))?;
+            if bytes.len() > MAX_PHOTO_BYTES {
+                return Err(AppError::too_large("photo exceeds 10 MB limit"));
+            }
+            photo_bytes = Some(bytes.to_vec());
+        }
+    }
+
+    let photo_bytes = photo_bytes.ok_or_else(|| AppError::bad_request("photo is required"))?;
+    let data_dir = state.config.data_dir.clone();
+    let db = state.db.clone();
+
+    let (user, ws_push, fcm_push) = tokio::task::spawn_blocking(
+        move || -> AppResult<(User, Option<(i64, crate::models::Event)>, Option<(String, std::collections::HashMap<String, String>)>)> {
+            let photo_id = save_jpeg_and_thumb(&data_dir, &photo_bytes)?;
+
+            let mut conn = match db.lock() {
+                Ok(c) => c,
+                Err(_) => {
+                    delete_photo_files(&data_dir, &photo_id);
+                    return Err(AppError::internal("database lock poisoned"));
+                }
+            };
+            let tx = conn.transaction()?;
+
+            let old_avatar: Option<String> = tx
+                .query_row(
+                    "SELECT avatar_photo_id FROM users WHERE id = ?1",
+                    params![user_id],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .flatten();
+
+            tx.execute(
+                "UPDATE users SET avatar_photo_id = ?1 WHERE id = ?2",
+                params![photo_id, user_id],
+            )?;
+            let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
+            let now = now_ms();
+            let ws_push = insert_partner_event(
+                &tx,
+                user_id,
+                "avatar",
+                serde_json::json!({ "user_id": user_id, "avatar_photo_id": &photo_id }),
+                now,
+            )?;
+
+            let fcm_push = if let Some((_, ref ev)) = ws_push {
+                if let Some(pid) = get_partner_id(&tx, user_id)? {
+                    if let Some(token) = get_user_fcm_token(&tx, pid)? {
+                        let actor_name = get_user_name(&tx, user_id)?;
+                        let mut data = std::collections::HashMap::new();
+                        data.insert("type".into(), "avatar".into());
+                        data.insert("event_id".into(), ev.id.to_string());
+                        data.insert("title".into(), actor_name);
+                        data.insert("body".into(), "Updated profile photo".into());
+                        Some((token, data))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            tx.commit()?;
+            if let Some(old_pid) = old_avatar {
+                delete_photo_files(&data_dir, &old_pid);
+            }
+            Ok((user, ws_push, fcm_push))
+        },
+    )
+    .await??;
+
+    if let Some((recipient_id, ev)) = ws_push {
+        state.push_ws_event(recipient_id, &ev).await;
+    }
+    if let Some((token, data)) = fcm_push {
+        state.fcm.send_async(Some(token), data);
+    }
+
+    Ok(Json(user))
+}
+
 pub async fn get_me(
     AuthUser(user_id): AuthUser,
     State(state): State<AppState>,
@@ -378,7 +533,6 @@ pub async fn set_push_token(
     })
     .await??;
 
-    state.disconnect_ws(user_id).await;
-
     Ok(StatusCode::NO_CONTENT)
 }
+

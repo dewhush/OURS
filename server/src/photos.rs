@@ -117,6 +117,8 @@ pub async fn get_photo(
              SELECT 1 FROM replies WHERE photo_id = ?1
              UNION ALL
              SELECT 1 FROM messages WHERE photo_id = ?1
+             UNION ALL
+             SELECT 1 FROM users WHERE avatar_photo_id = ?1
              LIMIT 1",
         )?;
         Ok(stmt.exists(rusqlite::params![pid_check])?)

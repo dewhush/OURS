@@ -1066,3 +1066,108 @@ async fn logout_closes_active_websocket_connections() {
         "expected WS close after logout, got {frame:?}"
     );
 }
+
+#[tokio::test]
+async fn pair_state_avatar_and_sos_endpoints() {
+    let app = TestApp::start().await;
+    let (t1, t2, id1, _id2) = app.pair_both().await;
+    let now = now_ms();
+
+    // User 1 uploads location
+    app.client
+        .post(format!("{}/api/locations", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!([{
+            "lat": -6.21, "lon": 106.81, "accuracy_m": 5.0, "speed_mps": 0.0,
+            "bearing": null, "activity": "still", "battery_pct": 95, "charging": false,
+            "recorded_at": now
+        }]))
+        .send()
+        .await
+        .unwrap();
+
+    // User 2 connects WS
+    let (mut ws2, _) =
+        tokio_tungstenite::connect_async(format!("{}/api/ws?token={t2}", app.ws_base_url))
+            .await
+            .expect("ws connect");
+
+    // User 1 uploads avatar
+    let avatar_form = reqwest::multipart::Form::new().part(
+        "photo",
+        reqwest::multipart::Part::bytes(make_test_jpeg(200, 200))
+            .file_name("avatar.jpg")
+            .mime_str("image/jpeg")
+            .unwrap(),
+    );
+    let av_res = app
+        .client
+        .post(format!("{}/api/me/avatar", app.base_url))
+        .bearer_auth(&t1)
+        .multipart(avatar_form)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(av_res.status(), StatusCode::OK);
+    let av_user: Value = av_res.json().await.unwrap();
+    let avatar_pid = av_user["avatar_photo_id"].as_str().unwrap().to_string();
+
+    // Partner receives avatar WS event
+    let av_msg = tokio::time::timeout(Duration::from_secs(2), ws2.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let av_ev: Value = serde_json::from_str(&av_msg.into_text().unwrap()).unwrap();
+    assert_eq!(av_ev["type"], "avatar");
+    assert_eq!(av_ev["data"]["avatar_photo_id"], avatar_pid);
+
+    // Avatar reachable via /api/photos/{id}?size=thumb
+    let av_img = app
+        .client
+        .get(format!("{}/api/photos/{avatar_pid}?size=thumb", app.base_url))
+        .bearer_auth(&t2)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(av_img.status(), StatusCode::OK);
+
+    // GET /api/pair/state returns both me_location and partner_location + avatar_photo_id
+    let state: Value = app
+        .client
+        .get(format!("{}/api/pair/state", app.base_url))
+        .bearer_auth(&t2)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(state["partner"]["id"], id1);
+    assert_eq!(state["partner"]["avatar_photo_id"], avatar_pid);
+    assert_eq!(state["partner_location"]["lat"], -6.21);
+    assert!(state["partner_location"]["server_ts"].as_i64().unwrap() > 0);
+    assert!(state["me_location"]["lat"].is_null());
+
+    // User 1 sends SOS
+    let sos_res = app
+        .client
+        .post(format!("{}/api/sos", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"kind": "crash", "lat": -6.21, "lon": 106.81, "message": "Impact detected"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(sos_res.status(), StatusCode::OK);
+
+    // Partner receives SOS WS event
+    let sos_msg = tokio::time::timeout(Duration::from_secs(2), ws2.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let sos_ev: Value = serde_json::from_str(&sos_msg.into_text().unwrap()).unwrap();
+    assert_eq!(sos_ev["type"], "sos");
+    assert_eq!(sos_ev["data"]["kind"], "crash");
+    assert_eq!(sos_ev["data"]["lat"], -6.21);
+}
