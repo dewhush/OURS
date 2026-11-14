@@ -86,16 +86,17 @@ fun OursButton(
         OursButtonVariant.Primary -> colors.action
         OursButtonVariant.Secondary -> colors.glassSurfaceStrong
         OursButtonVariant.Ghost -> Color.Transparent
-        OursButtonVariant.Destructive -> colors.errorSoft
+        OursButtonVariant.Destructive -> colors.dangerSoft
     }
     val contentColor = when (variant) {
         OursButtonVariant.Primary -> colors.onAction
         OursButtonVariant.Secondary -> colors.ink
         OursButtonVariant.Ghost -> colors.inkSecondary
-        OursButtonVariant.Destructive -> colors.error
+        OursButtonVariant.Destructive -> colors.danger
     }
     val border = when (variant) {
         OursButtonVariant.Secondary -> BorderStroke(1.dp, colors.glassBorder)
+        OursButtonVariant.Destructive -> BorderStroke(1.dp, colors.danger.copy(alpha = 0.25f))
         else -> null
     }
 
@@ -479,6 +480,7 @@ fun OursInterlockedRingsMark(
     rightRingColor: Color = OursTheme.colors.inkMuted,
     backgroundColor: Color = OursTheme.colors.canvas,
     progress: Float = 1f,
+    convergeProgress: Float = 1f,
 ) {
     Canvas(modifier = modifier) {
         val s = size.minDimension / 100f
@@ -486,9 +488,11 @@ fun OursInterlockedRingsMark(
         val stroke = 6.5f * s
         val cutStroke = 10.5f * s
         val sweep = (360f * progress.coerceIn(0f, 1f))
+        val c = convergeProgress.coerceIn(0f, 1f)
+        val sep = 5f * (1f - c) // Gently converges rings into interlocked position
 
-        val leftCenter = Offset(39f * s, 50f * s)
-        val rightCenter = Offset(61f * s, 50f * s)
+        val leftCenter = Offset((39f - sep) * s, 50f * s)
+        val rightCenter = Offset((61f + sep) * s, 50f * s)
         val leftTopLeft = Offset(leftCenter.x - r, leftCenter.y - r)
         val rightTopLeft = Offset(rightCenter.x - r, rightCenter.y - r)
         val arcSize = Size(r * 2f, r * 2f)

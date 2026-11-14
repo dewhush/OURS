@@ -1,5 +1,11 @@
 package app.ours.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,13 +15,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -35,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.ours.ui.OursUiState
 import app.ours.ui.OursViewModel
@@ -43,9 +52,11 @@ import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
 import app.ours.ui.components.OursIcons
+import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
+import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -60,8 +71,11 @@ fun SettingsScreen(
     val colors = OursTheme.colors
     val strings = OursTheme.strings
     var serverInput by remember(state.serverUrl) { mutableStateOf(state.serverUrl) }
+    var serverExpanded by remember { mutableStateOf(false) }
+    var placesExpanded by remember { mutableStateOf(false) }
     var showAddPlace by remember { mutableStateOf(false) }
     var showXiaomiGuide by remember { mutableStateOf(false) }
+    var showSignOutConfirm by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -72,7 +86,7 @@ fun SettingsScreen(
             start = OursSpacing.md,
             top = OursSpacing.md,
             end = OursSpacing.md,
-            bottom = 108.dp,
+            bottom = 116.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
     ) {
@@ -80,85 +94,102 @@ fun SettingsScreen(
             Text(strings.settingsTitle, style = OursTypography.display, color = colors.ink)
         }
 
-        // Notion-style structured property block: Pair + Language + Quiet Pause
+        // 1. Couple Header Card
+        item {
+            OursCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(OursMotion.enterSpec()),
+                padding = PaddingValues(OursSpacing.md),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = colors.surfaceMuted,
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        OursInterlockedRingsMark(
+                            modifier = Modifier.fillMaxSize().padding(6.dp),
+                            leftRingColor = colors.ink,
+                            rightRingColor = colors.inkMuted,
+                            backgroundColor = colors.surfaceMuted,
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        val meName = state.me?.name?.ifBlank { null } ?: "You"
+                        val coupleTitle = if (state.partner != null) {
+                            "$meName & ${state.partner.name}"
+                        } else {
+                            meName
+                        }
+                        Text(
+                            text = coupleTitle,
+                            style = OursTypography.headline,
+                            color = colors.ink,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        val meEmail = state.me?.email?.let { " · $it" } ?: ""
+                        Text(
+                            text = if (state.partner != null) {
+                                "${strings.pairedWith} ${state.partner.name}$meEmail"
+                            } else {
+                                "${strings.signedInAs} $meName$meEmail"
+                            },
+                            style = OursTypography.caption,
+                            color = colors.inkSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    OursStatusChip(
+                        label = if (state.partner != null) "Paired" else "Waiting",
+                        tone = if (state.partner != null) StatusTone.Live else StatusTone.Muted,
+                    )
+                }
+
+                if (state.partner == null) {
+                    Spacer(Modifier.height(OursSpacing.sm))
+                    if (!state.inviteCode.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(OursRadius.chip),
+                            color = colors.actionSoft,
+                            border = BorderStroke(1.dp, colors.action.copy(alpha = 0.25f)),
+                        ) {
+                            Text(
+                                "Invite code: ${state.inviteCode}",
+                                style = OursTypography.tabular,
+                                color = colors.action,
+                                modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 6.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(OursSpacing.xs))
+                    }
+                    OursButton(
+                        text = strings.generateInvite,
+                        variant = OursButtonVariant.Secondary,
+                        onClick = { vm.refreshInviteCode() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+
+        // 2. Appearance & Language Card
         item {
             OursCard(
                 modifier = Modifier.fillMaxWidth(),
                 padding = PaddingValues(0.dp),
             ) {
-                Column(modifier = Modifier.padding(OursSpacing.md)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(strings.pairCardTitle, style = OursTypography.title, color = colors.ink)
-                        OursStatusChip(
-                            label = if (state.partner != null) state.partner.name else "Waiting",
-                            tone = if (state.partner != null) StatusTone.Live else StatusTone.Muted,
-                        )
-                    }
-                    Spacer(Modifier.height(OursSpacing.xs))
-                    val meEmail = state.me?.email?.let { " ($it)" } ?: ""
-                    Text(
-                        "${strings.signedInAs} ${state.me?.name ?: "You"}$meEmail",
-                        style = OursTypography.body,
-                        color = colors.ink,
-                    )
-                    if (state.partner != null) {
-                        val pEmail = state.partner.email?.let { " ($it)" } ?: ""
-                        Text(
-                            "${strings.pairedWith} ${state.partner.name}$pEmail",
-                            style = OursTypography.body,
-                            color = colors.inkSecondary,
-                        )
-                    } else {
-                        Spacer(Modifier.height(OursSpacing.xs))
-                        if (!state.inviteCode.isNullOrBlank()) {
-                            Surface(
-                                shape = RoundedCornerShape(OursRadius.chip),
-                                color = colors.actionSoft,
-                                border = BorderStroke(1.dp, colors.action.copy(alpha = 0.25f)),
-                            ) {
-                                Text(
-                                    "Invite code: ${state.inviteCode}",
-                                    style = OursTypography.tabular,
-                                    color = colors.action,
-                                    modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 4.dp),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(OursSpacing.xs))
-                        OursButton(
-                            text = strings.generateInvite,
-                            variant = OursButtonVariant.Secondary,
-                            onClick = { vm.refreshInviteCode() },
-                        )
-                    }
-                }
-
-                HorizontalDivider(thickness = 1.dp, color = colors.border)
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(OursSpacing.md),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(strings.languageTitle, style = OursTypography.title, color = colors.ink)
-                    LanguagePillToggle(
-                        current = state.language,
-                        onSelect = { vm.setLanguage(it) },
-                    )
-                }
-
-                HorizontalDivider(thickness = 1.dp, color = colors.border)
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(OursSpacing.md),
+                        .defaultMinSize(minHeight = 56.dp)
+                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
@@ -175,11 +206,38 @@ fun SettingsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(OursSpacing.md),
+                        .defaultMinSize(minHeight = 56.dp)
+                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Text(strings.languageTitle, style = OursTypography.title, color = colors.ink)
+                    LanguagePillToggle(
+                        current = state.language,
+                        onSelect = { vm.setLanguage(it) },
+                    )
+                }
+            }
+        }
+
+        // 3. Location & Places Modular Card
+        item {
+            OursCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(OursMotion.enterSpec()),
+                padding = PaddingValues(0.dp),
+            ) {
+                // Pause sharing row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 60.dp)
+                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = OursSpacing.sm)) {
                         Text(strings.pauseSharingTitle, style = OursTypography.title, color = colors.ink)
                         Text(
                             strings.pauseSharingSubtitle,
@@ -192,117 +250,224 @@ fun SettingsScreen(
                         onCheckedChange = { vm.toggleSharingPaused(it) },
                     )
                 }
-            }
-        }
 
-        // Saved places header
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(strings.savedPlacesTitle, style = OursTypography.headline, color = colors.ink)
-                OursButton(
-                    text = strings.addPlace,
-                    variant = OursButtonVariant.Secondary,
-                    onClick = { showAddPlace = true },
-                    leadingIcon = {
-                        Icon(imageVector = OursIcons.Plus, contentDescription = null)
-                    },
-                )
-            }
-        }
+                HorizontalDivider(thickness = 1.dp, color = colors.border)
 
-        if (state.places.isEmpty()) {
-            item {
-                OursCard(modifier = Modifier.fillMaxWidth()) {
+                // Saved places row (expands inline)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 56.dp)
+                        .clickable { placesExpanded = !placesExpanded }
+                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(strings.savedPlacesTitle, style = OursTypography.title, color = colors.ink)
+                        Text(
+                            if (state.places.isEmpty()) strings.noPlacesHint else "${state.places.size} saved",
+                            style = OursTypography.caption,
+                            color = colors.inkSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     Text(
-                        strings.noPlacesHint,
-                        style = OursTypography.caption,
-                        color = colors.inkSecondary,
+                        text = if (placesExpanded) "⌄" else "›",
+                        style = OursTypography.headline,
+                        color = colors.inkMuted,
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = placesExpanded,
+                    enter = fadeIn(OursMotion.enterSpec()) + expandVertically(OursMotion.enterSpec()),
+                    exit = fadeOut(OursMotion.exitSpec()) + shrinkVertically(OursMotion.exitSpec()),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = OursSpacing.md, end = OursSpacing.md, bottom = OursSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                    ) {
+                        state.places.forEach { place ->
+                            Surface(
+                                shape = RoundedCornerShape(OursRadius.inner),
+                                color = colors.surfaceMuted,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = OursSpacing.sm, vertical = OursSpacing.xs),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            place.name,
+                                            style = OursTypography.body.copy(fontWeight = FontWeight.Medium),
+                                            color = colors.ink,
+                                        )
+                                        Text(
+                                            "${place.radiusM.toInt()} m · ${String.format("%.4f, %.4f", place.lat, place.lon)}",
+                                            style = OursTypography.tabular,
+                                            color = colors.inkSecondary,
+                                        )
+                                    }
+                                    IconButton(onClick = { vm.deletePlace(place.id) }) {
+                                        Icon(
+                                            imageVector = OursIcons.Trash,
+                                            contentDescription = "Delete place",
+                                            tint = colors.danger,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        OursButton(
+                            text = strings.addPlace,
+                            variant = OursButtonVariant.Secondary,
+                            onClick = { showAddPlace = true },
+                            leadingIcon = {
+                                Icon(imageVector = OursIcons.Plus, contentDescription = null)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+
+                HorizontalDivider(thickness = 1.dp, color = colors.border)
+
+                // Xiaomi / HyperOS guide row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 56.dp)
+                        .clickable { showXiaomiGuide = true }
+                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = OursSpacing.sm)) {
+                        Text(strings.backgroundReliability, style = OursTypography.title, color = colors.ink)
+                        Text(
+                            strings.openXiaomiGuide,
+                            style = OursTypography.caption,
+                            color = colors.inkSecondary,
+                        )
+                    }
+                    Text(
+                        text = "›",
+                        style = OursTypography.headline,
+                        color = colors.inkMuted,
                     )
                 }
             }
-        } else {
-            items(state.places, key = { it.id }) { place ->
-                OursCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+        }
+
+        // 4. Collapsible Server Row
+        item {
+            OursCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(OursMotion.enterSpec()),
+                padding = PaddingValues(0.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 56.dp)
+                        .clickable { serverExpanded = !serverExpanded }
+                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = OursSpacing.sm)) {
+                        Text(strings.serverUrlTitle, style = OursTypography.title, color = colors.ink)
+                        Text(
+                            state.serverUrl.ifBlank { "Not configured" },
+                            style = OursTypography.caption,
+                            color = colors.inkSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        text = if (serverExpanded) "⌄" else "›",
+                        style = OursTypography.headline,
+                        color = colors.inkMuted,
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = serverExpanded,
+                    enter = fadeIn(OursMotion.enterSpec()) + expandVertically(OursMotion.enterSpec()),
+                    exit = fadeOut(OursMotion.exitSpec()) + shrinkVertically(OursMotion.exitSpec()),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = OursSpacing.md, end = OursSpacing.md, bottom = OursSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                place.name,
-                                style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
-                                color = colors.ink,
-                            )
-                            Text(
-                                "${place.radiusM.toInt()} m radius  |  ${String.format("%.4f, %.4f", place.lat, place.lon)}",
-                                style = OursTypography.tabular,
-                                color = colors.inkSecondary,
-                            )
-                        }
-                        IconButton(onClick = { vm.deletePlace(place.id) }) {
-                            Icon(
-                                imageVector = OursIcons.Trash,
-                                contentDescription = "Delete place",
-                                tint = colors.error,
-                            )
-                        }
+                        OutlinedTextField(
+                            value = serverInput,
+                            onValueChange = { serverInput = it },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OursButton(
+                            text = strings.saveServerUrl,
+                            variant = OursButtonVariant.Secondary,
+                            enabled = serverInput.isNotBlank() && serverInput != state.serverUrl,
+                            onClick = {
+                                vm.updateServerUrl(serverInput)
+                                serverExpanded = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }
         }
 
-        // Xiaomi / HyperOS guide
-        item {
-            OursCard(modifier = Modifier.fillMaxWidth()) {
-                Text(strings.backgroundReliability, style = OursTypography.title, color = colors.ink)
-                Text(
-                    strings.xiaomiChecklistHint,
-                    style = OursTypography.caption,
-                    color = colors.inkSecondary,
-                )
-                Spacer(Modifier.height(OursSpacing.sm))
-                OursButton(
-                    text = strings.openXiaomiGuide,
-                    variant = OursButtonVariant.Secondary,
-                    onClick = { showXiaomiGuide = true },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        // Server URL
-        item {
-            OursCard(modifier = Modifier.fillMaxWidth()) {
-                Text(strings.serverUrlTitle, style = OursTypography.title, color = colors.ink)
-                Spacer(Modifier.height(OursSpacing.xs))
-                OutlinedTextField(
-                    value = serverInput,
-                    onValueChange = { serverInput = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(OursSpacing.xs))
-                OursButton(
-                    text = strings.saveServerUrl,
-                    variant = OursButtonVariant.Secondary,
-                    enabled = serverInput.isNotBlank() && serverInput != state.serverUrl,
-                    onClick = { vm.updateServerUrl(serverInput) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        // Sign out
+        // 5. Destructive Red Sign Out Button
         item {
             OursButton(
                 text = strings.signOutCta,
                 variant = OursButtonVariant.Destructive,
-                onClick = { vm.signOut() },
+                onClick = { showSignOutConfirm = true },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+
+    if (showSignOutConfirm) {
+        OursBottomSheet(onDismiss = { showSignOutConfirm = false }) {
+            Text(strings.signOutCta, style = OursTypography.headline, color = colors.danger)
+            Spacer(Modifier.height(OursSpacing.xs))
+            Text(
+                "This signs out of this device and removes your local session. You can sign back in or re-pair anytime.",
+                style = OursTypography.body,
+                color = colors.inkSecondary,
+            )
+            Spacer(Modifier.height(OursSpacing.md))
+            OursButton(
+                text = strings.signOutCta,
+                variant = OursButtonVariant.Destructive,
+                onClick = {
+                    showSignOutConfirm = false
+                    vm.signOut()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(OursSpacing.xs))
+            OursButton(
+                text = "Cancel",
+                variant = OursButtonVariant.Secondary,
+                onClick = { showSignOutConfirm = false },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

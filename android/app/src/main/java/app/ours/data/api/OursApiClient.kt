@@ -5,6 +5,7 @@ import app.ours.data.local.PrefsStore
 import coil3.ImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -56,6 +57,20 @@ class OursApiClient(
                     chain.request()
                 }
                 chain.proceed(req)
+            }
+            .authenticator { _, response ->
+                if (response.request.header("X-Ours-Auth-Retry") != null) return@authenticator null
+                val failedToken = response.request.header("Authorization")
+                    ?.removePrefix("Bearer ")
+                    ?.trim()
+                    .orEmpty()
+                val newToken = runBlocking {
+                    runCatching { refreshAccessToken(failedToken) }.getOrNull()
+                } ?: return@authenticator null
+                response.request.newBuilder()
+                    .header("Authorization", "Bearer $newToken")
+                    .header("X-Ours-Auth-Retry", "1")
+                    .build()
             }
             .build()
         return ImageLoader.Builder(context.applicationContext)

@@ -34,6 +34,8 @@ data class OursColors(
     val pausedSoft: Color,
     val error: Color,
     val errorSoft: Color,
+    val danger: Color,
+    val dangerSoft: Color,
 )
 
 val OursLightColors = OursColors(
@@ -57,6 +59,8 @@ val OursLightColors = OursColors(
     pausedSoft = Color(0xFFF0EDE7),
     error = Color(0xFF2C2C2A),
     errorSoft = Color(0xFFE9E6E0),
+    danger = Color(0xFFC63B3B),
+    dangerSoft = Color(0xFFFCECEC),
 )
 
 val OursDarkColors = OursColors(
@@ -80,6 +84,8 @@ val OursDarkColors = OursColors(
     pausedSoft = Color(0xFF242421),
     error = Color(0xFFE5E3DD),
     errorSoft = Color(0xFF2D2D2A),
+    danger = Color(0xFFE85D5D),
+    dangerSoft = Color(0xFF2E1616),
 )
 
 object OursSpacing {

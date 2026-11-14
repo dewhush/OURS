@@ -15,6 +15,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -67,6 +68,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
@@ -131,14 +133,15 @@ class MainActivity : ComponentActivity() {
             OursTheme(darkTheme = darkTheme, language = state.language) {
                 var showSplash by remember { mutableStateOf(true) }
                 LaunchedEffect(Unit) {
-                    delay(650)
+                    delay(820)
                     showSplash = false
                 }
                 Box(modifier = Modifier.fillMaxSize()) {
                     OursRoot(vm = vm)
                     AnimatedVisibility(
                         visible = showSplash,
-                        exit = fadeOut(OursMotion.exitSpec()),
+                        exit = fadeOut(OursMotion.exitSpec(220)) +
+                            scaleOut(targetScale = 1.04f, animationSpec = OursMotion.exitSpec(220)),
                     ) {
                         OursSplashOverlay()
                     }
@@ -156,31 +159,48 @@ private fun OursSplashOverlay() {
     val leftRingColor = if (isDark) Color(0xFFFAF8F4) else Color(0xFF0F0F0E)
     val rightRingColor = if (isDark) Color(0xFFC8C2B6) else Color(0xFF5A5853)
 
-    val iconScale = remember { Animatable(0.88f) }
-    val iconOffsetY = remember { Animatable(12f) }
-    val ringDraw = remember { Animatable(0.15f) }
+    val iconScale = remember { Animatable(0.86f) }
+    val iconOffsetY = remember { Animatable(14f) }
+    val ringDraw = remember { Animatable(0.10f) }
+    val ringConverge = remember { Animatable(0f) }
     val pulseScale = remember { Animatable(0.92f) }
-    val pulseAlpha = remember { Animatable(0.55f) }
-    val textAlpha = remember { Animatable(0f) }
+    val pulseAlpha = remember { Animatable(0.45f) }
+    val wordmarkAlpha = remember { Animatable(0f) }
+    val wordmarkOffsetY = remember { Animatable(8f) }
+    val subtitleAlpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        iconScale.animateTo(1f, OursMotion.enterSpec(240))
+        iconScale.animateTo(1f, OursMotion.enterSpec(280))
     }
     LaunchedEffect(Unit) {
-        iconOffsetY.animateTo(0f, OursMotion.enterSpec(240))
+        iconOffsetY.animateTo(0f, OursMotion.enterSpec(280))
     }
     LaunchedEffect(Unit) {
-        ringDraw.animateTo(1f, OursMotion.enterSpec(380))
+        ringDraw.animateTo(1f, OursMotion.enterSpec(420))
     }
     LaunchedEffect(Unit) {
-        pulseScale.animateTo(1.28f, OursMotion.enterSpec(480))
+        delay(120)
+        ringConverge.animateTo(1f, OursMotion.enterSpec(380))
     }
     LaunchedEffect(Unit) {
-        pulseAlpha.animateTo(0f, OursMotion.enterSpec(480))
+        delay(180)
+        pulseScale.animateTo(1.32f, OursMotion.enterSpec(520))
     }
     LaunchedEffect(Unit) {
-        delay(90)
-        textAlpha.animateTo(1f, OursMotion.enterSpec(220))
+        delay(180)
+        pulseAlpha.animateTo(0f, OursMotion.enterSpec(520))
+    }
+    LaunchedEffect(Unit) {
+        delay(160)
+        wordmarkAlpha.animateTo(1f, OursMotion.enterSpec(240))
+    }
+    LaunchedEffect(Unit) {
+        delay(160)
+        wordmarkOffsetY.animateTo(0f, OursMotion.enterSpec(240))
+    }
+    LaunchedEffect(Unit) {
+        delay(260)
+        subtitleAlpha.animateTo(1f, OursMotion.enterSpec(240))
     }
 
     Box(
@@ -191,24 +211,24 @@ private fun OursSplashOverlay() {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(OursSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Box(
                     modifier = Modifier
-                        .size(88.dp)
+                        .size(92.dp)
                         .graphicsLayer {
                             scaleX = pulseScale.value
                             scaleY = pulseScale.value
                             alpha = pulseAlpha.value
                         }
-                        .border(2.dp, colors.action, RoundedCornerShape(24.dp)),
+                        .border(1.5.dp, colors.action.copy(alpha = 0.5f), RoundedCornerShape(26.dp)),
                 )
                 Surface(
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(26.dp),
                     color = colors.canvas,
                     modifier = Modifier
-                        .size(88.dp)
+                        .size(92.dp)
                         .graphicsLayer {
                             scaleX = iconScale.value
                             scaleY = iconScale.value
@@ -221,23 +241,42 @@ private fun OursSplashOverlay() {
                         rightRingColor = rightRingColor,
                         backgroundColor = colors.canvas,
                         progress = ringDraw.value,
+                        convergeProgress = ringConverge.value,
                     )
                 }
             }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.graphicsLayer { alpha = textAlpha.value },
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = "OURS",
-                    style = OursTypography.display.copy(fontWeight = FontWeight.Bold),
+                    style = OursTypography.display.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 4.sp,
+                    ),
                     color = colors.ink,
+                    modifier = Modifier.graphicsLayer {
+                        alpha = wordmarkAlpha.value
+                        translationY = wordmarkOffsetY.value * density
+                    },
                 )
-                Text(
-                    text = strings.splashTagline,
-                    style = OursTypography.caption,
-                    color = colors.inkMuted,
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.graphicsLayer { alpha = subtitleAlpha.value },
+                ) {
+                    Text(
+                        text = "PRIVATE FOR TWO",
+                        style = OursTypography.label.copy(letterSpacing = 2.2.sp),
+                        color = colors.inkSecondary,
+                    )
+                    Text(
+                        text = strings.splashTagline,
+                        style = OursTypography.caption,
+                        color = colors.inkMuted,
+                    )
+                }
             }
         }
     }
