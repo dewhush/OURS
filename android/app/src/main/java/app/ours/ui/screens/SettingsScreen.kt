@@ -51,6 +51,7 @@ import android.app.Activity
 import android.content.Intent
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
@@ -102,7 +103,7 @@ fun SettingsScreen(
     var emergencyPhoneInput by remember(state.emergencyContactPhone) { mutableStateOf(state.emergencyContactPhone) }
 
     val avatarPickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
             vm.uploadAvatar(uri)
@@ -174,7 +175,11 @@ fun SettingsScreen(
                 ) {
                     val meName = state.me?.name?.ifBlank { null } ?: "You"
                     Box(
-                        modifier = Modifier.clickable { avatarPickerLauncher.launch("image/*") },
+                        modifier = Modifier.clickable {
+                            avatarPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
                         contentAlignment = Alignment.BottomEnd,
                     ) {
                         OursAvatar(

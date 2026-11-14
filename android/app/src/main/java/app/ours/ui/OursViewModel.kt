@@ -8,6 +8,7 @@ import app.ours.OursApp
 import app.ours.data.api.ApiException
 import app.ours.data.api.ChatMessageDto
 import app.ours.data.api.CheckInDto
+import app.ours.data.api.EventAvatarData
 import app.ours.data.api.EventChatMessageData
 import app.ours.data.api.EventCheckInData
 import app.ours.data.api.EventDto
@@ -141,13 +142,17 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             val localPhoto = ProfileAndSosHelper.queryLocalProfilePhotoUri(app)
             if (!localPhoto.isNullOrBlank()) {
                 _state.update { s ->
-                    s.copy(
-                        myAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(
-                            s.me?.avatarUrl,
-                            s.me?.email ?: prefs.userEmail,
-                            localPhoto,
+                    if (s.me?.avatarPhotoId != null || !s.myAvatarUrl.isNullOrBlank()) {
+                        s
+                    } else {
+                        s.copy(
+                            myAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(
+                                s.me?.avatarUrl,
+                                s.me?.email ?: prefs.userEmail,
+                                localPhoto,
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -939,6 +944,25 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             "nudge" -> {
                 OursNotifier.buzzPhone(app)
                 showConfirmation("${prefs.partnerName ?: "Partner"} is thinking of you")
+            }
+            "avatar" -> {
+                runCatching { OursJson.decodeFromJsonElement<EventAvatarData>(event.data) }
+                    .onSuccess { data ->
+                        val url = photoUrl(data.avatarPhotoId, thumb = true)
+                        _state.update { cur ->
+                            if (data.userId == prefs.userId) {
+                                cur.copy(
+                                    me = cur.me?.copy(avatarPhotoId = data.avatarPhotoId),
+                                    myAvatarUrl = url,
+                                )
+                            } else {
+                                cur.copy(
+                                    partner = cur.partner?.copy(avatarPhotoId = data.avatarPhotoId),
+                                    partnerAvatarUrl = url,
+                                )
+                            }
+                        }
+                    }
             }
         }
         if (showNotification && event.id > 0) {

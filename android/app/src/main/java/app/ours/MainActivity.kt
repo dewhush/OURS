@@ -432,6 +432,31 @@ private fun OursRoot(vm: OursViewModel) {
                     .statusBarsPadding()
                     .padding(top = OursSpacing.sm),
             )
+
+            AnimatedVisibility(
+                visible = state.errorMessage != null && state.confirmationMessage == null,
+                enter = fadeIn(OursMotion.enterSpec()),
+                exit = fadeOut(OursMotion.exitSpec()),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = OursSpacing.sm, start = OursSpacing.md, end = OursSpacing.md),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = colors.dangerSoft,
+                    border = BorderStroke(1.dp, colors.danger.copy(alpha = 0.35f)),
+                    shadowElevation = 4.dp,
+                    onClick = { vm.clearError() },
+                ) {
+                    Text(
+                        text = state.errorMessage ?: "",
+                        style = OursTypography.label,
+                        color = colors.danger,
+                        modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
+                    )
+                }
+            }
         }
     }
 

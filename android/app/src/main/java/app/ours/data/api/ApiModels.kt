@@ -295,3 +295,9 @@ data class EventPlaceData(
     val lat: Double,
     val lon: Double,
 )
+
+@Serializable
+data class EventAvatarData(
+    @SerialName("user_id") val userId: Long,
+    @SerialName("avatar_photo_id") val avatarPhotoId: String,
+)
