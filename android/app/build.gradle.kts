@@ -116,3 +116,14 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
 }
+
+val syncWebAssets by tasks.registering(Copy::class) {
+    val webDir = rootProject.file("../web")
+    onlyIf { webDir.exists() }
+    from(webDir)
+    into(layout.projectDirectory.dir("src/main/assets/web"))
+}
+
+tasks.named("preBuild") {
+    dependsOn(syncWebAssets)
+}

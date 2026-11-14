@@ -112,6 +112,7 @@ import app.ours.ui.screens.ChatScreen
 import app.ours.ui.screens.MapScreen
 import app.ours.ui.screens.MemoriesScreen
 import app.ours.ui.screens.OnboardingScreen
+import app.ours.ui.screens.OursWebShellScreen
 import app.ours.ui.screens.SettingsScreen
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
@@ -289,6 +290,13 @@ private fun OursRoot(vm: OursViewModel) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val useWebShell by rememberSaveable { mutableStateOf(true) }
+    if (useWebShell) {
+        val prefs = remember(context) { (context.applicationContext as OursApp).prefs }
+        OursWebShellScreen(prefs = prefs)
+        return
     }
 
     if (!state.isPaired || !state.onboardingDone) {
