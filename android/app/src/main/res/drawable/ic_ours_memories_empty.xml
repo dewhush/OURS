@@ -9,15 +9,15 @@
     <path
         android:fillColor="#FFFFFFFF"
         android:pathData="M18,20 L38,20 A4,4 0 0,1 42,24 L42,44 A4,4 0 0,1 38,48 L18,48 A4,4 0 0,1 14,44 L14,24 A4,4 0 0,1 18,20 Z"
-        android:strokeColor="#FF0066CC"
+        android:strokeColor="#FF0055FF"
         android:strokeWidth="2" />
     <path
-        android:fillColor="#FFF2F2F7"
+        android:fillColor="#FFFAF9F5"
         android:pathData="M24,16 L46,16 A4,4 0 0,1 50,20 L50,40 A4,4 0 0,1 46,44 L24,44 A4,4 0 0,1 20,40 L20,20 A4,4 0 0,1 24,16 Z"
         android:strokeColor="#FF1C1C1E"
         android:strokeWidth="2" />
     <path
-        android:fillColor="#FF0066CC"
+        android:fillColor="#FF0055FF"
         android:pathData="M29,22 A3,3 0 0,1 32,25 A3,3 0 0,1 29,28 A3,3 0 0,1 26,25 A3,3 0 0,1 29,22 Z" />
     <path
         android:pathData="M24,38 L31,30 L37,35 L42,29 L46,38"

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
@@ -26,6 +27,7 @@ class OursNativeBridge(
     private val onReloadUpdatingUi: () -> Unit,
     private val onHapticTick: () -> Unit,
     private val onSignInWithGoogle: () -> Unit = {},
+    private val isTrustedOrigin: () -> Boolean = { false },
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -34,7 +36,7 @@ class OursNativeBridge(
         runCatching {
             val obj = JSONObject(json)
             val serverUrl = obj.optString("serverUrl", "").trim().trimEnd('/')
-            if (serverUrl.isNotBlank()) {
+            if (serverUrl.isNotBlank() && isTrustedServerUrl(serverUrl)) {
                 prefs.serverUrl = serverUrl
             }
 
@@ -130,10 +132,11 @@ class OursNativeBridge(
             }
         }
 
+        val trusted = isTrustedOrigin()
         return JSONObject().apply {
             put("serverUrl", prefs.serverUrl)
-            put("accessToken", prefs.accessToken ?: "")
-            put("refreshToken", prefs.refreshToken ?: "")
+            put("accessToken", if (trusted) (prefs.accessToken ?: "") else "")
+            put("refreshToken", if (trusted) (prefs.refreshToken ?: "") else "")
             put("userId", prefs.userId)
             put("deviceId", androidId)
             put("myName", prefs.userName ?: "")
@@ -157,7 +160,7 @@ class OursNativeBridge(
     @JavascriptInterface
     fun setServerUrl(url: String) {
         val cleaned = url.trim().trimEnd('/')
-        if (cleaned.isNotBlank()) {
+        if (cleaned.isNotBlank() && isTrustedServerUrl(cleaned)) {
             prefs.serverUrl = cleaned
             mainHandler.post { onReloadFromServer(prefs.serverUrl) }
         }
@@ -176,5 +179,25 @@ class OursNativeBridge(
     @JavascriptInterface
     fun signInWithGoogle() {
         mainHandler.post { onSignInWithGoogle() }
+    }
+
+    companion object {
+        fun isTrustedServerUrl(rawUrl: String): Boolean {
+            val trimmed = rawUrl.trim()
+            if (trimmed.isBlank()) return false
+            val parsed = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return false
+            val scheme = parsed.scheme?.lowercase() ?: return false
+            val host = parsed.host?.lowercase() ?: return false
+            if (host.isBlank()) return false
+            return when (scheme) {
+                "https" -> true
+                "http" -> host == "127.0.0.1" ||
+                    host == "localhost" ||
+                    host == "10.0.2.2" ||
+                    host.startsWith("192.168.") ||
+                    host.startsWith("100.")
+                else -> false
+            }
+        }
     }
 }

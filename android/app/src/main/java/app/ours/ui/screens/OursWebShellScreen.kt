@@ -8,6 +8,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.view.HapticFeedbackConstants
 import android.view.ViewGroup
@@ -46,8 +48,29 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 private const val OFFLINE_FALLBACK_URL = "file:///android_asset/web/index.html"
+
+private fun isAllowedWebOrigin(rawUrl: String?, serverUrl: String): Boolean {
+    val url = rawUrl?.trim().orEmpty()
+    if (url.isBlank()) return false
+    if (url.startsWith("file:///android_asset/")) return true
+    val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase() ?: return false
+    if (scheme != "http" && scheme != "https") return false
+    val host = uri.host?.lowercase() ?: return false
+    val configuredHost = runCatching { Uri.parse(serverUrl).host?.lowercase() }.getOrNull()
+    return (configuredHost != null && host == configuredHost) ||
+        host == "192.168.100.92" ||
+        host == "100.114.15.94" ||
+        host == "127.0.0.1" ||
+        host == "10.0.2.2" ||
+        host == "mnemonic.my.id" ||
+        host.endsWith(".mnemonic.my.id") ||
+        host.endsWith(".trycloudflare.com")
+}
 
 private fun resolveReachableServerUrl(preferred: String): String? {
     val candidates = linkedSetOf(
@@ -209,6 +232,20 @@ fun OursWebShellScreen(
                     )
                 }
             },
+            isTrustedOrigin = {
+                if (Looper.myLooper() == Looper.getMainLooper()) {
+                    isAllowedWebOrigin(webViewRef?.url, prefs.serverUrl)
+                } else {
+                    var allowed = false
+                    val latch = CountDownLatch(1)
+                    Handler(Looper.getMainLooper()).post {
+                        allowed = isAllowedWebOrigin(webViewRef?.url, prefs.serverUrl)
+                        latch.countDown()
+                    }
+                    latch.await(500, TimeUnit.MILLISECONDS)
+                    allowed
+                }
+            },
         )
     }
 
@@ -243,6 +280,8 @@ fun OursWebShellScreen(
                         mediaPlaybackRequiresUserGesture = false
                         allowFileAccess = true
                         allowContentAccess = true
+                        allowFileAccessFromFileURLs = false
+                        allowUniversalAccessFromFileURLs = false
                         cacheMode = WebSettings.LOAD_DEFAULT
                         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                         useWideViewPort = true
@@ -255,6 +294,23 @@ fun OursWebShellScreen(
                     addJavascriptInterface(bridge, "OursNative")
 
                     webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                        ): Boolean {
+                            if (request?.isForMainFrame != true) return false
+                            val targetUri = request.url ?: return false
+                            if (isAllowedWebOrigin(targetUri.toString(), prefs.serverUrl)) {
+                                return false
+                            }
+                            runCatching {
+                                ctx.startActivity(
+                                    Intent(Intent.ACTION_VIEW, targetUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                )
+                            }
+                            return true
+                        }
+
                         override fun onPageFinished(view: WebView?, url: String?) {
                             canGoBack = view?.canGoBack() == true
                         }

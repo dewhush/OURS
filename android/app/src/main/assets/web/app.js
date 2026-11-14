@@ -82,7 +82,12 @@
       orManual: "or continue with name",
       googleModalTitle: "Continue with Google",
       googleModalSub: "Enter your Google account email to sign in or restore your OURS session.",
-      googleEmailRequired: "Valid Google email is required"
+      googleEmailRequired: "Valid Google email is required",
+      getInviteCode: "Get invite code",
+      copyCode: "Copy code",
+      codeCopied: "Invite code copied",
+      waitingPartnerPulse: "Waiting for your partner to join...",
+      joinPairBtn: "Join pair"
     },
     id: {
       tabMap: "Peta",
@@ -164,17 +169,30 @@
       orManual: "atau lanjutkan dengan nama",
       googleModalTitle: "Lanjutkan dengan Google",
       googleModalSub: "Masukkan email akun Google untuk masuk atau memulihkan sesi OURS.",
-      googleEmailRequired: "Email Google yang valid wajib diisi"
+      googleEmailRequired: "Email Google yang valid wajib diisi",
+      getInviteCode: "Buat kode undangan",
+      copyCode: "Salin kode",
+      codeCopied: "Kode undangan disalin",
+      waitingPartnerPulse: "Menunggu pasangan bergabung...",
+      joinPairBtn: "Gabung pasangan"
     }
   };
 
   const native = typeof window.OursNative === "object" && window.OursNative !== null ? window.OursNative : null;
+  const DEFAULT_VPS_URL = "https://rebate-engines-reproduced-hereby.trycloudflare.com";
+
+  function resolveDefaultServerUrl() {
+    if (window.location && /^https?:/.test(window.location.protocol) && window.location.origin) {
+      return window.location.origin;
+    }
+    return DEFAULT_VPS_URL;
+  }
 
   const state = {
     tab: "map",
     lang: localStorage.getItem("ours_lang") || "en",
     theme: localStorage.getItem("ours_theme") || "system",
-    serverUrl: localStorage.getItem("ours_server_url") || window.location.origin,
+    serverUrl: localStorage.getItem("ours_server_url") || resolveDefaultServerUrl(),
     accessToken: localStorage.getItem("ours_access_token") || "",
     refreshToken: localStorage.getItem("ours_refresh_token") || "",
     deviceId: localStorage.getItem("ours_device_id") || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
@@ -641,15 +659,33 @@
     return icons[name] || "";
   }
 
+  function oursRingsLogo() {
+    return `<div class="ours-logo-rings" aria-hidden="true"><svg width="56" height="56" viewBox="0 0 64 64" fill="none"><circle cx="24" cy="32" r="15" stroke="#0066CC" stroke-width="5"/><circle cx="40" cy="32" r="15" stroke="#34C759" stroke-width="5"/></svg></div>`;
+  }
+
+  function startPairPolling() {
+    clearInterval(pairPollTimer);
+    if (!state.accessToken || !state.inviteCode || state.partner) return;
+    pairPollTimer = setInterval(async () => {
+      if (!state.accessToken || state.partner) {
+        clearInterval(pairPollTimer);
+        return;
+      }
+      try {
+        const ps = await apiFetch("/api/pair/state");
+        if (ps.partner) {
+          clearInterval(pairPollTimer);
+          await syncAllData();
+        }
+      } catch (_) {}
+    }, 2500);
+  }
+
   function googleGIcon() {
     return `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24Z"/><path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"/></svg>`;
   }
 
   async function submitGoogleAuthPayload(payload, options = {}) {
-    const serverInput = document.getElementById("ob-server");
-    if (serverInput && serverInput.value.trim()) {
-      state.serverUrl = serverInput.value.trim();
-    }
     const email = (payload?.email || "").trim();
     if (!email) {
       showToast(t("googleEmailRequired"));
@@ -660,14 +696,11 @@
       name: (payload?.name || "").trim() || null,
       id_token: payload?.id_token || payload?.idToken || null,
       invite_code: options.inviteCode || null,
-      auto_create: options.autoCreate === true ? true : null,
-      setup_key: options.setupKey || null
+      auto_create: options.autoCreate === true ? true : null
     };
-    const headers = { "Content-Type": "application/json" };
-    if (options.setupKey) headers["X-Setup-Key"] = options.setupKey;
     const resp = await fetch(`${apiBase()}/api/auth/google`, {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
     const data = await resp.json();
@@ -681,17 +714,20 @@
       state.inviteCode = data.invite_code || "";
       state.googleAuth = {
         email: data.user?.email || email,
-        name: data.user?.name || body.name || "",
+        name: data.user?.name || body.name || email.split("@")[0],
         idToken: body.id_token || null,
         provider: payload?.provider || "google"
       };
       persistAndSyncNative();
       connectWebSocket();
       startBrowserLocationWatch();
-      if (state.inviteCode && !state.partner) {
-        render();
-      } else {
+      if (state.partner) {
+        clearInterval(pairPollTimer);
         await syncAllData();
+      } else {
+        state.onboardingMode = "create";
+        render();
+        startPairPolling();
       }
       return;
     }
@@ -703,6 +739,18 @@
       provider: payload?.provider || "google"
     };
     render();
+  }
+
+  function triggerGoogleSignIn() {
+    haptic();
+    persistAndSyncNative();
+    if (native?.signInWithGoogle) {
+      try {
+        native.signInWithGoogle();
+        return;
+      } catch (_) {}
+    }
+    openBrowserGoogleModal();
   }
 
   function openBrowserGoogleModal() {
@@ -746,165 +794,159 @@
 
   function renderOnboarding() {
     const app = document.getElementById("app");
-    if (state.inviteCode && !state.partner) {
-      app.innerHTML = `
-        <div class="onboarding-wrap">
-          <div class="card" style="display:flex;flex-direction:column;gap:14px;">
-            <div style="font-size:22px;font-weight:700;">${escapeHtml(t("waitingPartner"))}</div>
-            <div class="invite-code-box tnum">${escapeHtml(state.inviteCode)}</div>
-            <button class="btn btn-primary" id="btn-continue-app">${escapeHtml(t("continueApp"))}</button>
-          </div>
-        </div>
-      `;
-      document.getElementById("btn-continue-app").onclick = () => {
-        clearInterval(pairPollTimer);
-        syncAllData();
+    if (!state.googleAuth && state.me?.email) {
+      state.googleAuth = {
+        email: state.me.email,
+        name: state.me.name || state.me.email.split("@")[0],
+        idToken: null,
+        provider: "google"
       };
-      return;
     }
 
     const g = state.googleAuth;
-    const prefillName = g?.name || "";
-    const prefillEmail = g?.email || "";
+
+    // Stage 1: Mandatory Google Sign-In
+    if (!g && !state.accessToken) {
+      app.innerHTML = `
+        <div class="onboarding-wrap">
+          <div class="card" style="display:flex;flex-direction:column;gap:16px;text-align:center;padding:24px 20px;">
+            ${oursRingsLogo()}
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="font-size:28px;font-weight:800;letter-spacing:-0.03em;">OURS</div>
+              <div style="font-size:18px;font-weight:700;">${escapeHtml(t("welcomeTitle"))}</div>
+              <div class="row-sub">${escapeHtml(t("welcomeSub"))}</div>
+            </div>
+            <button class="btn-google" id="ob-google-btn">${googleGIcon()}<span>${escapeHtml(t("continueGoogle"))}</span></button>
+          </div>
+        </div>
+      `;
+      document.getElementById("ob-google-btn").onclick = triggerGoogleSignIn;
+      return;
+    }
+
+    // Stage 2: Create pair or Join with code
+    const profilePill = g ? `
+      <div class="google-pill">
+        <div class="google-pill-meta">
+          <div class="google-pill-email">${escapeHtml(g.name || g.email)}</div>
+          <div class="row-sub" style="font-size:12px;">${escapeHtml(g.email)}</div>
+          <div class="google-verified-badge">${googleGIcon()}<span>${escapeHtml(t("googleVerified"))}</span></div>
+        </div>
+        <button class="google-switch-btn" id="ob-google-switch">${escapeHtml(t("googleSwitch"))}</button>
+      </div>
+    ` : "";
+
+    let stageBody = "";
+    if (state.onboardingMode === "create") {
+      if (state.inviteCode) {
+        stageBody = `
+          <div class="card" style="display:flex;flex-direction:column;gap:14px;text-align:center;">
+            <div style="font-size:17px;font-weight:700;">${escapeHtml(t("waitingPartner"))}</div>
+            <div class="invite-code-box tnum">${escapeHtml(state.inviteCode)}</div>
+            <div class="waiting-pulse-row">
+              <span class="waiting-pulse-dot"></span>
+              <span>${escapeHtml(t("waitingPartnerPulse"))}</span>
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button class="btn btn-secondary" id="btn-copy-code" style="flex:1;">${escapeHtml(t("copyCode"))}</button>
+              <button class="btn btn-primary" id="btn-continue-app" style="flex:1;">${escapeHtml(t("continueApp"))}</button>
+            </div>
+          </div>
+        `;
+      } else {
+        stageBody = `
+          <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+            <button class="btn btn-primary" id="ob-get-code">${escapeHtml(t("getInviteCode"))}</button>
+          </div>
+        `;
+      }
+    } else {
+      stageBody = `
+        <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+          <input class="input tnum" id="ob-code" placeholder="ABC123" maxlength="8" style="text-transform:uppercase;letter-spacing:0.2em;text-align:center;font-size:20px;font-weight:700;" />
+          <button class="btn btn-primary" id="ob-join-submit">${escapeHtml(t("joinPairBtn"))}</button>
+        </div>
+      `;
+    }
 
     app.innerHTML = `
       <div class="onboarding-wrap">
         <div style="text-align:center;display:flex;flex-direction:column;gap:6px;">
-          <div style="font-size:28px;font-weight:800;letter-spacing:-0.03em;">OURS</div>
-          <div style="font-size:18px;font-weight:700;">${escapeHtml(t("welcomeTitle"))}</div>
-          <div class="row-sub">${escapeHtml(t("welcomeSub"))}</div>
+          ${oursRingsLogo()}
+          <div style="font-size:26px;font-weight:800;letter-spacing:-0.03em;">OURS</div>
         </div>
-
-        ${g ? `
-          <div class="google-pill">
-            <div class="google-pill-meta">
-              <div class="google-pill-email">${escapeHtml(t("googleSignedInAs"))} ${escapeHtml(g.email)}</div>
-              <div class="google-verified-badge">${googleGIcon()}<span>${escapeHtml(t("googleVerified"))}</span></div>
-            </div>
-            <button class="google-switch-btn" id="ob-google-switch">${escapeHtml(t("googleSwitch"))}</button>
-          </div>
-        ` : `
-          <button class="btn-google" id="ob-google-btn">${googleGIcon()}<span>${escapeHtml(t("continueGoogle"))}</span></button>
-          <div class="or-divider"><span>${escapeHtml(t("orManual"))}</span></div>
-        `}
-
+        ${profilePill}
         <div class="segmented">
           <button class="seg-btn ${state.onboardingMode === "create" ? "active" : ""}" id="ob-mode-create">${escapeHtml(t("createPair"))}</button>
           <button class="seg-btn ${state.onboardingMode === "join" ? "active" : ""}" id="ob-mode-join">${escapeHtml(t("joinPair"))}</button>
         </div>
-
-        <div class="card" style="display:flex;flex-direction:column;gap:10px;">
-          <input class="input" id="ob-server" placeholder="${escapeHtml(t("serverUrl"))}" value="${escapeHtml(state.serverUrl)}" />
-          <input class="input" id="ob-name" placeholder="${escapeHtml(t("yourName"))}" value="${escapeHtml(prefillName)}" />
-          <input class="input" id="ob-email" type="email" placeholder="${escapeHtml(t("yourEmail"))}" value="${escapeHtml(prefillEmail)}" ${g ? "readonly" : ""} />
-          ${
-            state.onboardingMode === "create"
-              ? `<input class="input" id="ob-key" placeholder="${escapeHtml(t("setupKey"))}" />`
-              : `<input class="input" id="ob-code" placeholder="${escapeHtml(t("inviteCode"))}" style="text-transform:uppercase;letter-spacing:0.15em;" />`
-          }
-          <button class="btn btn-primary" id="ob-submit">${escapeHtml(state.onboardingMode === "create" ? t("createPair") : t("joinPair"))}</button>
-        </div>
+        ${stageBody}
       </div>
     `;
 
-    const googleBtn = document.getElementById("ob-google-btn");
-    if (googleBtn) {
-      googleBtn.onclick = () => {
-        haptic();
-        state.serverUrl = document.getElementById("ob-server").value.trim() || window.location.origin;
-        persistAndSyncNative();
-        if (native?.signInWithGoogle) {
-          try {
-            native.signInWithGoogle();
-          } catch (_) {
-            openBrowserGoogleModal();
-          }
-        } else {
-          openBrowserGoogleModal();
-        }
-      };
-    }
     const switchBtn = document.getElementById("ob-google-switch");
     if (switchBtn) {
       switchBtn.onclick = () => {
         haptic();
-        if (native?.signInWithGoogle) {
-          try {
-            native.signInWithGoogle();
-          } catch (_) {
-            openBrowserGoogleModal();
-          }
-        } else {
-          openBrowserGoogleModal();
-        }
+        clearInterval(pairPollTimer);
+        state.googleAuth = null;
+        state.accessToken = "";
+        state.refreshToken = "";
+        state.me = null;
+        state.partner = null;
+        state.inviteCode = "";
+        persistAndSyncNative();
+        triggerGoogleSignIn();
       };
     }
 
     document.getElementById("ob-mode-create").onclick = () => { state.onboardingMode = "create"; render(); };
     document.getElementById("ob-mode-join").onclick = () => { state.onboardingMode = "join"; render(); };
-    document.getElementById("ob-submit").onclick = async () => {
-      haptic();
-      state.serverUrl = document.getElementById("ob-server").value.trim() || window.location.origin;
-      const name = document.getElementById("ob-name").value.trim();
-      const email = document.getElementById("ob-email").value.trim() || null;
-      if (!name) return showToast("Name is required");
-      try {
-        if (state.googleAuth && email) {
-          if (state.onboardingMode === "create") {
-            const setupKey = document.getElementById("ob-key").value.trim();
-            await submitGoogleAuthPayload(
-              { email, name, id_token: state.googleAuth.idToken, provider: state.googleAuth.provider },
-              { autoCreate: true, setupKey }
-            );
-          } else {
-            const code = document.getElementById("ob-code").value.trim().toUpperCase();
-            await submitGoogleAuthPayload(
-              { email, name, id_token: state.googleAuth.idToken, provider: state.googleAuth.provider },
-              { inviteCode: code }
-            );
+
+    if (state.onboardingMode === "create") {
+      if (state.inviteCode) {
+        startPairPolling();
+        document.getElementById("btn-copy-code").onclick = async () => {
+          haptic();
+          try {
+            await navigator.clipboard.writeText(state.inviteCode);
+            showToast(t("codeCopied"));
+          } catch (_) {
+            showToast(state.inviteCode);
           }
-          return;
-        }
-        if (state.onboardingMode === "create") {
-          const setupKey = document.getElementById("ob-key").value.trim();
-          const headers = { "Content-Type": "application/json" };
-          if (setupKey) headers["X-Setup-Key"] = setupKey;
-          const resp = await fetch(`${apiBase()}/api/pair/create`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ name, email })
-          });
-          const data = await resp.json();
-          if (!resp.ok) throw new Error(data.message || "Failed");
-          state.accessToken = data.tokens.access_token;
-          state.refreshToken = data.tokens.refresh_token;
-          state.me = data.user;
-          state.inviteCode = data.invite_code;
-          persistAndSyncNative();
-          connectWebSocket();
-          startBrowserLocationWatch();
-          render();
-        } else {
-          const code = document.getElementById("ob-code").value.trim().toUpperCase();
-          const resp = await fetch(`${apiBase()}/api/pair/join`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code, name, email })
-          });
-          const data = await resp.json();
-          if (!resp.ok) throw new Error(data.message || "Failed");
-          state.accessToken = data.tokens.access_token;
-          state.refreshToken = data.tokens.refresh_token;
-          state.me = data.user;
-          persistAndSyncNative();
-          connectWebSocket();
-          startBrowserLocationWatch();
-          await syncAllData();
-        }
-      } catch (err) {
-        showToast(err.message);
+        };
+        document.getElementById("btn-continue-app").onclick = () => {
+          clearInterval(pairPollTimer);
+          syncAllData();
+        };
+      } else {
+        document.getElementById("ob-get-code").onclick = async () => {
+          haptic();
+          try {
+            await submitGoogleAuthPayload(
+              { email: g.email, name: g.name, id_token: g.idToken, provider: g.provider },
+              { autoCreate: true }
+            );
+          } catch (err) {
+            showToast(err.message);
+          }
+        };
       }
-    };
+    } else {
+      document.getElementById("ob-join-submit").onclick = async () => {
+        haptic();
+        const code = document.getElementById("ob-code").value.trim().toUpperCase();
+        if (!code) return showToast(t("inviteCode"));
+        try {
+          await submitGoogleAuthPayload(
+            { email: g.email, name: g.name, id_token: g.idToken, provider: g.provider },
+            { inviteCode: code }
+          );
+        } catch (err) {
+          showToast(err.message);
+        }
+      };
+    }
   }
 
   function renderMapScreen() {

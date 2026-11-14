@@ -31,7 +31,7 @@ object MapMarkerFactory {
         val cy = sizePx / 2f
 
         val ringColor = if (isLive) Color.parseColor("#1D7A3B") else Color.parseColor("#68686E")
-        val fillColor = Color.parseColor("#0066CC")
+        val fillColor = Color.parseColor("#0055FF")
 
         val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = ringColor
@@ -122,7 +122,7 @@ object MapMarkerFactory {
         val whitePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
         canvas.drawCircle(cx, cy, 13f * density, whitePaint)
 
-        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0066CC") }
+        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0055FF") }
         canvas.drawCircle(cx, cy, 10f * density, accentPaint)
 
         val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
