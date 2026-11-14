@@ -186,7 +186,7 @@ object OursNotifier {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val avatar = createAvatarBitmap(senderName, 0xFF0F0F0E.toInt())
+        val avatar = createAvatarBitmap(senderName, 0xFFD4623F.toInt())
         val sender = Person.Builder()
             .setName(senderName)
             .setIcon(IconCompat.createWithBitmap(avatar))
@@ -197,7 +197,7 @@ object OursNotifier {
         val builder = NotificationCompat.Builder(context, CHANNEL_UPDATES)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setLargeIcon(avatar)
-            .setColor(0xFF0F0F0E.toInt())
+            .setColor(0xFFD4623F.toInt())
             .setSubText("OURS")
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -225,7 +225,7 @@ object OursNotifier {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val badgeColor = if (channelId == CHANNEL_NUDGE) 0xFF0F0F0E.toInt() else 0xFF2C2C2A.toInt()
+        val badgeColor = 0xFFD4623F.toInt()
         val avatar = createAvatarBitmap(title, badgeColor)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
