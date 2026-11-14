@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -61,9 +62,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -94,6 +99,7 @@ import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursSendConfirmation
 import app.ours.ui.components.oursHeaderInsets
+import app.ours.ui.components.oursLiquidGlass
 import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.rememberOursLayoutSpec
@@ -213,12 +219,73 @@ private fun OursSplashOverlay() {
         subtitleAlpha.animateTo(1f, OursMotion.enterSpec(240))
     }
 
+    val orb1 = if (isDark) Color(0xFF1D4ED8) else Color(0xFF38BDF8)
+    val orb2 = if (isDark) Color(0xFF0284C7) else Color(0xFF2563EB)
+    val orb3 = if (isDark) Color(0xFF4338CA) else Color(0xFF6366F1)
+    val emblemFill = Brush.linearGradient(
+        colors = if (isDark) {
+            listOf(Color.White.copy(alpha = 0.16f), Color.White.copy(alpha = 0.06f))
+        } else {
+            listOf(Color.White.copy(alpha = 0.82f), Color.White.copy(alpha = 0.48f))
+        },
+        start = Offset.Zero,
+        end = Offset(260f, 260f),
+    )
+    val emblemRim = Brush.linearGradient(
+        colors = if (isDark) {
+            listOf(Color.White.copy(alpha = 0.42f), Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0.22f))
+        } else {
+            listOf(Color.White.copy(alpha = 0.95f), Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.72f))
+        },
+        start = Offset.Zero,
+        end = Offset(260f, 260f),
+    )
+    val badgeFill = Brush.linearGradient(
+        colors = if (isDark) {
+            listOf(Color.White.copy(alpha = 0.14f), Color.White.copy(alpha = 0.05f))
+        } else {
+            listOf(Color.White.copy(alpha = 0.74f), Color.White.copy(alpha = 0.44f))
+        },
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas),
         contentAlignment = Alignment.Center,
     ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(orb1.copy(alpha = if (isDark) 0.28f else 0.26f), Color.Transparent),
+                    center = Offset(w * 0.20f, h * 0.24f),
+                    radius = w * 0.68f,
+                ),
+                radius = w * 0.68f,
+                center = Offset(w * 0.20f, h * 0.24f),
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(orb2.copy(alpha = if (isDark) 0.24f else 0.20f), Color.Transparent),
+                    center = Offset(w * 0.82f, h * 0.38f),
+                    radius = w * 0.62f,
+                ),
+                radius = w * 0.62f,
+                center = Offset(w * 0.82f, h * 0.38f),
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(orb3.copy(alpha = if (isDark) 0.24f else 0.18f), Color.Transparent),
+                    center = Offset(w * 0.44f, h * 0.78f),
+                    radius = w * 0.72f,
+                ),
+                radius = w * 0.72f,
+                center = Offset(w * 0.44f, h * 0.78f),
+            )
+        }
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
@@ -232,24 +299,32 @@ private fun OursSplashOverlay() {
                             scaleY = pulseScale.value
                             alpha = pulseAlpha.value
                         }
-                        .border(1.5.dp, colors.action.copy(alpha = 0.5f), RoundedCornerShape(26.dp)),
+                        .border(1.5.dp, colors.action.copy(alpha = 0.45f), RoundedCornerShape(26.dp)),
                 )
-                Surface(
-                    shape = RoundedCornerShape(26.dp),
-                    color = colors.canvas,
+                Box(
                     modifier = Modifier
                         .size(92.dp)
                         .graphicsLayer {
                             scaleX = iconScale.value
                             scaleY = iconScale.value
                             translationY = iconOffsetY.value * density
-                        },
+                        }
+                        .shadow(
+                            elevation = 16.dp,
+                            shape = RoundedCornerShape(26.dp),
+                            ambientColor = orb2.copy(alpha = 0.25f),
+                            spotColor = orb2.copy(alpha = 0.25f),
+                        )
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(emblemFill)
+                        .border(1.5.dp, emblemRim, RoundedCornerShape(26.dp)),
+                    contentAlignment = Alignment.Center,
                 ) {
                     OursInterlockedRingsMark(
-                        modifier = Modifier.fillMaxSize().padding(6.dp),
+                        modifier = Modifier.fillMaxSize().padding(8.dp),
                         leftRingColor = leftRingColor,
                         rightRingColor = rightRingColor,
-                        backgroundColor = colors.canvas,
+                        backgroundColor = if (isDark) Color(0xFF151926) else Color(0xFFEAF2FC),
                         progress = ringDraw.value,
                         convergeProgress = ringConverge.value,
                     )
@@ -257,7 +332,7 @@ private fun OursSplashOverlay() {
             }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
             ) {
                 Text(
                     text = "OURS",
@@ -273,14 +348,26 @@ private fun OursSplashOverlay() {
                 )
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.graphicsLayer { alpha = subtitleAlpha.value },
                 ) {
-                    Text(
-                        text = "PRIVATE FOR TWO",
-                        style = OursTypography.label.copy(letterSpacing = 2.2.sp),
-                        color = colors.inkSecondary,
-                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(badgeFill)
+                            .border(
+                                1.dp,
+                                Color.White.copy(alpha = if (isDark) 0.24f else 0.80f),
+                                RoundedCornerShape(999.dp),
+                            )
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "PRIVATE SPACE FOR TWO",
+                            style = OursTypography.label.copy(letterSpacing = 2.0.sp),
+                            color = colors.inkSecondary,
+                        )
+                    }
                     Text(
                         text = strings.splashTagline,
                         style = OursTypography.caption,
@@ -656,17 +743,17 @@ private fun OursFloatingBottomNav(
             .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.xs),
         contentAlignment = Alignment.Center,
     ) {
-        Surface(
-            modifier = Modifier.oursContentWidth(layoutSpec),
-            shape = RoundedCornerShape(OursRadius.card),
-            color = colors.glassSurfaceStrong,
-            border = BorderStroke(1.dp, colors.glassBorder),
-            shadowElevation = 8.dp,
+        Box(
+            modifier = Modifier
+                .widthIn(max = 300.dp)
+                .height(58.dp)
+                .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 8.dp),
+            contentAlignment = Alignment.Center,
         ) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(6.dp),
+                    .padding(horizontal = 7.dp, vertical = 7.dp),
             ) {
                 val tabWidth = maxWidth / items.size
                 val indicatorOffset by animateDpAsState(
@@ -679,9 +766,10 @@ private fun OursFloatingBottomNav(
                     modifier = Modifier
                         .offset(x = indicatorOffset)
                         .width(tabWidth)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(OursRadius.inner))
-                        .background(colors.actionSoft),
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(colors.actionSoft)
+                        .border(1.dp, colors.action.copy(alpha = 0.35f), RoundedCornerShape(999.dp)),
                 )
 
                 Row(modifier = Modifier.fillMaxWidth()) {
@@ -696,9 +784,9 @@ private fun OursFloatingBottomNav(
                         Box(
                             modifier = Modifier
                                 .width(tabWidth)
-                                .height(48.dp)
+                                .height(44.dp)
                                 .oursPressScale(interactionSource)
-                                .clip(RoundedCornerShape(OursRadius.inner))
+                                .clip(RoundedCornerShape(999.dp))
                                 .clickable(
                                     interactionSource = interactionSource,
                                     indication = null,
