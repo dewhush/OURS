@@ -551,7 +551,15 @@ fun OnboardingScreen(
             }
             if (serverStatus != null) {
                 Spacer(Modifier.height(OursSpacing.xs))
-                Text(serverStatus!!, style = OursTypography.caption, color = colors.live)
+                val statusText = serverStatus!!
+                val isFailure = statusText.startsWith("Unreachable") ||
+                    statusText.startsWith("Gagal") ||
+                    statusText.startsWith("Failed")
+                Text(
+                    text = statusText,
+                    style = OursTypography.caption,
+                    color = if (isFailure) colors.danger else colors.success,
+                )
             }
             Spacer(Modifier.height(OursSpacing.sm))
             Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {

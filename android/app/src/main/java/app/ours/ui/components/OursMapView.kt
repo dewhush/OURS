@@ -248,7 +248,7 @@ fun OursMapView(
     }
 
     var lastRecenterTrigger by remember { mutableStateOf(recenterTrigger) }
-    LaunchedEffect(styleReady, partnerLocation, places, highlights, recenterTrigger) {
+    LaunchedEffect(styleReady, partnerLocation, myLocation, places, highlights, recenterTrigger) {
         val map = mapRef ?: return@LaunchedEffect
         if (!styleReady) return@LaunchedEffect
         val manualRecenter = recenterTrigger != lastRecenterTrigger
@@ -260,12 +260,15 @@ fun OursMapView(
         ) LatLng(partnerLocation.lat, partnerLocation.lon) else null
         val myLatLng = myLocation?.let { LatLng(it.lat, it.lon) }
 
+        val pairDist = if (partnerLatLng != null && myLatLng != null) {
+            app.ours.location.AdaptiveLocationPolicy.distanceMeters(
+                myLatLng.latitude, myLatLng.longitude,
+                partnerLatLng.latitude, partnerLatLng.longitude,
+            )
+        } else null
+
         val update = when {
-            partnerLatLng != null && myLatLng != null &&
-                app.ours.location.AdaptiveLocationPolicy.distanceMeters(
-                    myLatLng.latitude, myLatLng.longitude,
-                    partnerLatLng.latitude, partnerLatLng.longitude,
-                ) > 60.0 -> {
+            partnerLatLng != null && myLatLng != null && pairDist != null && pairDist > 60.0 && pairDist <= 100_000.0 -> {
                 val bounds = LatLngBounds.Builder()
                     .include(myLatLng)
                     .include(partnerLatLng)
@@ -304,13 +307,15 @@ fun OursMapView(
                 myLatLng.latitude, myLatLng.longitude,
                 partnerLatLng.latitude, partnerLatLng.longitude,
             )
-            if (dist > 60.0) {
+            if (dist > 60.0 && dist <= 100_000.0) {
                 val bounds = LatLngBounds.Builder()
                     .include(myLatLng)
                     .include(partnerLatLng)
                     .build()
                 val padPx = (96f * context.resources.displayMetrics.density).toInt()
                 map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, padPx), 420)
+            } else if (dist > 100_000.0) {
+                map.animateCamera(CameraUpdateFactory.newLatLngZoom(partnerLatLng, 14.5), 420)
             }
         }
         nudgeProgress.snapTo(0f)

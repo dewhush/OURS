@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -66,6 +67,7 @@ import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursHeaderInsets
+import app.ours.ui.components.oursLiquidGlass
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -119,7 +121,9 @@ fun MapScreen(
     val hasCoords = !isPaused && loc?.lat != null && loc.lon != null
     val nowMs = System.currentTimeMillis()
     val isStale = loc?.recordedAt?.let { nowMs - it > 15 * 60_000L } ?: true
-    val myLastCoords = remember(loc?.recordedAt, recenterTrigger) { readLastKnownCoords(context) }
+    val myLastCoords = remember(state.myLocation, loc?.recordedAt, recenterTrigger) {
+        state.myLocation?.let { it.lat to it.lon } ?: readLastKnownCoords(context)
+    }
     val distanceText = remember(loc?.lat, loc?.lon, myLastCoords, strings.awaySuffix) {
         if (hasCoords && loc != null && myLastCoords != null) {
             val meters = AdaptiveLocationPolicy.distanceMeters(
@@ -172,17 +176,15 @@ fun MapScreen(
                 .align(Alignment.Center)
                 .padding(bottom = 140.dp),
         ) {
-            androidx.compose.material3.Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = colors.glassSurfaceStrong,
-                border = androidx.compose.foundation.BorderStroke(1.dp, colors.action.copy(alpha = 0.45f)),
-                shadowElevation = 4.dp,
+            Box(
+                modifier = Modifier
+                    .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 6.dp, tinted = true)
+                    .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
             ) {
                 Text(
                     text = if (strings.langCode == "id") "Sapaan terkirim" else "Nudge sent",
-                    style = OursTypography.label,
+                    style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.action,
-                    modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
                 )
             }
         }
@@ -263,6 +265,12 @@ fun MapScreen(
                 }
             }
         }
+        if (loc == null && !state.errorMessage.isNullOrBlank()) {
+            app.ours.ui.components.OursErrorState(
+                message = state.errorMessage!!,
+                onRetry = { vm.refreshAll() },
+            )
+        }
         }
 
         // Bottom floating actions: Check-in CTA + Nudge + Recenter
@@ -270,7 +278,12 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .oursContentWidth(layoutSpec)
-                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.md),
+                .navigationBarsPadding()
+                .padding(
+                    start = layoutSpec.horizontalPadding,
+                    end = layoutSpec.horizontalPadding,
+                    bottom = 104.dp,
+                ),
             horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
             verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
         ) {

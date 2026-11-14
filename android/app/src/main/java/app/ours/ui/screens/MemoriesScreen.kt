@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -35,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +57,7 @@ import app.ours.ui.components.OursMapView
 import app.ours.ui.components.OursStaggeredItem
 import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursHeaderInsets
+import app.ours.ui.components.oursLiquidGlass
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursRadius
@@ -107,13 +111,13 @@ fun MemoriesScreen(
     ) {
         Surface(
             shape = RoundedCornerShape(OursRadius.card),
-            color = colors.glassSurfaceStrong,
-            border = BorderStroke(1.dp, colors.glassBorder),
-            shadowElevation = 4.dp,
+            color = Color.Transparent,
+            shadowElevation = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .oursHeaderInsets()
-                .padding(horizontal = layoutSpec.horizontalPadding),
+                .padding(horizontal = layoutSpec.horizontalPadding)
+                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
         ) {
             Row(
                 modifier = Modifier
@@ -169,7 +173,8 @@ fun MemoriesScreen(
                     OursCard(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(OursSpacing.md)
+                            .navigationBarsPadding()
+                            .padding(start = OursSpacing.md, end = OursSpacing.md, bottom = 104.dp)
                             .fillMaxWidth(),
                         frosted = true,
                     ) {
@@ -215,7 +220,12 @@ fun MemoriesScreen(
                 }
                 else -> {
                     LazyColumn(
-                        contentPadding = PaddingValues(OursSpacing.md),
+                        contentPadding = PaddingValues(
+                            start = OursSpacing.md,
+                            top = OursSpacing.md,
+                            end = OursSpacing.md,
+                            bottom = 104.dp,
+                        ),
                         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
                     ) {
                         itemsIndexed(filteredMemories, key = { _, it -> it.id }) { idx, item ->
@@ -311,10 +321,11 @@ internal fun <T> OursSearchFilterBar(
         verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 3.dp),
             shape = RoundedCornerShape(OursRadius.card),
-            color = colors.glassSurfaceStrong,
-            border = BorderStroke(1.dp, colors.glassBorder),
+            color = Color.Transparent,
         ) {
             Row(
                 modifier = Modifier
@@ -342,19 +353,24 @@ internal fun <T> OursSearchFilterBar(
                 }
                 if (query.isNotEmpty()) {
                     val clearInteraction = remember { MutableInteractionSource() }
-                    Icon(
-                        imageVector = OursIcons.Close,
-                        contentDescription = "Clear",
-                        tint = colors.inkMuted,
+                    Box(
                         modifier = Modifier
-                            .size(18.dp)
+                            .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                             .oursPressScale(clearInteraction)
                             .clickable(
                                 interactionSource = clearInteraction,
                                 indication = null,
                                 onClick = { onQueryChange("") },
                             ),
-                    )
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = OursIcons.Close,
+                            contentDescription = "Clear",
+                            tint = colors.inkMuted,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
         }
@@ -369,25 +385,34 @@ internal fun <T> OursSearchFilterBar(
                 val chipInteraction = remember { MutableInteractionSource() }
                 Surface(
                     modifier = Modifier
+                        .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                         .oursPressScale(chipInteraction)
-                        .clip(RoundedCornerShape(OursRadius.chip))
+                        .oursLiquidGlass(
+                            radius = OursRadius.chip,
+                            colors = colors,
+                            elevation = if (selected) 3.dp else 1.dp,
+                            tinted = selected,
+                        )
                         .clickable(
                             interactionSource = chipInteraction,
                             indication = null,
                             onClick = { onSelectFilter(value) },
                         ),
                     shape = RoundedCornerShape(OursRadius.chip),
-                    color = if (selected) colors.actionSoft else colors.surface,
-                    border = BorderStroke(1.dp, if (selected) colors.action else colors.border),
+                    color = Color.Transparent,
                 ) {
-                    Text(
-                        text = label,
-                        style = OursTypography.label.copy(
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                        ),
-                        color = if (selected) colors.action else colors.inkSecondary,
-                        modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 6.dp),
-                    )
+                    Box(
+                        modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = label,
+                            style = OursTypography.label.copy(
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                            ),
+                            color = if (selected) colors.action else colors.inkSecondary,
+                        )
+                    }
                 }
             }
         }

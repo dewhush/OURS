@@ -57,8 +57,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
@@ -123,6 +127,80 @@ fun Modifier.oursHeaderInsets(): Modifier = composed {
         .padding(top = 4.dp)
 }
 
+/**
+ * iOS 26+ Liquid Glass surface modifier:
+ * multi-stop diagonal refractive gradient, subtle radial specular sheen,
+ * 1.dp top-edge inner highlight, and directional top-left-to-bottom-right rim border.
+ */
+fun Modifier.oursLiquidGlass(
+    radius: Dp,
+    colors: app.ours.ui.theme.OursColors,
+    elevation: Dp = 4.dp,
+    tinted: Boolean = false,
+): Modifier {
+    val shape = RoundedCornerShape(radius)
+    val surfaceBrush = if (tinted) {
+        Brush.linearGradient(
+            colors = listOf(colors.actionSoft.copy(alpha = 0.92f), colors.glassGradientEnd),
+            start = Offset.Zero,
+            end = Offset(900f, 900f),
+        )
+    } else {
+        Brush.linearGradient(
+            colors = listOf(colors.glassGradientStart, colors.glassGradientEnd),
+            start = Offset.Zero,
+            end = Offset(900f, 900f),
+        )
+    }
+    val rimBrush = Brush.linearGradient(
+        colors = listOf(colors.glassHighlightTopLeft, colors.glassRimBottomRight),
+        start = Offset.Zero,
+        end = Offset(700f, 700f),
+    )
+    return this
+        .shadow(elevation = elevation, shape = shape, clip = false)
+        .clip(shape)
+        .background(brush = surfaceBrush, shape = shape)
+        .drawWithContent {
+            drawContent()
+            drawRoundRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(colors.glassInnerHighlight.copy(alpha = 0.22f), Color.Transparent),
+                    center = Offset(size.width * 0.18f, 0f),
+                    radius = (size.maxDimension * 0.7f).coerceAtLeast(1f),
+                ),
+                cornerRadius = CornerRadius(radius.toPx(), radius.toPx()),
+            )
+            drawLine(
+                color = colors.glassInnerHighlight,
+                start = Offset(radius.toPx() * 0.5f, 1.dp.toPx()),
+                end = Offset(size.width - radius.toPx() * 0.5f, 1.dp.toPx()),
+                strokeWidth = 1.dp.toPx(),
+            )
+        }
+        .border(width = 1.dp, brush = rimBrush, shape = shape)
+}
+
+@Composable
+fun OursGlassCard(
+    modifier: Modifier = Modifier,
+    radius: Dp = OursRadius.card,
+    padding: PaddingValues = PaddingValues(OursSpacing.md),
+    elevation: Dp = 6.dp,
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    OursCard(
+        modifier = modifier,
+        radius = radius,
+        padding = padding,
+        frosted = true,
+        elevation = elevation,
+        onClick = onClick,
+        content = content,
+    )
+}
+
 enum class OursButtonVariant { Primary, Secondary, Ghost, Destructive }
 
 @Composable
@@ -162,7 +240,9 @@ fun OursButton(
         else -> null
     }
 
+    val isSecondaryGlass = variant == OursButtonVariant.Secondary
     val effectiveAlpha = if (enabled) 1f else 0.45f
+    val buttonShape = RoundedCornerShape(OursRadius.control)
 
     Surface(
         modifier = modifier
@@ -172,7 +252,13 @@ fun OursButton(
                 scaleY = scale
                 alpha = effectiveAlpha
             }
-            .clip(RoundedCornerShape(OursRadius.control))
+            .then(
+                if (isSecondaryGlass) {
+                    Modifier.oursLiquidGlass(radius = OursRadius.control, colors = colors, elevation = 3.dp)
+                } else {
+                    Modifier.clip(buttonShape)
+                }
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -180,10 +266,10 @@ fun OursButton(
                 role = Role.Button,
                 onClick = onClick,
             ),
-        shape = RoundedCornerShape(OursRadius.control),
-        color = containerColor,
+        shape = buttonShape,
+        color = if (isSecondaryGlass) Color.Transparent else containerColor,
         contentColor = contentColor,
-        border = border,
+        border = if (isSecondaryGlass) null else border,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
@@ -217,7 +303,8 @@ fun OursCard(
     modifier: Modifier = Modifier,
     radius: Dp = OursRadius.card,
     padding: PaddingValues = PaddingValues(OursSpacing.md),
-    frosted: Boolean = false,
+    frosted: Boolean = true,
+    elevation: Dp = 4.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -246,12 +333,18 @@ fun OursCard(
         Modifier
     }
 
+    val shape = RoundedCornerShape(radius)
     Surface(
-        modifier = modifier.then(clickModifier),
-        shape = RoundedCornerShape(radius),
-        color = if (frosted) colors.glassSurfaceStrong else colors.surface,
-        border = BorderStroke(1.dp, if (frosted) colors.glassBorder else colors.border),
-        shadowElevation = if (frosted) 6.dp else 0.dp,
+        modifier = modifier
+            .then(
+                if (frosted) Modifier.oursLiquidGlass(radius = radius, colors = colors, elevation = elevation)
+                else Modifier
+            )
+            .then(clickModifier),
+        shape = shape,
+        color = if (frosted) Color.Transparent else colors.surface,
+        border = if (frosted) null else BorderStroke(1.dp, colors.border),
+        shadowElevation = 0.dp,
     ) {
         Column(modifier = Modifier.padding(padding), content = content)
     }
@@ -521,11 +614,11 @@ fun OursErrorState(
     modifier: Modifier = Modifier,
 ) {
     val colors = OursTheme.colors
-    OursCard(modifier = modifier.fillMaxWidth()) {
+    OursCard(modifier = modifier.fillMaxWidth(), frosted = true) {
         Text(
             text = "Could not load",
             style = OursTypography.title,
-            color = colors.error,
+            color = colors.danger,
         )
         Spacer(Modifier.height(OursSpacing.xxs))
         Text(
@@ -563,8 +656,8 @@ fun OursSendConfirmation(
     ) {
         Surface(
             shape = RoundedCornerShape(OursRadius.control),
-            color = colors.liveSoft,
-            border = BorderStroke(1.dp, colors.live.copy(alpha = 0.35f)),
+            color = colors.successSoft,
+            border = BorderStroke(1.dp, colors.success.copy(alpha = 0.35f)),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
@@ -575,12 +668,12 @@ fun OursSendConfirmation(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(colors.live)
+                        .background(colors.success)
                 )
                 Text(
                     text = message,
                     style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
-                    color = colors.live,
+                    color = colors.success,
                 )
             }
         }

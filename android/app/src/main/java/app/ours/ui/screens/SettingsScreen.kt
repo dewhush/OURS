@@ -75,6 +75,7 @@ import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursHeaderInsets
+import app.ours.ui.components.oursLiquidGlass
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
@@ -214,8 +215,6 @@ fun SettingsScreen(
                             text = coupleTitle,
                             style = OursTypography.headline,
                             color = colors.ink,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                         )
                         val meEmail = state.me?.email?.let { " · $it" } ?: ""
                         Text(
@@ -226,14 +225,8 @@ fun SettingsScreen(
                             },
                             style = OursTypography.caption,
                             color = colors.inkSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    OursStatusChip(
-                        label = if (state.partner != null) "Paired" else "Waiting",
-                        tone = if (state.partner != null) StatusTone.Live else StatusTone.Muted,
-                    )
                 }
 
                 if (state.partner == null) {
@@ -638,14 +631,14 @@ fun SettingsScreen(
         // Fixed floating frosted top header aligned below HyperIsland
         Surface(
             shape = RoundedCornerShape(OursRadius.card),
-            color = colors.glassSurfaceStrong,
-            border = BorderStroke(1.dp, colors.glassBorder),
-            shadowElevation = 4.dp,
+            color = androidx.compose.ui.graphics.Color.Transparent,
+            shadowElevation = 0.dp,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .oursContentWidth(layoutSpec)
                 .oursHeaderInsets()
-                .padding(horizontal = layoutSpec.horizontalPadding),
+                .padding(horizontal = layoutSpec.horizontalPadding)
+                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
         ) {
             Row(
                 modifier = Modifier

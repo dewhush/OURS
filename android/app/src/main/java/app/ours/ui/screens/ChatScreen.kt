@@ -13,13 +13,17 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -42,9 +46,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +71,7 @@ import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursHeaderInsets
+import app.ours.ui.components.oursLiquidGlass
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
@@ -186,13 +193,13 @@ fun ChatScreen(
         // Floating frosted top header
         Surface(
             shape = RoundedCornerShape(OursRadius.card),
-            color = colors.glassSurfaceStrong,
-            border = BorderStroke(1.dp, colors.glassBorder),
-            shadowElevation = 4.dp,
+            color = Color.Transparent,
+            shadowElevation = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .oursHeaderInsets()
-                .padding(horizontal = layoutSpec.horizontalPadding),
+                .padding(horizontal = layoutSpec.horizontalPadding)
+                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
         ) {
             Row(
                 modifier = Modifier
@@ -246,6 +253,14 @@ fun ChatScreen(
             when {
                 (state.checkInsLoading || state.messagesLoading) && threadItems.isEmpty() -> {
                     OursLoadingState("Loading conversation...")
+                }
+                !state.errorMessage.isNullOrBlank() && threadItems.isEmpty() -> {
+                    Box(Modifier.padding(OursSpacing.md)) {
+                        app.ours.ui.components.OursErrorState(
+                            message = state.errorMessage!!,
+                            onRetry = { vm.refreshAll() },
+                        )
+                    }
                 }
                 threadItems.isEmpty() -> {
                     val emptyGreeting = if (strings.langCode == "id") {
@@ -379,14 +394,21 @@ fun ChatScreen(
         }
 
         // Floating frosted bottom composer
+        val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         Surface(
             shape = RoundedCornerShape(OursRadius.card),
-            color = colors.glassSurfaceStrong,
-            border = BorderStroke(1.dp, colors.glassBorder),
-            shadowElevation = 4.dp,
+            color = Color.Transparent,
+            shadowElevation = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
+                .then(if (imeOpen) Modifier else Modifier.navigationBarsPadding())
+                .padding(
+                    start = OursSpacing.md,
+                    end = OursSpacing.md,
+                    top = OursSpacing.xs,
+                    bottom = if (imeOpen) OursSpacing.xs else 100.dp,
+                )
+                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
         ) {
             Column(
                 modifier = Modifier
@@ -419,7 +441,7 @@ fun ChatScreen(
                         }
                         IconButton(
                             onClick = { replyTarget = null },
-                            modifier = Modifier.size(28.dp),
+                            modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp),
                         ) {
                             Icon(
                                 imageVector = OursIcons.Close,
@@ -690,12 +712,13 @@ private fun CheckInBubble(
                             shape = RoundedCornerShape(OursRadius.chip),
                             color = if (checkIn.highlighted) colors.actionSoft else colors.surfaceMuted,
                             modifier = Modifier
+                                .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                                 .oursPressScale(saveInteraction)
                                 .clip(RoundedCornerShape(OursRadius.chip))
                                 .clickable(interactionSource = saveInteraction, indication = null, onClick = onToggleHighlight),
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
@@ -714,14 +737,20 @@ private fun CheckInBubble(
                         }
 
                         if (onDelete != null) {
-                            Icon(
-                                imageVector = OursIcons.Trash,
-                                contentDescription = "Delete check-in",
-                                tint = colors.inkMuted,
+                            Box(
                                 modifier = Modifier
-                                    .size(16.dp)
+                                    .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+                                    .clip(RoundedCornerShape(OursRadius.chip))
                                     .clickable(onClick = onDelete),
-                            )
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = OursIcons.Trash,
+                                    contentDescription = "Delete check-in",
+                                    tint = colors.inkMuted,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
 
