@@ -195,6 +195,13 @@ Errors: `404 invite_not_found`, `409 pair_full` (two users already exist; there 
 ```
 -> `200 Tokens`. Error: `401 invalid_refresh_token` (unknown, already used, or expired), `429 rate_limited`.
 
+### `POST /api/auth/google`
+Authenticates or prepares onboarding using a Google account (`email`, optional `name` and `id_token`).
+- Existing user (matched case-insensitively by `email`): updates `last_seen_at`, issues fresh `tokens`, and returns `200` with `{"status": "authenticated", "user": User, "partner": User | null, "invite_code": "..." | null, "tokens": Tokens}`.
+- New user with `invite_code`: validates and consumes the invite code, creates the partner user, and returns `200` with `{"status": "authenticated", ...}` (errors: `404 invite_not_found`, `409 pair_full`, `429 rate_limited`).
+- New user with `auto_create: true` (and optional `setup_key` / `X-Setup-Key`): creates the first user + invite code and returns `200` with `{"status": "authenticated", ...}` (errors: `403 forbidden`, `409 already_set_up`, `429 rate_limited`).
+- Otherwise returns `200 {"status": "needs_pair", "email": "...", "name": "..."}`.
+
 ### `POST /api/auth/logout` (auth)
 Optional JSON body `{"refresh_token": "..."}` to revoke a specific refresh token, or empty body to
 revoke all refresh tokens for the caller.

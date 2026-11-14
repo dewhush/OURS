@@ -140,6 +140,35 @@ pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
+#[derive(Deserialize)]
+pub struct GoogleAuthRequest {
+    #[serde(default)]
+    pub email: String,
+    pub name: Option<String>,
+    pub id_token: Option<String>,
+    pub device_id: Option<String>,
+    pub invite_code: Option<String>,
+    pub setup_key: Option<String>,
+    pub auto_create: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub struct GoogleAuthResponse {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<User>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partner: Option<User>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invite_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens: Option<Tokens>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
 #[derive(Serialize)]
 pub struct MeResponse {
     pub me: User,

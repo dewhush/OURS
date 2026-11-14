@@ -1484,3 +1484,95 @@ async fn web_app_assets_served_with_no_cache_headers() {
         assert!(!body.is_empty(), "path={path}");
     }
 }
+
+#[tokio::test]
+async fn google_auth_creates_and_restores_session() {
+    let app = TestApp::start().await;
+
+    // 1. Unknown email without auto_create or invite_code returns needs_pair
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "name": "Dewhush"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["status"], "needs_pair");
+    assert_eq!(body["email"], "dewhush@gmail.com");
+    assert_eq!(body["name"], "Dewhush");
+
+    // 2. auto_create: true creates the first user + invite code and authenticates
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "name": "Dewhush",
+            "auto_create": true,
+            "setup_key": "test-setup-key"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let created: Value = resp.json().await.unwrap();
+    assert_eq!(created["status"], "authenticated");
+    assert_eq!(created["user"]["email"], "dewhush@gmail.com");
+    let invite_code = created["invite_code"].as_str().unwrap().to_string();
+    assert_eq!(invite_code.len(), 6);
+    assert!(created["tokens"]["access_token"].as_str().is_some());
+
+    // 3. Existing user login (case-insensitive email) restores session and active invite code
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "DEWHUSH@GMAIL.COM"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let restored: Value = resp.json().await.unwrap();
+    assert_eq!(restored["status"], "authenticated");
+    assert_eq!(restored["user"]["id"], created["user"]["id"]);
+    assert_eq!(restored["invite_code"], invite_code);
+    assert!(restored["tokens"]["access_token"].as_str().is_some());
+
+    // 4. Partner joins using invite_code via Google Auth
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "marchanda@gmail.com",
+            "name": "Marchanda",
+            "invite_code": invite_code
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let joined: Value = resp.json().await.unwrap();
+    assert_eq!(joined["status"], "authenticated");
+    assert_eq!(joined["user"]["email"], "marchanda@gmail.com");
+    assert_eq!(joined["partner"]["id"], created["user"]["id"]);
+    let partner_token = joined["tokens"]["access_token"].as_str().unwrap();
+
+    // 5. Partner token works on authenticated endpoint
+    let me_resp = app
+        .client
+        .get(format!("{}/api/me", app.base_url))
+        .bearer_auth(partner_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(me_resp.status(), StatusCode::OK);
+    let me_body: Value = me_resp.json().await.unwrap();
+    assert_eq!(me_body["me"]["email"], "marchanda@gmail.com");
+    assert_eq!(me_body["partner"]["email"], "dewhush@gmail.com");
+}

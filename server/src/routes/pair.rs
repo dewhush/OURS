@@ -12,8 +12,9 @@ use crate::db::{
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    CreatePairRequest, CreatePairResponse, InviteResponse, JoinPairRequest, JoinPairResponse,
-    MeResponse, PairStateResponse, PushTokenRequest, RefreshRequest, Tokens, User,
+    CreatePairRequest, CreatePairResponse, GoogleAuthRequest, GoogleAuthResponse, InviteResponse,
+    JoinPairRequest, JoinPairResponse, MeResponse, PairStateResponse, PushTokenRequest,
+    RefreshRequest, Tokens, User,
 };
 use crate::photos::{MAX_PHOTO_BYTES, PhotoGuard, delete_photo_files, save_jpeg_and_thumb};
 use crate::routes::{FcmPush, WsPush};
@@ -571,5 +572,273 @@ pub async fn set_push_token(
     .await??;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+fn decode_jwt_email_name(id_token: &str) -> (Option<String>, Option<String>) {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    let mut parts = id_token.split('.');
+    let Some(_hdr) = parts.next() else {
+        return (None, None);
+    };
+    let Some(payload_b64) = parts.next() else {
+        return (None, None);
+    };
+    let Some(_sig) = parts.next() else {
+        return (None, None);
+    };
+    let Ok(bytes) = URL_SAFE_NO_PAD.decode(payload_b64) else {
+        return (None, None);
+    };
+    let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return (None, None);
+    };
+    let email = val
+        .get("email")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let name = val
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    (email, name)
+}
+
+pub async fn google_auth(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<GoogleAuthRequest>,
+) -> AppResult<Json<GoogleAuthResponse>> {
+    let (jwt_email, jwt_name) = req
+        .id_token
+        .as_deref()
+        .map(decode_jwt_email_name)
+        .unwrap_or((None, None));
+
+    let raw_email = if req.email.trim().is_empty() {
+        jwt_email.unwrap_or_default()
+    } else {
+        req.email.clone()
+    };
+    let email = normalize_email(Some(raw_email))?
+        .ok_or_else(|| AppError::bad_request("valid email is required"))?;
+
+    let raw_name = req
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            jwt_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| email.split('@').next().unwrap_or("User").to_string());
+    let name: String = raw_name.chars().take(40).collect();
+
+    let invite_code = req
+        .invite_code
+        .as_deref()
+        .map(|s| s.trim().to_ascii_uppercase())
+        .filter(|s| !s.is_empty());
+
+    let db = state.db.clone();
+    let secret = state.config.token_secret.clone();
+
+    // Case A: Existing user login by email
+    let existing = {
+        let db = db.clone();
+        let secret = secret.clone();
+        let email_q = email.clone();
+        tokio::task::spawn_blocking(move || -> AppResult<Option<GoogleAuthResponse>> {
+            let mut conn = db
+                .lock()
+                .map_err(|_| AppError::internal("database lock poisoned"))?;
+            let tx = conn.transaction()?;
+            let uid: Option<i64> = tx
+                .query_row(
+                    "SELECT id FROM users WHERE lower(email) = lower(?1) ORDER BY id DESC LIMIT 1",
+                    params![email_q],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            let Some(user_id) = uid else {
+                return Ok(None);
+            };
+            let now = now_ms();
+            tx.execute(
+                "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
+                params![now, user_id],
+            )?;
+            let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
+            let partner = get_partner(&tx, user_id)?;
+            let active_invite = if partner.is_none() {
+                tx.query_row(
+                    "SELECT code FROM invites WHERE created_by = ?1 AND used_at IS NULL AND expires_at > ?2 ORDER BY created_at DESC LIMIT 1",
+                    params![user_id, now],
+                    |r| r.get(0),
+                )
+                .optional()?
+            } else {
+                None
+            };
+            let tokens = issue_tokens(&tx, &secret, user_id, now)?;
+            tx.commit()?;
+            Ok(Some(GoogleAuthResponse {
+                status: "authenticated".to_string(),
+                user: Some(user),
+                partner,
+                invite_code: active_invite,
+                tokens: Some(tokens),
+                email: None,
+                name: None,
+            }))
+        })
+        .await??
+    };
+
+    if let Some(resp) = existing {
+        return Ok(Json(resp));
+    }
+
+    // Case B: New user joining with invite_code
+    if let Some(code) = invite_code {
+        let rate_key = client_rate_key(&headers, &code);
+        state.check_join_rate_limit(&rate_key)?;
+        let res = tokio::task::spawn_blocking(move || -> AppResult<GoogleAuthResponse> {
+            let mut conn = db
+                .lock()
+                .map_err(|_| AppError::internal("database lock poisoned"))?;
+            let tx = conn.transaction()?;
+
+            let count: i64 = tx.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))?;
+            if count >= 2 {
+                return Err(AppError::pair_full());
+            }
+
+            let now = now_ms();
+            let valid_invite: Option<String> = tx
+                .query_row(
+                    "SELECT code FROM invites WHERE code = ?1 AND used_at IS NULL AND expires_at > ?2",
+                    params![code, now],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if valid_invite.is_none() {
+                return Err(AppError::invite_not_found());
+            }
+
+            tx.execute(
+                "UPDATE invites SET used_at = ?1 WHERE code = ?2",
+                params![now, code],
+            )?;
+            tx.execute(
+                "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
+                params![name, Some(email), now],
+            )?;
+            let user_id = tx.last_insert_rowid();
+            let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
+            let partner = get_partner(&tx, user_id)?;
+            let tokens = issue_tokens(&tx, &secret, user_id, now)?;
+            tx.commit()?;
+            Ok(GoogleAuthResponse {
+                status: "authenticated".to_string(),
+                user: Some(user),
+                partner,
+                invite_code: None,
+                tokens: Some(tokens),
+                email: None,
+                name: None,
+            })
+        })
+        .await?;
+
+        return match res {
+            Ok(resp) => {
+                state.clear_join_rate_limit(&rate_key);
+                Ok(Json(resp))
+            }
+            Err(err) => {
+                if err.code == "invite_not_found" {
+                    state.record_join_failure(&rate_key);
+                }
+                Err(err)
+            }
+        };
+    }
+
+    // Case C: New user without invite_code
+    if req.auto_create == Some(true) {
+        let mut create_rate_key: Option<String> = None;
+        if let Some(ref expected_key) = state.config.setup_key {
+            let provided_key = req
+                .setup_key
+                .as_deref()
+                .or_else(|| headers.get("X-Setup-Key").and_then(|v| v.to_str().ok()))
+                .unwrap_or("");
+            let rk = client_rate_key(&headers, &hash_refresh_token(provided_key)[..16]);
+            state.check_create_rate_limit(&rk)?;
+            if !constant_time_eq(provided_key.as_bytes(), expected_key.as_bytes()) {
+                state.record_create_failure(&rk);
+                return Err(AppError::forbidden("invalid or missing X-Setup-Key"));
+            }
+            create_rate_key = Some(rk);
+        }
+
+        let resp = tokio::task::spawn_blocking(move || -> AppResult<GoogleAuthResponse> {
+            let mut conn = db
+                .lock()
+                .map_err(|_| AppError::internal("database lock poisoned"))?;
+            let tx = conn.transaction()?;
+
+            let count: i64 = tx.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))?;
+            if count > 0 {
+                return Err(AppError::already_set_up());
+            }
+
+            let now = now_ms();
+            tx.execute(
+                "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
+                params![name, Some(email), now],
+            )?;
+            let user_id = tx.last_insert_rowid();
+            let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
+            let tokens = issue_tokens(&tx, &secret, user_id, now)?;
+            let code = generate_invite_code();
+            let invite_expires_at = now + INVITE_TTL_MS;
+            tx.execute(
+                "INSERT INTO invites (code, created_by, created_at, expires_at) VALUES (?1, ?2, ?3, ?4)",
+                params![code, user_id, now, invite_expires_at],
+            )?;
+            tx.commit()?;
+            Ok(GoogleAuthResponse {
+                status: "authenticated".to_string(),
+                user: Some(user),
+                partner: None,
+                invite_code: Some(code),
+                tokens: Some(tokens),
+                email: None,
+                name: None,
+            })
+        })
+        .await??;
+
+        if let Some(ref rk) = create_rate_key {
+            state.clear_create_rate_limit(rk);
+        }
+        return Ok(Json(resp));
+    }
+
+    Ok(Json(GoogleAuthResponse {
+        status: "needs_pair".to_string(),
+        user: None,
+        partner: None,
+        invite_code: None,
+        tokens: None,
+        email: Some(email),
+        name: Some(name),
+    }))
 }
 
