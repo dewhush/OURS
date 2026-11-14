@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/banner.png" alt="OURS — Private, self-hosted live location & shared memories for two" width="100%" />
+  <img src="docs/banner.png" alt="OURS - Private, self-hosted live location & shared memories for two" width="100%" />
 </p>
 
 # OURS
 
-**OURS** is a private, self-hosted Android app for two people—combining always-on **real-time location sharing** (like Life360, without subscriptions, circles, or third-party tracking) with **24-hour photo check-ins, inline replies, and a shared memory map**.
+**OURS** is a private, self-hosted Android app for two people, combining always-on **real-time location sharing** (like Life360, without subscriptions, circles, or third-party tracking) with **24-hour photo check-ins, inline replies, and a shared memory map**.
 
 Built to run on your own home server with a lightweight **Rust** backend and a native **Kotlin + Jetpack Compose** Android app.
 
@@ -24,11 +24,11 @@ Built to run on your own home server with a lightweight **Rust** backend and a n
 - **Permanent Highlights & Memories**
   - Save any check-in as a **Highlight** before its 24 hours run out to keep it permanently in your shared **Memories** timeline and pinned on the map.
 - **Saved Places & Arrival Alerts**
-  - Server-side place enter/exit detection (e.g., *Home*) with 50 m hysteresis—no Google Play Services geofences required.
+  - Server-side place enter/exit detection (e.g., *Home*) with 50 m hysteresis (no Google Play Services geofences required).
 - **Privacy & Lightweight Social Touches**
   - **Quiet Pause** toggle to hide your coordinates whenever you want privacy (`paused: true`, null coordinates).
-  - One-tap **Nudge** ("thinking of you") notification.
-  - Strictly capped at **two accounts** via single-use invite codes gated by `OURS_SETUP_KEY`.
+  - One-tap **Nudge** ("thinking of you") notification and **SOS** / crash alert.
+  - Strictly capped at **two accounts** via single-use invite codes (optionally gated by `OURS_SETUP_KEY`).
 
 ---
 
@@ -51,7 +51,7 @@ cd server
 cargo build --release
 ```
 
-Start the binary with a setup key (required to create the initial pair):
+Start the binary (optionally set `OURS_SETUP_KEY` to gate initial pair creation):
 
 ```bash
 OURS_BIND=0.0.0.0:8080 \
@@ -83,7 +83,7 @@ cd android
 
 ## Documentation
 
-- [`docs/API.md`](docs/API.md) — HTTP, WebSocket, auth, and FCM data-message contract
-- [`docs/PRD.md`](docs/PRD.md) — Product requirements and design notes
-- [`docs/VERIFICATION.md`](docs/VERIFICATION.md) — End-to-end verification checklist
-- [`deploy/README.md`](deploy/README.md) — Home server (`systemd` + Cloudflare Tunnel + backup) guide
+- [`docs/API.md`](docs/API.md) - HTTP, WebSocket, auth, and FCM data-message contract
+- [`docs/PRD.md`](docs/PRD.md) - Product requirements and design notes
+- [`docs/VERIFICATION.md`](docs/VERIFICATION.md) - End-to-end verification checklist
+- [`deploy/README.md`](deploy/README.md) - Home server (`systemd` + Cloudflare Tunnel + backup) guide

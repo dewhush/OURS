@@ -55,7 +55,15 @@ pub async fn ws_handler(
                 |r| r.get(0),
             )
             .optional()?;
-        Ok(found.is_some())
+        if found.is_some() {
+            conn.execute(
+                "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
+                params![now, user_id],
+            )?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     })
     .await??;
 
@@ -121,6 +129,18 @@ async fn handle_socket(state: AppState, user_id: i64, socket: WebSocket) {
                     if let Ok(parsed) = serde_json::from_str::<ClientMsg>(&txt)
                         && parsed.msg_type.as_deref() == Some("ping")
                     {
+                        let db = state.db.clone();
+                        tokio::task::spawn_blocking(move || {
+                            if let Ok(conn) = db.lock() {
+                                let now = now_ms();
+                                let stale_cutoff = now - 60_000;
+                                let _ = conn.execute(
+                                    "UPDATE users SET last_seen_at = ?1
+                                     WHERE id = ?2 AND (last_seen_at IS NULL OR last_seen_at <= ?3)",
+                                    params![now, user_id, stale_cutoff],
+                                );
+                            }
+                        });
                         let _ = pong_tx.try_send(Message::Text(r#"{"type":"pong"}"#.into()));
                     }
                 }

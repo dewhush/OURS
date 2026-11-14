@@ -13,8 +13,9 @@ use crate::db::{
     get_partner_id, get_user_fcm_token, get_user_name, insert_partner_event, now_ms,
 };
 use crate::error::{AppError, AppResult};
-use crate::models::{ChatMessage, Event, MessagesResponse};
+use crate::models::{ChatMessage, MessagesResponse};
 use crate::photos::{MAX_PHOTO_BYTES, PhotoGuard, save_jpeg_and_thumb};
+use crate::routes::{FcmPush, WsPush};
 use crate::state::AppState;
 
 #[derive(Deserialize)]
@@ -132,7 +133,7 @@ pub async fn post_message(
     let db = state.db.clone();
 
     let (msg, ws_push, fcm_push) = tokio::task::spawn_blocking(
-        move || -> AppResult<(ChatMessage, Option<(i64, Event)>, Option<(String, HashMap<String, String>)>)> {
+        move || -> AppResult<(ChatMessage, WsPush, FcmPush)> {
             let photo_id = if let Some(bytes) = photo_bytes {
                 Some(save_jpeg_and_thumb(&data_dir, &bytes)?)
             } else {

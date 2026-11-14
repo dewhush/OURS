@@ -11,7 +11,7 @@ Check methods: **B** build/test command, **C** curl/websocket against a locally 
 | ID | Check | Method | Status | Notes |
 | --- | --- | --- | --- | --- |
 | B1 | `cd server && cargo build --release --offline` succeeds | B | PASS | |
-| B2 | `cd server && cargo test --offline` passes; integration tests cover pairing, refresh, locations + piggyback, pause, places enter/exit, check-in upload/expiry/highlight, replies, photo auth, WebSocket | B + R | PASS | 5/5 integration tests passed |
+| B2 | `cd server && cargo test --offline` passes; integration tests cover pairing, refresh, locations + piggyback, pause, places enter/exit, check-in upload/expiry/highlight, replies, photo auth, WebSocket, avatar, SOS, pagination | B + R | PASS | 14/14 integration tests passed |
 | B3 | Release profile: lto, opt-level s/3, strip; binary size reported | R + B | PASS | `opt-level="s"`, `lto=true`, `strip=true`, `4.8M` |
 | B4 | `cd android && ./gradlew assembleDebug --offline` succeeds | B | PASS | `41M` (arm64-v8a + x86_64) |
 | B5 | `./gradlew assembleRelease --offline` succeeds; R8 minify + shrinkResources on; arm64-v8a ABI filter; APK size reported | B + R | PASS | `15M` (`isMinifyEnabled=true`, `isShrinkResources=true`, `arm64-v8a`) |
@@ -28,10 +28,10 @@ Check methods: **B** build/test command, **C** curl/websocket against a locally 
 | F4 | Check-in: photo + note + location tag, reply text/photo, 24h expiry (Must) | C: multipart `POST /api/checkins`, 400px thumb verified, `POST /api/checkins/{id}/replies`, expiry covered by `B2` | R: `ChatScreen` <=3-tap camera flow, 1600px JPEG 80 compression, `UploadManager` retry queue, `countdown24h` | PASS |
 | F5 | Highlights: save before expiry, live in timeline + map (Must) | C: `POST`/`DELETE /api/checkins/{id}/highlight`, `GET /api/memories`; expiry survival covered by `B2` | R: `ChatScreen` Save highlight, `MemoriesScreen` timeline + map pins | PASS |
 | F6 | Notifications: check-ins, replies, place arrive/leave (Must) | C: place enter/exit with 50m hysteresis (120m no exit, 200m exit, 0m enter), piggyback + inbox + WS | R: `LocationTrackingService` piggyback events -> `OursNotifier`, `POST_NOTIFICATIONS` | PASS |
-| F7 | Custom map: both people, places, highlight pins (Must) | — | R: MapLibre + OpenFreeMap + `assets/ours_map_style.json` | PASS |
+| F7 | Custom map: both people, places, highlight pins (Must) | N/A | R: MapLibre + OpenFreeMap + `assets/ours_map_style.json` | PASS |
 | F8 | Pause sharing with clear paused state on other side (Should) | C: `POST /api/sharing {paused:true}` clears coords, drops uploads, `partner_paused:true`, history `[]` | R: `SettingsScreen` toggle, `LocationTrackingService`/`WatchdogReceiver`/`BootReceiver` respect `sharingPaused`, `MapScreen` shows "Sharing paused" | PASS |
 | F9 | Thinking of you: one tap haptic buzz (Could) | C: `POST /api/nudge` -> 204 + `nudge` event | R: `MapScreen` nudge action, `OursNotifier` | PASS |
-| F10 | Location history 30 days, auto delete (Could) | C/R: `/api/partner/history`, `jobs.rs` hourly retention delete | — | PASS |
+| F10 | Location history 30 days, auto delete (Could) | C/R: `/api/partner/history`, `jobs.rs` hourly retention delete | N/A | PASS |
 
 ## 2. User stories (PRD §7)
 
@@ -43,13 +43,13 @@ Check methods: **B** build/test command, **C** curl/websocket against a locally 
 
 | ID | Check | Method | Status |
 | --- | --- | --- | --- |
-| X1-X10 | Map-first home, 4 tabs, design tokens (`Tokens.kt`), single action color (`#D95D39`/`#E8714D`), motion 200ms/160ms EaseOut/EaseInOut (no `spring`/bounce), `PRESS_SCALE=0.97f`, `tnum`, nested radius (`mediaCard = inner + sm`), onboarding order | R | PASS |
+| X1-X10 | Map-first home, 4 tabs, Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#0A84FF` Apple System Blue), motion 220ms/160ms EaseOut/EaseInOut (no `spring`/bounce), `PRESS_SCALE=0.97f`, `tnum`, nested radius (`mediaCard = inner + padding`), onboarding order | R | PASS |
 
 ## 4. Technical requirements (PRD §10)
 
 | ID | Check | Method | Status |
 | --- | --- | --- | --- |
-| T1-T12 | No Room/KSP/Play Services location; adaptive sampling; `LocationManager`; `SQLiteOpenHelper`; WS + 401 refresh-once; DTOs match `docs/API.md` field-for-field; server env config (refuses without `OURS_SETUP_KEY`); `deploy/` files for `192.168.100.92` (`mnemonic`); server idle RSS `6.21 MB`; `/health` unauthed | R + C | PASS |
+| T1-T12 | No Room/KSP/Play Services location; adaptive sampling; `LocationManager`; `SQLiteOpenHelper`; WS + 401 refresh-once; DTOs match `docs/API.md` field-for-field; server env config (optional `OURS_SETUP_KEY`, required if configured); `deploy/` files for `192.168.100.92` (`mnemonic`); server idle RSS `6.21 MB`; `/health` unauthed | R + C | PASS |
 
 ## 5. Privacy and security (PRD §11)
 

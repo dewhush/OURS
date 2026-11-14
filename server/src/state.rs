@@ -37,6 +37,12 @@ impl SlidingLimiter {
             guard.push(Instant::now());
         }
     }
+
+    pub fn clear(&self) {
+        if let Ok(mut guard) = self.attempts.lock() {
+            guard.clear();
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -103,6 +109,18 @@ impl AppState {
 
     pub fn record_refresh_failure(&self) {
         self.refresh_failures.record();
+    }
+
+    pub fn clear_join_rate_limit(&self) {
+        self.join_failures.clear();
+    }
+
+    pub fn clear_create_rate_limit(&self) {
+        self.create_failures.clear();
+    }
+
+    pub fn clear_refresh_rate_limit(&self) {
+        self.refresh_failures.clear();
     }
 
     pub async fn push_ws_event(&self, recipient_id: i64, event: &Event) {

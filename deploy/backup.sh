@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 DATA_DIR="${OURS_DATA_DIR:-/var/lib/ours}"
 BACKUP_ROOT="${OURS_BACKUP_DIR:-/var/backups/ours}"

@@ -6,9 +6,9 @@ use axum::{
 use rusqlite::params;
 
 use crate::auth::AuthUser;
-use crate::db::now_ms;
+use crate::db::{get_partner_id, now_ms};
 use crate::error::{AppError, AppResult};
-use crate::models::{CreatePlaceRequest, Place, PlacesResponse};
+use crate::models::{CreatePlaceRequest, Event, Place, PlacesResponse};
 use crate::state::AppState;
 
 pub async fn list_places(
@@ -66,7 +66,7 @@ pub async fn create_place(
     }
 
     let db = state.db.clone();
-    let place = tokio::task::spawn_blocking(move || -> AppResult<Place> {
+    let (place, partner_id) = tokio::task::spawn_blocking(move || -> AppResult<(Place, Option<i64>)> {
         let conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
@@ -77,38 +77,70 @@ pub async fn create_place(
             params![name, req.lat, req.lon, req.radius_m, user_id, now],
         )?;
         let id = conn.last_insert_rowid();
-        Ok(Place {
-            id,
-            name,
-            lat: req.lat,
-            lon: req.lon,
-            radius_m: req.radius_m,
-            created_by: user_id,
-            created_at: now,
-        })
+        let partner_id = get_partner_id(&conn, user_id)?;
+        Ok((
+            Place {
+                id,
+                name,
+                lat: req.lat,
+                lon: req.lon,
+                radius_m: req.radius_m,
+                created_by: user_id,
+                created_at: now,
+            },
+            partner_id,
+        ))
     })
     .await??;
+
+    if let Some(pid) = partner_id {
+        let ev = Event {
+            id: 0,
+            event_type: "places_changed".to_string(),
+            created_at: place.created_at,
+            actor_id: user_id,
+            data: serde_json::json!({}),
+        };
+        state.push_ws_event(pid, &ev).await;
+    }
 
     Ok((StatusCode::CREATED, Json(place)))
 }
 
 pub async fn delete_place(
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     State(state): State<AppState>,
     Path(place_id): Path<i64>,
 ) -> AppResult<StatusCode> {
     let db = state.db.clone();
-    let deleted = tokio::task::spawn_blocking(move || -> AppResult<usize> {
+    let (deleted, partner_id) = tokio::task::spawn_blocking(move || -> AppResult<(usize, Option<i64>)> {
         let conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
         let n = conn.execute("DELETE FROM places WHERE id = ?1", params![place_id])?;
-        Ok(n)
+        let partner_id = if n > 0 {
+            get_partner_id(&conn, user_id)?
+        } else {
+            None
+        };
+        Ok((n, partner_id))
     })
     .await??;
 
     if deleted == 0 {
         return Err(AppError::not_found("place not found"));
     }
+
+    if let Some(pid) = partner_id {
+        let ev = Event {
+            id: 0,
+            event_type: "places_changed".to_string(),
+            created_at: now_ms(),
+            actor_id: user_id,
+            data: serde_json::json!({}),
+        };
+        state.push_ws_event(pid, &ev).await;
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }

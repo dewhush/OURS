@@ -14,8 +14,9 @@ use crate::db::{
     load_replies_for_checkin, now_ms,
 };
 use crate::error::{AppError, AppResult};
-use crate::models::{CheckIn, CheckInsResponse, MemoriesResponse, Reply};
+use crate::models::{CheckIn, CheckInsResponse, Event, MemoriesResponse, Reply};
 use crate::photos::{PhotoGuard, delete_photo_files, save_jpeg_and_thumb};
+use crate::routes::{FcmPush, WsPush};
 use crate::state::AppState;
 
 const CHECKIN_TTL_MS: i64 = 24 * 60 * 60 * 1000;
@@ -125,7 +126,7 @@ pub async fn create_checkin(
     let db = state.db.clone();
 
     let (checkin, ws_push, fcm_push) = tokio::task::spawn_blocking(
-        move || -> AppResult<(CheckIn, Option<(i64, crate::models::Event)>, Option<(String, HashMap<String, String>)>)> {
+        move || -> AppResult<(CheckIn, WsPush, FcmPush)> {
             let photo_id = save_jpeg_and_thumb(&data_dir, &photo_bytes)?;
             let mut photo_guard = PhotoGuard::new(&data_dir, photo_id.clone());
 
@@ -274,7 +275,7 @@ pub async fn delete_checkin(
     let db = state.db.clone();
     let data_dir = state.config.data_dir.clone();
 
-    tokio::task::spawn_blocking(move || -> AppResult<()> {
+    let partner_id = tokio::task::spawn_blocking(move || -> AppResult<Option<i64>> {
         let mut conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
@@ -307,14 +308,26 @@ pub async fn delete_checkin(
         }
 
         tx.execute("DELETE FROM checkins WHERE id = ?1", params![checkin_id])?;
+        let partner_id = get_partner_id(&tx, user_id)?;
         tx.commit()?;
 
         for pid in photo_ids {
             delete_photo_files(&data_dir, &pid);
         }
-        Ok(())
+        Ok(partner_id)
     })
     .await??;
+
+    if let Some(pid) = partner_id {
+        let ev = Event {
+            id: 0,
+            event_type: "checkin_deleted".to_string(),
+            created_at: now_ms(),
+            actor_id: user_id,
+            data: serde_json::json!({ "checkin_id": checkin_id }),
+        };
+        state.push_ws_event(pid, &ev).await;
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -343,7 +356,7 @@ async fn toggle_highlight(
 ) -> AppResult<Json<CheckIn>> {
     let db = state.db.clone();
     let (checkin, ws_push, fcm_push) = tokio::task::spawn_blocking(
-        move || -> AppResult<(CheckIn, Option<(i64, crate::models::Event)>, Option<(String, HashMap<String, String>)>)> {
+        move || -> AppResult<(CheckIn, WsPush, FcmPush)> {
             let mut conn = db
                 .lock()
                 .map_err(|_| AppError::internal("database lock poisoned"))?;
@@ -469,7 +482,7 @@ pub async fn create_reply(
     let db = state.db.clone();
 
     let (reply, ws_push, fcm_push) = tokio::task::spawn_blocking(
-        move || -> AppResult<(Reply, Option<(i64, crate::models::Event)>, Option<(String, HashMap<String, String>)>)> {
+        move || -> AppResult<(Reply, WsPush, FcmPush)> {
             let photo_id = if let Some(bytes) = photo_bytes {
                 Some(save_jpeg_and_thumb(&data_dir, &bytes)?)
             } else {

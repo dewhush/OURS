@@ -1,10 +1,10 @@
 # OURS Design System
 
 ## Design Read
-Reading this as: private two-person location, photo check-in, and messenger companion app for couples, in an iOS 26+ Liquid Glass + Apple Cobalt Blue & Crisp Pearl Glass style, dial `ENERGY 2 / RHYTHM 2 / MOTION 2`.
+Reading this as: private two-person location, photo check-in, and messenger companion app for couples, in an Apple HIG Light/Dark & iOS 26+ Liquid Glass style, dial `ENERGY 2 / RHYTHM 2 / MOTION 2`.
 
 ### Liveliness Dials
-- **ENERGY 2 (Balanced)**: Crisp Pearl Glass (`#F5F7FA`) and Midnight Slate (`#0B0E14`) ground plane with a single deliberate Apple Cobalt Blue focal accent (`#005EC4` light / `#5EA8FF` dark) reserved for primary CTAs, active navigation, and partner markers.
+- **ENERGY 2 (Balanced)**: Apple HIG Light (`#F2F2F7` / `#FFFFFF`) and Dark (`#000000` / `#1C1C1E` / `#2C2C2E`) ground plane with Apple System Blue (`#0066CC` light / `#0A84FF` dark) reserved for primary CTAs, active navigation, and partner markers.
 - **RHYTHM 2 (Consistent with intentional breaks)**: Full-bleed live Map and Memories Map views contrast against structured Timeline, Messenger, and Settings cards.
 - **MOTION 2 (Purposeful choreography)**: Apple fluid easing (`CubicBezierEasing(0.22f, 1f, 0.36f, 1f)`), `220ms` entrances, `160ms` exits, `0.97f` press micro-scale, and expanding Nudge ripple waves on the Map.
 
@@ -23,5 +23,5 @@ Clean weight-contrasted sentence/title case without wide-tracked uppercase templ
 
 ### WCAG AA Color Tokens (R-25)
 All normal-text foreground/background pairings clear `4.5:1`:
-- **Light (`OursLightColors`)**: `canvas = #F5F7FA`, `surface = #FFFFFF`, `surfaceMuted = #EBEEF3`, `ink = #0F141C`, `inkSecondary = #3E4856`, `inkMuted = #525D6D`, `action = #005EC4`, `onAction = #FFFFFF`, `actionSoft = #E6F0FC`, `success = #196F43`, `successSoft = #E8F5EE`, `danger = #B83232`, `dangerSoft = #FCECEC`, `paused = #4B5563`, `pausedSoft = #EBEEF3`.
-- **Dark (`OursDarkColors`)**: `canvas = #0B0E14`, `surface = #131822`, `surfaceMuted = #1C2330`, `ink = #F5F7FA`, `inkSecondary = #B8C2D0`, `inkMuted = #8E99AA`, `action = #5EA8FF`, `onAction = #08101C`, `actionSoft = #122742`, `success = #45C486`, `successSoft = #142E21`, `danger = #E85D5D`, `dangerSoft = #2E1616`.
+- **Light (`OursLightColors`)**: `canvas = #F2F2F7`, `surface = #FFFFFF`, `surfaceMuted = #E5E5EA`, `ink = #000000`, `inkSecondary = #3C3C43`, `inkMuted = #5C5C60`, `action = #0066CC`, `onAction = #FFFFFF`, `actionSoft = #E5F0FF`, `success = #196F43`, `successSoft = #E8F5EE`, `danger = #B83232`, `dangerSoft = #FCECEC`, `paused = #4B5563`, `pausedSoft = #E5E5EA`.
+- **Dark (`OursDarkColors`)**: `canvas = #000000`, `surface = #1C1C1E`, `surfaceMuted = #2C2C2E`, `ink = #FFFFFF`, `inkSecondary = #AEAEB2`, `inkMuted = #8E8E93`, `action = #0A84FF`, `onAction = #FFFFFF`, `actionSoft = #0D2B4D`, `success = #45C486`, `successSoft = #142E21`, `danger = #E85D5D`, `dangerSoft = #2E1616`.

@@ -14,6 +14,7 @@ use crate::db::{
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{Event, EventsResponse, SosRequest, SosResponse};
+use crate::routes::{FcmPush, WsPush};
 use crate::state::AppState;
 
 pub async fn nudge(
@@ -22,7 +23,7 @@ pub async fn nudge(
 ) -> AppResult<StatusCode> {
     let db = state.db.clone();
     let (ws_push, fcm_push) = tokio::task::spawn_blocking(
-        move || -> AppResult<(Option<(i64, Event)>, Option<(String, HashMap<String, String>)>)> {
+        move || -> AppResult<(WsPush, FcmPush)> {
             let mut conn = db
                 .lock()
                 .map_err(|_| AppError::internal("database lock poisoned"))?;
@@ -118,7 +119,7 @@ pub async fn send_sos(
 
     let db = state.db.clone();
     let (event_id, ws_push, fcm_push) = tokio::task::spawn_blocking(
-        move || -> AppResult<(Option<i64>, Option<(i64, Event)>, Option<(String, HashMap<String, String>)>)> {
+        move || -> AppResult<(Option<i64>, WsPush, FcmPush)> {
             let mut conn = db
                 .lock()
                 .map_err(|_| AppError::internal("database lock poisoned"))?;

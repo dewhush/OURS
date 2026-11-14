@@ -286,9 +286,7 @@ is created only records the state, without an event. Each transition creates a `
 Errors: `400 bad_request` (missing or non-JPEG photo), `413 too_large`. Sends a `checkin` event.
 
 ### `GET /api/checkins` (auth)
--> `200 {"checkins": [CheckIn, ...]}`: every check-in by either user that has not expired yet
-(created in the last 24h), highlighted or not, newest first, with replies inline.
-Older highlighted check-ins are served by `/api/memories`.
+-> `200 {"checkins": [CheckIn, ...]}`: all active (unexpired) and highlighted check-ins, newest first, with replies inline.
 
 ### `GET /api/checkins/{id}` (auth)
 -> `200 CheckIn`. Expired non-highlighted check-ins are `404 not_found` (even before the hourly sweep deletes them).
@@ -306,10 +304,10 @@ Parts: `text` (max 1000 chars) and/or `photo` (JPEG, max 10 MB); at least one.
 -> `201 Reply`. Replies are deleted with their check-in and kept while it is highlighted.
 Replying to an expired check-in: `410 expired`. Sends a `reply` event.
 
-### `GET /api/memories?before=<ms>&limit=<n>` (auth)
-Highlighted check-ins ordered by `created_at` newest first, with `created_at < before` (default: now),
+### `GET /api/memories?before=<ms>&before_id=<id>&limit=<n>` (auth)
+Highlighted check-ins ordered by `created_at DESC, id DESC`, with `(created_at < before)` (or `(created_at < before OR (created_at = before AND id < before_id))` when `before_id` is supplied; `before` defaults to now),
 `limit` default 50, max 200.
--> `200 {"items": [CheckIn, ...], "next_before": 1731400000000 | null}` (`null` when there are no more).
+-> `200 {"items": [CheckIn, ...], "next_before": 1731400000000 | null, "next_before_id": 42 | null}` (`null` / omitted when there are no more).
 
 ## Chat messages
 
@@ -325,10 +323,10 @@ Plain text / photo messages for the messenger thread (merged on the client with 
 At least one of `text` or `photo` is required.
 -> `201 ChatMessage`. Sends a `chat_message` event to the partner.
 
-### `GET /api/messages?before=<ms>&limit=<n>` (auth)
-Messages ordered **newest first** (`created_at DESC, id DESC`), with `created_at < before` (default: now),
+### `GET /api/messages?before=<ms>&before_id=<id>&limit=<n>` (auth)
+Messages ordered **newest first** (`created_at DESC, id DESC`), with `(created_at < before)` (or `(created_at < before OR (created_at = before AND id < before_id))` when `before_id` is supplied; `before` defaults to now),
 `limit` default 50, max 200.
--> `200 {"items": [ChatMessage, ...], "next_before": 1731400000000 | null}` (`null` when there are no more).
+-> `200 {"items": [ChatMessage, ...], "next_before": 1731400000000 | null, "next_before_id": 42 | null}` (`null` / omitted when there are no more).
 
 ## Photos
 
@@ -357,8 +355,9 @@ Glide/Coil: add the `Authorization` header to image requests.
 
 `GET /api/ws?token=<access_token>` (upgrade). An invalid token is rejected with `401` before upgrade.
 
-- Server -> client: text frames, each one `Event` JSON (same shape as the inbox), including `location`
-  events (`id` 0) whenever the partner uploads a newer location or pauses.
+- Server -> client: text frames, each one `Event` JSON (same shape as the inbox), including ephemeral
+  events (`id` 0): `location` (whenever the partner uploads a newer location or pauses), `places_changed`
+  (when a place is created or deleted), and `checkin_deleted` (`{"checkin_id": 12}` when a check-in is deleted).
 - The server sends a WebSocket ping every 30 s; the client may send `{"type":"ping"}` text frames and
   gets `{"type":"pong"}` back. Other client messages are ignored.
 - The socket is not closed when the access token expires, but the client should reconnect with a fresh

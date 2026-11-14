@@ -89,6 +89,8 @@ struct PendingFcm {
     data: HashMap<String, String>,
 }
 
+type LocationBatchResult = (LocationsResponse, Vec<(i64, Event)>, Vec<PendingFcm>);
+
 pub async fn post_locations(
     AuthUser(user_id): AuthUser,
     State(state): State<AppState>,
@@ -108,7 +110,7 @@ pub async fn post_locations(
     let after_event_id = query.after_event_id;
 
     let (resp, ws_pushes, fcm_pushes) = tokio::task::spawn_blocking(
-        move || -> AppResult<(LocationsResponse, Vec<(i64, Event)>, Vec<PendingFcm>)> {
+        move || -> AppResult<LocationBatchResult> {
             let mut conn = db
                 .lock()
                 .map_err(|_| AppError::internal("database lock poisoned"))?;
@@ -168,7 +170,6 @@ pub async fn post_locations(
                 }
             }
 
-            // Update latest_locations if newest point is newer than stored
             let newest = points.last().expect("non-empty batch");
             let existing_recorded_at: Option<i64> = tx
                 .query_row(
@@ -213,7 +214,6 @@ pub async fn post_locations(
                 )?;
             }
 
-            // Place enter/exit detection
             let places: Vec<(i64, String, f64, f64, f64)> = {
                 let mut stmt =
                     tx.prepare("SELECT id, name, lat, lon, radius_m FROM places ORDER BY id")?;

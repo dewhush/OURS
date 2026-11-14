@@ -287,7 +287,7 @@ This section adds to the full PRD above. Where it differs, this section wins.
 
 - Map-first home screen showing the partner's position, last-updated time, battery and status, with check-in reachable in one tap.
 - Few screens: Map, Memories (timeline and map of photos), Chat/replies, and Settings (places, pause, setup guide).
-- Build the design system first: tokens for color, type, spacing, radius and motion, plus a small component set (buttons, cards, bottom sheet, avatar, status chip).
+- Build the design system first: Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#0A84FF` Apple System Blue), tokens for color, type, spacing, radius and motion, plus a small component set (buttons, cards, bottom sheet, avatar, status chip).
 - One action color, consistent icons, clear headlines, loading states, and animated feedback on send and upload, following the saved design and animation lists.
 - Keep motion simple and fast: ease-out entrances, 150 to 250 ms, no bounce on everyday UI.
 - Large touch targets and few choices per screen (Fitts's, Hick's and Miller's laws).
@@ -307,7 +307,8 @@ This section adds to the full PRD above. Where it differs, this section wins.
 - Database: embedded SQLite for users, locations, places, check-ins and replies; simple, lightweight, and easy to back up.
 - Photos: stored as files on local disk with metadata in SQLite; generate thumbnails on upload.
 - Real-time: WebSocket endpoint pushing partner location and new messages; REST for the rest.
-- Auth: two paired accounts, invite-code pairing, and short-lived tokens over HTTPS.
+- Auth: two paired accounts, invite-code pairing (optionally gated by `OURS_SETUP_KEY`), and short-lived tokens over HTTPS.
+- Profile avatar (`POST /api/me/avatar`), pair state (`GET /api/pair/state`), and SOS / crash alerts (`POST /api/sos`).
 - Wake-up pushes: server tracks last-seen time per phone and sends a high-priority push when a phone has been quiet too long.
 - Deployment: a single small binary on the home server, reached through Cloudflare Tunnel or similar with no VPN app on either phone, with automatic backups of the database and photos.
 - Retention: a scheduled job deletes location history older than the retention period (30 days proposed).
@@ -423,7 +424,7 @@ Two users, me and my girlfriend, each on the same phone model, a Poco X8 (Xiaomi
 
 - Map-first home screen showing the partner's position, speed, last-updated time and battery, with check-in reachable in one tap.
 - Few screens: Map, Memories (highlights as a timeline and map), Chat and replies, and Settings (places, pause, setup guide).
-- Build the design system first: tokens for color, type, spacing, radius and motion, plus a small component set (buttons, cards, bottom sheet, avatar, status chip).
+- Build the design system first: Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#0A84FF` Apple System Blue), tokens for color, type, spacing, radius and motion, plus a small component set (buttons, cards, bottom sheet, avatar, status chip).
 - A custom map style that matches the design system.
 - One action color, consistent icons, clear headlines, loading states and animated feedback on send and upload, following the saved design and animation lists.
 - Fast, simple motion: ease-out entrances, 150 to 250 ms, no bounce on everyday UI.
@@ -452,7 +453,8 @@ Two users, me and my girlfriend, each on the same phone model, a Poco X8 (Xiaomi
 - Rust, preferred for low memory use and speed on a home server; a framework such as Axum is a likely fit.
 - SQLite for users, locations, places, check-ins and replies; photos stored as files on local disk with thumbnails generated on upload.
 - WebSocket endpoint for partner location and new messages; REST for everything else.
-- Auth: two paired accounts, invite-code pairing, and short-lived tokens over HTTPS.
+- Auth: two paired accounts, invite-code pairing (optionally gated by `OURS_SETUP_KEY`), and short-lived tokens over HTTPS.
+- Profile avatar (`POST /api/me/avatar`), pair state (`GET /api/pair/state`), and SOS / crash alerts (`POST /api/sos`).
 - Wake-up pushes: the server tracks last-seen time per phone and sends a high-priority push when a phone has been quiet too long. Firebase Cloud Messaging is the easiest route and can be used for wake-ups alone.
 - Jobs: delete expired check-in photos after 24 hours unless saved as highlights, and delete location history past the retention period.
 - Deployment: a single small binary on the home server, reached through Cloudflare Tunnel or similar, with automatic backups of the database and highlight photos.

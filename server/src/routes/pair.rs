@@ -16,6 +16,7 @@ use crate::models::{
     MeResponse, PairStateResponse, PushTokenRequest, RefreshRequest, Tokens, User,
 };
 use crate::photos::{MAX_PHOTO_BYTES, PhotoGuard, delete_photo_files, save_jpeg_and_thumb};
+use crate::routes::{FcmPush, WsPush};
 use crate::state::AppState;
 
 const INVITE_TTL_MS: i64 = 24 * 60 * 60 * 1000;
@@ -107,6 +108,7 @@ pub async fn create_pair(
     })
     .await??;
 
+    state.clear_create_rate_limit();
     Ok((StatusCode::CREATED, Json(resp)))
 }
 
@@ -207,7 +209,10 @@ pub async fn join_pair(
     .await?;
 
     match res {
-        Ok(resp) => Ok((StatusCode::CREATED, Json(resp))),
+        Ok(resp) => {
+            state.clear_join_rate_limit();
+            Ok((StatusCode::CREATED, Json(resp)))
+        }
         Err(err) => {
             if err.code == "invite_not_found" {
                 state.record_join_failure();
@@ -274,7 +279,10 @@ pub async fn refresh_auth(
     .await?;
 
     match res {
-        Ok(tokens) => Ok(Json(tokens)),
+        Ok(tokens) => {
+            state.clear_refresh_rate_limit();
+            Ok(Json(tokens))
+        }
         Err(err) => {
             if err.code == "invalid_refresh_token" {
                 state.record_refresh_failure();
@@ -396,7 +404,7 @@ pub async fn upload_avatar(
     let db = state.db.clone();
 
     let (user, ws_push, fcm_push) = tokio::task::spawn_blocking(
-        move || -> AppResult<(User, Option<(i64, crate::models::Event)>, Option<(String, std::collections::HashMap<String, String>)>)> {
+        move || -> AppResult<(User, WsPush, FcmPush)> {
             let photo_id = save_jpeg_and_thumb(&data_dir, &photo_bytes)?;
             let mut photo_guard = PhotoGuard::new(&data_dir, photo_id.clone());
 
