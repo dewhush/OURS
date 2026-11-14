@@ -23,7 +23,7 @@ object MapMarkerFactory {
         val cy = sizePx / 2f
 
         val ringColor = if (isLive) Color.parseColor("#228B54") else Color.parseColor("#787570")
-        val fillColor = Color.parseColor("#D4623F")
+        val fillColor = Color.parseColor("#005EC4")
 
         // Outer translucent halo
         val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -47,7 +47,7 @@ object MapMarkerFactory {
         }
         canvas.drawCircle(cx, cy, 18.5f * density, statusRingPaint)
 
-        // Terracotta core
+        // Cobalt core
         val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = fillColor
         }
@@ -83,7 +83,7 @@ object MapMarkerFactory {
         val canvas = Canvas(bmp)
 
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#181615")
+            color = Color.parseColor("#0F141C")
         }
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
@@ -111,7 +111,7 @@ object MapMarkerFactory {
         val whitePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
         canvas.drawCircle(cx, cy, 13f * density, whitePaint)
 
-        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#D4623F") }
+        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#005EC4") }
         canvas.drawCircle(cx, cy, 10f * density, accentPaint)
 
         val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }

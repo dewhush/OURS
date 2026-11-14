@@ -186,7 +186,7 @@ object OursNotifier {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val avatar = createAvatarBitmap(senderName, 0xFFD4623F.toInt())
+        val avatar = createAvatarBitmap(senderName, 0xFF005EC4.toInt())
         val sender = Person.Builder()
             .setName(senderName)
             .setIcon(IconCompat.createWithBitmap(avatar))
@@ -197,7 +197,7 @@ object OursNotifier {
         val builder = NotificationCompat.Builder(context, CHANNEL_UPDATES)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setLargeIcon(avatar)
-            .setColor(0xFFD4623F.toInt())
+            .setColor(0xFF005EC4.toInt())
             .setSubText("OURS")
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -225,7 +225,7 @@ object OursNotifier {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val badgeColor = 0xFFD4623F.toInt()
+        val badgeColor = 0xFF005EC4.toInt()
         val avatar = createAvatarBitmap(title, badgeColor)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -254,7 +254,7 @@ object OursNotifier {
 
         val ch = label.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "O"
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFFAF8F4.toInt()
+            color = 0xFFF5F7FA.toInt()
             textSize = 56f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER

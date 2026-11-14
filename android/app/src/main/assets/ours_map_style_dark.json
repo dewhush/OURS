@@ -1,6 +1,6 @@
 {
   "version": 8,
-  "name": "OURS Monochrome Dark",
+  "name": "OURS Midnight Slate Dark",
   "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
   "sources": {
     "openmaptiles": {
@@ -13,7 +13,7 @@
       "id": "background",
       "type": "background",
       "paint": {
-        "background-color": "#121210"
+        "background-color": "#0B0E14"
       }
     },
     {
@@ -23,7 +23,7 @@
       "source-layer": "landuse",
       "filter": ["in", "class", "residential", "suburb", "neighbourhood"],
       "paint": {
-        "fill-color": "#181816"
+        "fill-color": "#11161F"
       }
     },
     {
@@ -33,7 +33,7 @@
       "source-layer": "landcover",
       "filter": ["in", "class", "grass", "wood", "park", "forest"],
       "paint": {
-        "fill-color": "#18221B"
+        "fill-color": "#13201B"
       }
     },
     {
@@ -43,7 +43,7 @@
       "source-layer": "landuse",
       "filter": ["in", "class", "park", "cemetery", "pitch", "playground", "recreation_ground"],
       "paint": {
-        "fill-color": "#18221B"
+        "fill-color": "#13201B"
       }
     },
     {
@@ -52,7 +52,7 @@
       "source": "openmaptiles",
       "source-layer": "water",
       "paint": {
-        "fill-color": "#14222B"
+        "fill-color": "#101E2E"
       }
     },
     {
@@ -61,7 +61,7 @@
       "source": "openmaptiles",
       "source-layer": "waterway",
       "paint": {
-        "line-color": "#1A2C38",
+        "line-color": "#16293D",
         "line-width": 1.6
       }
     },
@@ -72,8 +72,8 @@
       "source-layer": "building",
       "minzoom": 13.5,
       "paint": {
-        "fill-color": "#1E1E1B",
-        "fill-outline-color": "#2A2A26"
+        "fill-color": "#171D28",
+        "fill-outline-color": "#222B3A"
       }
     },
     {
@@ -88,7 +88,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#1D1D1A",
+        "line-color": "#151B25",
         "line-width": ["interpolate", ["linear"], ["zoom"], 13, 2.0, 16, 6.0]
       }
     },
@@ -104,7 +104,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#2C2C28",
+        "line-color": "#222B3A",
         "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.0, 16, 4.2]
       }
     },
@@ -119,7 +119,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#22221F",
+        "line-color": "#1A2230",
         "line-width": ["interpolate", ["linear"], ["zoom"], 10, 2.0, 16, 8.0]
       }
     },
@@ -134,7 +134,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#383833",
+        "line-color": "#2C374B",
         "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.2, 16, 6.0]
       }
     },
@@ -149,7 +149,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#262622",
+        "line-color": "#1F2838",
         "line-width": ["interpolate", ["linear"], ["zoom"], 6, 2.0, 16, 10.5]
       }
     },
@@ -164,7 +164,7 @@
         "line-join": "round"
       },
       "paint": {
-        "line-color": "#484842",
+        "line-color": "#38465E",
         "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.2, 16, 8.0]
       }
     },
@@ -181,8 +181,8 @@
         "text-max-width": 8
       },
       "paint": {
-        "text-color": "#D8D5CE",
-        "text-halo-color": "#121210",
+        "text-color": "#CBD5E1",
+        "text-halo-color": "#0B0E14",
         "text-halo-width": 1.6
       }
     },
@@ -199,8 +199,8 @@
         "text-size": 11
       },
       "paint": {
-        "text-color": "#D8D5CE",
-        "text-halo-color": "#121210",
+        "text-color": "#CBD5E1",
+        "text-halo-color": "#0B0E14",
         "text-halo-width": 1.3
       }
     }
