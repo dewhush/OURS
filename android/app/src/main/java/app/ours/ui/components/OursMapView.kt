@@ -40,6 +40,7 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
+import org.maplibre.android.maps.MapLibreMapOptions
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 
@@ -64,7 +65,14 @@ fun OursMapView(
     val isDark = OursTheme.isDark
     val styleUri = if (isDark) "asset://ours_map_style_dark.json" else "asset://ours_map_style.json"
 
-    val mapView = remember { MapView(context) }
+    val mapView = remember {
+        MapView(
+            context,
+            MapLibreMapOptions.createFromAttributes(context).textureMode(true),
+        ).apply {
+            onCreate(null)
+        }
+    }
     var mapRef by remember { mutableStateOf<MapLibreMap?>(null) }
     var styleReady by remember { mutableStateOf(false) }
     var hasMovedInitialCamera by remember { mutableStateOf(false) }
@@ -79,7 +87,6 @@ fun OursMapView(
     DisposableEffect(lifecycleOwner, mapView) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_CREATE -> mapView.onCreate(null)
                 Lifecycle.Event.ON_START -> mapView.onStart()
                 Lifecycle.Event.ON_RESUME -> mapView.onResume()
                 Lifecycle.Event.ON_PAUSE -> mapView.onPause()
