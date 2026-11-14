@@ -49,18 +49,23 @@ private const val OFFLINE_FALLBACK_URL = "file:///android_asset/web/index.html"
 
 private fun resolveReachableServerUrl(preferred: String): String? {
     val candidates = linkedSetOf(
+        "https://ours.mnemonic.my.id",
         preferred.trim().trimEnd('/'),
-        "http://127.0.0.1:8787",
-        "http://192.168.100.12:8787",
-        "http://100.120.106.95:8787",
-    ).filter { it.startsWith("http://") || it.startsWith("https://") }
+        "https://rebate-engines-reproduced-hereby.trycloudflare.com",
+        "http://192.168.100.92:8787",
+        "http://100.114.15.94:8787",
+    ).filter {
+        (it.startsWith("http://") || it.startsWith("https://")) &&
+            !it.contains("127.0.0.1") &&
+            !it.contains(":8080")
+    }
 
     for (base in candidates) {
         val ok = runCatching {
             val conn = (URL("$base/healthz").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 700
-                readTimeout = 700
+                connectTimeout = 1500
+                readTimeout = 1500
             }
             val code = conn.responseCode
             conn.disconnect()

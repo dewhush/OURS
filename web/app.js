@@ -245,8 +245,9 @@
       if (!raw) return;
       const n = JSON.parse(raw);
       const savedUrl = localStorage.getItem("ours_server_url") || "";
-      if (n.serverUrl && (!savedUrl || savedUrl.includes(":8080") || savedUrl.startsWith("file:"))) {
+      if (n.serverUrl && (!savedUrl || savedUrl.includes(":8080") || savedUrl.includes("127.0.0.1") || savedUrl.startsWith("file:"))) {
         state.serverUrl = n.serverUrl;
+        localStorage.setItem("ours_server_url", n.serverUrl);
       }
       if (n.accessToken && !state.accessToken) state.accessToken = n.accessToken;
       if (n.refreshToken && !state.refreshToken) state.refreshToken = n.refreshToken;

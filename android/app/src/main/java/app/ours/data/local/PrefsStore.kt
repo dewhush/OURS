@@ -13,11 +13,15 @@ class PrefsStore(context: Context) {
     var serverUrl: String
         get() {
             val stored = prefs.getString(KEY_SERVER_URL, null)?.takeIf { it.isNotBlank() }
-            if (stored != null && !stored.contains(":8080") && !stored.contains("192.168.100.92")) {
+            if (stored != null &&
+                !stored.contains(":8080") &&
+                !stored.contains("127.0.0.1") &&
+                !stored.contains("192.168.100.12")
+            ) {
                 return stored
             }
             return BuildConfig.DEFAULT_SERVER_URL.takeIf { it.isNotBlank() }
-                ?: "http://127.0.0.1:8787"
+                ?: "https://rebate-engines-reproduced-hereby.trycloudflare.com"
         }
         set(value) = prefs.edit().putString(KEY_SERVER_URL, value.trim().trimEnd('/')).apply()
 

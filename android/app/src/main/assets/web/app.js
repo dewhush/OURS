@@ -244,13 +244,27 @@
       const raw = native.getNativeState();
       if (!raw) return;
       const n = JSON.parse(raw);
-      if (n.serverUrl && !localStorage.getItem("ours_server_url")) state.serverUrl = n.serverUrl;
+      const savedUrl = localStorage.getItem("ours_server_url") || "";
+      if (n.serverUrl && (!savedUrl || savedUrl.includes(":8080") || savedUrl.includes("127.0.0.1") || savedUrl.startsWith("file:"))) {
+        state.serverUrl = n.serverUrl;
+        localStorage.setItem("ours_server_url", n.serverUrl);
+      }
       if (n.accessToken && !state.accessToken) state.accessToken = n.accessToken;
       if (n.refreshToken && !state.refreshToken) state.refreshToken = n.refreshToken;
       if (n.deviceId) state.deviceId = n.deviceId;
       if (typeof n.sharingPaused === "boolean") state.sharingPaused = n.sharingPaused;
       if (typeof n.crashDetectionEnabled === "boolean") state.crashDetectionEnabled = n.crashDetectionEnabled;
       if (n.emergencyContact && !state.emergencyContact) state.emergencyContact = n.emergencyContact;
+      if (typeof n.lat === "number" && typeof n.lon === "number" && !state.meLocation) {
+        state.meLocation = {
+          lat: n.lat,
+          lon: n.lon,
+          speed_mps: 0,
+          battery_pct: typeof n.batteryPct === "number" ? n.batteryPct : 100,
+          charging: Boolean(n.charging),
+          recorded_at: Date.now()
+        };
+      }
     } catch (_) {}
   }
 
