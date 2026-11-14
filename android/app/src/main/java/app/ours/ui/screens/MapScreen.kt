@@ -62,7 +62,6 @@ import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursMapView
-import app.ours.ui.components.OursNudgeWaveOverlay
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursContentWidth
@@ -162,11 +161,7 @@ fun MapScreen(
             places = state.places,
             highlights = state.memories,
             recenterTrigger = recenterTrigger,
-        )
-
-        OursNudgeWaveOverlay(
-            nudgeKey = nudgePulseKey,
-            modifier = Modifier.fillMaxSize(),
+            nudgeTrigger = nudgePulseKey,
         )
 
         AnimatedVisibility(
