@@ -41,6 +41,7 @@ impl TestApp {
             history_days: 30,
             stale_minutes: 15,
             fcm_service_account: None,
+            web_dir: None,
         };
 
         let db = open_db(&data_dir.join("ours.db")).expect("open_db");
@@ -1443,4 +1444,43 @@ async fn rate_limiter_isolates_clients_and_keys() {
         .await
         .unwrap();
     assert_eq!(ok_join.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn web_app_assets_served_with_no_cache_headers() {
+    let app = TestApp::start().await;
+
+    for (path, expected_ct) in [
+        ("/", "text/html"),
+        ("/app.js", "application/javascript"),
+        ("/styles.css", "text/css"),
+        ("/manifest.webmanifest", "application/manifest+json"),
+        ("/sw.js", "application/javascript"),
+    ] {
+        let resp = app
+            .client
+            .get(format!("{}{}", app.base_url, path))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "path={path}");
+        let ct = resp
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(ct.contains(expected_ct), "path={path} ct={ct}");
+        let cc = resp
+            .headers()
+            .get("cache-control")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(cc.contains("no-cache"), "path={path} cc={cc}");
+        let body = resp.text().await.unwrap();
+        assert!(!body.is_empty(), "path={path}");
+    }
 }

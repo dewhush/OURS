@@ -28,7 +28,18 @@ async fn health() -> Json<serde_json::Value> {
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(routes::web::index_html))
+        .route("/index.html", get(routes::web::index_html))
+        .route("/styles.css", get(routes::web::styles_css))
+        .route("/web/styles.css", get(routes::web::styles_css))
+        .route("/app.js", get(routes::web::app_js))
+        .route("/web/app.js", get(routes::web::app_js))
+        .route("/manifest.webmanifest", get(routes::web::manifest_webmanifest))
+        .route("/web/manifest.webmanifest", get(routes::web::manifest_webmanifest))
+        .route("/sw.js", get(routes::web::sw_js))
+        .route("/web/sw.js", get(routes::web::sw_js))
         .route("/health", get(health))
+        .route("/healthz", get(health))
         .route("/api/pair/create", post(routes::pair::create_pair))
         .route("/api/pair/invite", get(routes::pair::reissue_invite))
         .route("/api/pair/join", post(routes::pair::join_pair))

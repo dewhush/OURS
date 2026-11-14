@@ -12,6 +12,7 @@ pub struct Config {
     pub history_days: i64,
     pub stale_minutes: i64,
     pub fcm_service_account: Option<PathBuf>,
+    pub web_dir: Option<PathBuf>,
 }
 
 impl Config {
@@ -54,6 +55,24 @@ impl Config {
             .filter(|s| !s.trim().is_empty())
             .map(PathBuf::from);
 
+        let web_dir = std::env::var("OURS_WEB_DIR")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                let cwd_web = PathBuf::from("./web");
+                if cwd_web.is_dir() {
+                    Some(cwd_web)
+                } else {
+                    let parent_web = PathBuf::from("../web");
+                    if parent_web.is_dir() {
+                        Some(parent_web)
+                    } else {
+                        None
+                    }
+                }
+            });
+
         Ok(Self {
             bind,
             data_dir,
@@ -62,6 +81,7 @@ impl Config {
             history_days,
             stale_minutes,
             fcm_service_account,
+            web_dir,
         })
     }
 }

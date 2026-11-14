@@ -11,3 +11,4 @@ pub mod locations;
 pub mod messages;
 pub mod pair;
 pub mod places;
+pub mod web;
