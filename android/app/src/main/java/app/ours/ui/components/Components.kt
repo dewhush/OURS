@@ -437,7 +437,7 @@ fun <T> OursSegmentedControl(
                 Box(
                     modifier = Modifier
                         .width(segmentWidth)
-                        .heightIn(min = 38.dp)
+                        .heightIn(min = 44.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .semantics {
                             role = Role.Tab

@@ -54,6 +54,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.ours.R
@@ -371,7 +374,8 @@ fun MemoriesScreen(
                                 modifier = Modifier
                                     .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .clickable {
+                                    .semantics { selected = showSearch }
+                                    .clickable(role = Role.Button) {
                                         if (showSearch) {
                                             showSearch = false
                                             searchQuery = ""
@@ -473,13 +477,14 @@ internal fun <T> OursSearchFilterBar(
                             .clickable(
                                 interactionSource = clearInteraction,
                                 indication = null,
+                                role = Role.Button,
                                 onClick = { onQueryChange("") },
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = OursIcons.Close,
-                            contentDescription = "Clear",
+                            contentDescription = if (OursTheme.strings.langCode == "id") "Hapus" else "Clear",
                             tint = colors.inkMuted,
                             modifier = Modifier.size(18.dp),
                         )
@@ -506,9 +511,11 @@ internal fun <T> OursSearchFilterBar(
                             elevation = if (selected) 3.dp else 1.dp,
                             tinted = selected,
                         )
+                        .semantics { this.selected = selected }
                         .clickable(
                             interactionSource = chipInteraction,
                             indication = null,
+                            role = Role.Tab,
                             onClick = { onSelectFilter(value) },
                         ),
                     shape = RoundedCornerShape(OursRadius.chip),

@@ -62,6 +62,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -181,7 +184,7 @@ fun SettingsScreen(
                         ) {
                             val meName = state.me?.name?.ifBlank { null } ?: strings.youFallback
                             Box(
-                                modifier = Modifier.clickable {
+                                modifier = Modifier.clickable(role = Role.Button) {
                                     avatarPickerLauncher.launch(
                                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                     )
@@ -358,7 +361,10 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .defaultMinSize(minHeight = 56.dp)
-                                .clickable { placesExpanded = !placesExpanded }
+                                .semantics {
+                                    stateDescription = if (placesExpanded) "Expanded" else "Collapsed"
+                                }
+                                .clickable(role = Role.Button) { placesExpanded = !placesExpanded }
                                 .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -447,7 +453,7 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .defaultMinSize(minHeight = 56.dp)
-                                .clickable { showXiaomiGuide = true }
+                                .clickable(role = Role.Button) { showXiaomiGuide = true }
                                 .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -518,7 +524,10 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .defaultMinSize(minHeight = 56.dp)
-                                .clickable { safetyExpanded = !safetyExpanded }
+                                .semantics {
+                                    stateDescription = if (safetyExpanded) "Expanded" else "Collapsed"
+                                }
+                                .clickable(role = Role.Button) { safetyExpanded = !safetyExpanded }
                                 .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -610,7 +619,7 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .defaultMinSize(minHeight = 52.dp)
-                                .clickable { vm.startSosCountdown("manual") }
+                                .clickable(role = Role.Button) { vm.startSosCountdown("manual") }
                                 .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -647,7 +656,10 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .defaultMinSize(minHeight = 56.dp)
-                                .clickable { serverExpanded = !serverExpanded }
+                                .semantics {
+                                    stateDescription = if (serverExpanded) "Expanded" else "Collapsed"
+                                }
+                                .clickable(role = Role.Button) { serverExpanded = !serverExpanded }
                                 .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,

@@ -63,6 +63,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -601,7 +604,7 @@ fun ChatScreen(
                                 .padding(2.dp)
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(if (canSend) colors.action else colors.surfaceMuted)
-                                .clickable(enabled = canSend) {
+                                .clickable(enabled = canSend, role = Role.Button) {
                                     val textToSend = draft.trim()
                                     val target = replyTarget
                                     draft = ""
@@ -884,9 +887,11 @@ private fun CheckInBubble(
                                 .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                                 .oursPressScale(saveInteraction)
                                 .clip(RoundedCornerShape(OursRadius.chip))
+                                .semantics { selected = checkIn.highlighted }
                                 .clickable(
                                     interactionSource = saveInteraction,
                                     indication = null,
+                                    role = Role.Button,
                                     onClick = onToggleHighlight,
                                 ),
                         ) {
@@ -920,6 +925,7 @@ private fun CheckInBubble(
                                 .clickable(
                                     interactionSource = replyInteraction,
                                     indication = null,
+                                    role = Role.Button,
                                     onClick = onReplyCamera,
                                 ),
                         ) {
@@ -947,7 +953,7 @@ private fun CheckInBubble(
                                 modifier = Modifier
                                     .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                                     .clip(RoundedCornerShape(OursRadius.chip))
-                                    .clickable(onClick = onDelete),
+                                    .clickable(role = Role.Button, onClick = onDelete),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
