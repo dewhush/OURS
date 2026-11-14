@@ -93,6 +93,7 @@ import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursSendConfirmation
+import app.ours.ui.components.oursHeaderInsets
 import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.rememberOursLayoutSpec
@@ -449,8 +450,8 @@ private fun OursRoot(vm: OursViewModel) {
                 message = state.confirmationMessage ?: "",
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = OursSpacing.sm),
+                    .oursHeaderInsets()
+                    .padding(top = 88.dp),
             )
 
             AnimatedVisibility(
@@ -459,8 +460,8 @@ private fun OursRoot(vm: OursViewModel) {
                 exit = fadeOut(OursMotion.exitSpec()),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = OursSpacing.sm, start = OursSpacing.md, end = OursSpacing.md),
+                    .oursHeaderInsets()
+                    .padding(top = 88.dp, start = OursSpacing.md, end = OursSpacing.md),
             ) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
