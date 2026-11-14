@@ -695,6 +695,7 @@
       email,
       name: (payload?.name || "").trim() || null,
       id_token: payload?.id_token || payload?.idToken || null,
+      device_id: state.deviceId || null,
       invite_code: options.inviteCode || null,
       auto_create: options.autoCreate === true ? true : null
     };
@@ -808,17 +809,17 @@
     // Stage 1: Mandatory Google Sign-In
     if (!g && !state.accessToken) {
       app.innerHTML = `
-        <div class="onboarding-wrap">
+        <main class="onboarding-wrap">
           <div class="card" style="display:flex;flex-direction:column;gap:16px;text-align:center;padding:24px 20px;">
             ${oursRingsLogo()}
             <div style="display:flex;flex-direction:column;gap:6px;">
-              <div style="font-size:28px;font-weight:800;letter-spacing:-0.03em;">OURS</div>
+              <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-0.03em;">OURS</h1>
               <div style="font-size:18px;font-weight:700;">${escapeHtml(t("welcomeTitle"))}</div>
               <div class="row-sub">${escapeHtml(t("welcomeSub"))}</div>
             </div>
             <button class="btn-google" id="ob-google-btn">${googleGIcon()}<span>${escapeHtml(t("continueGoogle"))}</span></button>
           </div>
-        </div>
+        </main>
       `;
       document.getElementById("ob-google-btn").onclick = triggerGoogleSignIn;
       return;
@@ -870,10 +871,10 @@
     }
 
     app.innerHTML = `
-      <div class="onboarding-wrap">
+      <main class="onboarding-wrap">
         <div style="text-align:center;display:flex;flex-direction:column;gap:6px;">
           ${oursRingsLogo()}
-          <div style="font-size:26px;font-weight:800;letter-spacing:-0.03em;">OURS</div>
+          <h1 style="margin:0;font-size:26px;font-weight:800;letter-spacing:-0.03em;">OURS</h1>
         </div>
         ${profilePill}
         <div class="segmented">
@@ -881,7 +882,7 @@
           <button class="seg-btn ${state.onboardingMode === "join" ? "active" : ""}" id="ob-mode-join">${escapeHtml(t("joinPair"))}</button>
         </div>
         ${stageBody}
-      </div>
+      </main>
     `;
 
     const switchBtn = document.getElementById("ob-google-switch");
@@ -968,12 +969,13 @@
     }
 
     return `
-      <div class="screen map-screen">
+      <main class="screen map-screen">
+        <h1 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;">${escapeHtml(t("tabMap"))}</h1>
         <div class="map-partner-card">
           <div style="display:flex;align-items:center;gap:10px;min-width:0;">
             <div class="avatar-circle">
               ${partner?.avatar_photo_id
-                ? `<img data-photo-id="${escapeHtml(partner.avatar_photo_id)}" data-photo-size="thumb" alt="" />`
+                ? `<img data-photo-id="${escapeHtml(partner.avatar_photo_id)}" data-photo-size="thumb" width="40" height="40" alt="" />`
                 : escapeHtml((partner?.name || "P").slice(0, 1).toUpperCase())}
             </div>
             <div style="min-width:0;">
@@ -994,7 +996,7 @@
           <button class="btn btn-glass" id="btn-map-center">${escapeHtml(t("center"))}</button>
           <button class="btn btn-glass" id="btn-map-places">${escapeHtml(t("places"))}</button>
         </div>
-      </div>
+      </main>
     `;
   }
 
@@ -1101,15 +1103,15 @@
     });
 
     return `
-      <div class="top-bar">
-        <div class="top-title">${escapeHtml(t("tabMemories"))}</div>
+      <header class="top-bar">
+        <h1 class="top-title" style="margin:0;">${escapeHtml(t("tabMemories"))}</h1>
         <div class="top-actions">
           <button class="icon-btn" id="btn-mem-search" aria-label="Search">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           </button>
         </div>
-      </div>
-      <div class="screen">
+      </header>
+      <main class="screen">
         <div class="page-pad">
           <div class="segmented">
             <button class="seg-btn ${state.memoriesMode === "timeline" ? "active" : ""}" id="seg-mem-timeline">${escapeHtml(t("timeline"))}</button>
@@ -1133,7 +1135,7 @@
               : items.map((c) => renderCheckInCard(c)).join("")
           }
         </div>
-      </div>
+      </main>
     `;
   }
 
@@ -1197,7 +1199,7 @@
         ${divider}
         <div class="bubble-row ${mine ? "mine" : "theirs"}">
           <div class="bubble ${mine ? "mine" : "theirs"}">
-            ${m.photo_id ? `<img data-photo-id="${escapeHtml(m.photo_id)}" data-photo-size="thumb" data-lightbox="${escapeHtml(m.photo_id)}" style="max-width:220px;border-radius:12px;display:block;margin-bottom:${m.text ? "6px" : "0"};cursor:pointer;" alt="" />` : ""}
+            ${m.photo_id ? `<img data-photo-id="${escapeHtml(m.photo_id)}" data-photo-size="thumb" data-lightbox="${escapeHtml(m.photo_id)}" width="220" height="165" style="max-width:220px;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;border-radius:12px;display:block;margin-bottom:${m.text ? "6px" : "0"};cursor:pointer;" alt="" />` : ""}
             ${m.text ? escapeHtml(m.text) : ""}
           </div>
           <div class="bubble-meta tnum">${escapeHtml(formatTime(m.created_at))}</div>
@@ -1206,20 +1208,20 @@
     }).join("");
 
     return `
-      <div class="top-bar">
-        <div class="top-title">${escapeHtml(state.partner?.name || t("tabChat"))}</div>
+      <header class="top-bar">
+        <h1 class="top-title" style="margin:0;">${escapeHtml(state.partner?.name || t("tabChat"))}</h1>
         <div class="top-actions">
           <button class="icon-btn" id="btn-chat-search" aria-label="Search">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           </button>
         </div>
-      </div>
-      <div class="screen chat-screen" id="chat-scroll">
+      </header>
+      <main class="screen chat-screen" id="chat-scroll">
         ${state.chatSearchOpen ? `<div class="page-pad" style="padding-bottom:0;"><input class="input" id="chat-search-input" placeholder="${escapeHtml(t("searchPlaceholder"))}" value="${escapeHtml(state.chatQuery)}" /></div>` : ""}
         <div class="chat-list">
           ${rowsHtml || `<div class="row-sub" style="text-align:center;padding:32px 0;">${escapeHtml(q ? t("noResults") : "Say hello")}</div>`}
         </div>
-      </div>
+      </main>
       <div class="chat-composer">
         ${
           state.replyToCheckInId
@@ -1239,16 +1241,16 @@
 
   function renderSettingsScreen() {
     return `
-      <div class="top-bar">
-        <div class="top-title">${escapeHtml(t("settings"))}</div>
-      </div>
-      <div class="screen">
+      <header class="top-bar">
+        <h1 class="top-title" style="margin:0;">${escapeHtml(t("settings"))}</h1>
+      </header>
+      <main class="screen">
         <div class="page-pad">
           <div class="card" style="display:flex;align-items:center;gap:14px;">
             <label class="avatar-circle" style="width:56px;height:56px;cursor:pointer;">
               <input type="file" id="avatar-file-input" accept="image/*" class="hidden" />
               ${state.me?.avatar_photo_id
-                ? `<img data-photo-id="${escapeHtml(state.me.avatar_photo_id)}" data-photo-size="thumb" alt="" />`
+                ? `<img data-photo-id="${escapeHtml(state.me.avatar_photo_id)}" data-photo-size="thumb" width="56" height="56" alt="" />`
                 : escapeHtml((state.me?.name || "U").slice(0, 1).toUpperCase())}
             </label>
             <div style="min-width:0;flex:1;">
@@ -1325,7 +1327,7 @@
 
           <button class="btn btn-danger" id="btn-logout">${escapeHtml(t("signOut"))}</button>
         </div>
-      </div>
+      </main>
     `;
   }
 
@@ -1754,6 +1756,10 @@
     if ("serviceWorker" in navigator && !native) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeSheet();
+    });
 
     setTimeout(() => {
       const splash = document.getElementById("splash");
