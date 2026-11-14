@@ -156,7 +156,7 @@ fun SettingsScreen(
             start = layoutSpec.horizontalPadding,
             top = topHeaderInset + 84.dp,
             end = layoutSpec.horizontalPadding,
-            bottom = 116.dp,
+            bottom = 140.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
     ) {

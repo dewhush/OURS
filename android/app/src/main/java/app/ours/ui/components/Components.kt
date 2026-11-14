@@ -57,16 +57,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
@@ -158,7 +161,28 @@ fun Modifier.oursLiquidGlass(
         end = Offset(700f, 700f),
     )
     return this
-        .shadow(elevation = elevation, shape = shape, clip = false)
+        .drawBehind {
+            val elevPx = elevation.toPx()
+            if (elevPx > 0f) {
+                val rPx = radius.toPx()
+                val cardPath = Path().apply {
+                    addRoundRect(RoundRect(0f, 0f, size.width, size.height, CornerRadius(rPx, rPx)))
+                }
+                clipPath(cardPath, clipOp = ClipOp.Difference) {
+                    val steps = 3
+                    for (i in 1..steps) {
+                        val spread = (elevPx * i) / steps
+                        val alpha = (0.045f * (steps - i + 1)) / steps
+                        drawRoundRect(
+                            color = Color.Black.copy(alpha = alpha),
+                            topLeft = Offset(-spread * 0.5f, spread * 0.35f),
+                            size = Size(size.width + spread, size.height + spread),
+                            cornerRadius = CornerRadius(rPx + spread * 0.5f, rPx + spread * 0.5f),
+                        )
+                    }
+                }
+            }
+        }
         .clip(shape)
         .background(brush = surfaceBrush, shape = shape)
         .drawWithContent {
