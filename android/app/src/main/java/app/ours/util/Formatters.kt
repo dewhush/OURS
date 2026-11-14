@@ -35,4 +35,23 @@ object Formatters {
         val fmt = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault())
         return fmt.format(Date(timestampMs))
     }
+
+    fun dayKey(timestampMs: Long): String {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        return fmt.format(Date(timestampMs))
+    }
+
+    fun dayLabel(
+        timestampMs: Long,
+        langCode: String,
+        nowMs: Long = System.currentTimeMillis(),
+    ): String {
+        val key = dayKey(timestampMs)
+        val todayKey = dayKey(nowMs)
+        if (key == todayKey) return if (langCode == "id") "Hari ini" else "Today"
+        val yesterdayKey = dayKey(nowMs - 86_400_000L)
+        if (key == yesterdayKey) return if (langCode == "id") "Kemarin" else "Yesterday"
+        val fmt = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+        return fmt.format(Date(timestampMs))
+    }
 }

@@ -1,8 +1,10 @@
 package app.ours.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -41,6 +44,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -107,6 +112,7 @@ fun ChatScreen(
     val partnerName = state.partner?.name ?: "Partner"
     val myId = state.me?.id ?: -1L
     val listState = rememberLazyListState()
+    val clipboard = LocalClipboardManager.current
 
     var draft by remember { mutableStateOf("") }
     var replyTarget by remember { mutableStateOf<ReplyTarget?>(null) }
@@ -255,6 +261,18 @@ fun ChatScreen(
                         onAction = onLaunchCameraCheckIn,
                     )
                 }
+                filteredThreadItems.isEmpty() -> {
+                    OursEmptyState(
+                        title = if (strings.langCode == "id") "Tidak ada hasil" else "No results",
+                        detail = if (strings.langCode == "id") "Coba kata kunci atau filter lain." else "Try a different search or filter.",
+                        illustrationRes = R.drawable.ic_ours_chat_empty,
+                        actionLabel = if (strings.langCode == "id") "Hapus filter" else "Clear filters",
+                        onAction = {
+                            searchQuery = ""
+                            filter = ChatFilter.All
+                        },
+                    )
+                }
                 else -> {
                     LazyColumn(
                         state = listState,
@@ -281,7 +299,29 @@ fun ChatScreen(
                             }
                         }
 
-                        items(filteredThreadItems, key = { it.key }) { item ->
+                        itemsIndexed(filteredThreadItems, key = { _, it -> it.key }) { idx, item ->
+                            val showDateDivider = idx == 0 ||
+                                Formatters.dayKey(item.createdAt) != Formatters.dayKey(filteredThreadItems[idx - 1].createdAt)
+                            if (showDateDivider) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = OursSpacing.xs),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = colors.surfaceMuted,
+                                    ) {
+                                        Text(
+                                            text = Formatters.dayLabel(item.createdAt, strings.langCode),
+                                            style = OursTypography.caption,
+                                            color = colors.inkSecondary,
+                                            modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 4.dp),
+                                        )
+                                    }
+                                }
+                            }
                             when (item) {
                                 is ChatThreadItem.MessageItem -> {
                                     val msg = item.msg
@@ -304,6 +344,10 @@ fun ChatScreen(
                                                 senderName = if (isMine) (state.me?.name ?: "You") else partnerName,
                                                 preview = msg.text ?: "Photo",
                                             )
+                                        },
+                                        onCopy = { txt ->
+                                            clipboard.setText(AnnotatedString(txt))
+                                            vm.notifyCopied(if (strings.langCode == "id") "Teks disalin" else "Copied text")
                                         },
                                     )
                                 }
@@ -456,6 +500,7 @@ fun ChatScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(
     msg: ChatMessageDto,
@@ -464,6 +509,7 @@ private fun MessageBubble(
     photoUrl: (String) -> String,
     onOpenPhoto: (String) -> Unit,
     onQuote: () -> Unit,
+    onCopy: (String) -> Unit,
 ) {
     val colors = OursTheme.colors
     val bubbleBg = if (isMine) colors.glassActionTint else colors.glassSurface
@@ -484,7 +530,14 @@ private fun MessageBubble(
             border = BorderStroke(1.dp, bubbleBorder),
             modifier = Modifier
                 .widthIn(max = 290.dp)
-                .clickable(onClick = onQuote),
+                .combinedClickable(
+                    onClick = onQuote,
+                    onLongClick = {
+                        if (!msg.text.isNullOrBlank()) {
+                            onCopy(msg.text)
+                        }
+                    },
+                ),
         ) {
             Column(modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = OursSpacing.xs)) {
                 if (!quotedPreview.isNullOrBlank()) {

@@ -29,6 +29,7 @@ data class UserDto(
     val name: String,
     val email: String? = null,
     @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("avatar_photo_id") val avatarPhotoId: String? = null,
     @SerialName("created_at") val createdAt: Long,
 )
 

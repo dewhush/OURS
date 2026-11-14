@@ -403,6 +403,7 @@ private fun OursRoot(vm: OursViewModel) {
                             fullCheckIn = item
                             fullPhotoId = item.photoId
                         },
+                        onQuickCheckIn = { launchCheckInCamera() },
                     )
                     MainTab.Chat -> ChatScreen(
                         state = state,
@@ -545,23 +546,37 @@ private fun OursRoot(vm: OursViewModel) {
                 ) {
                     Icon(
                         imageVector = OursIcons.Close,
-                        contentDescription = "Close",
+                        contentDescription = if (strings.langCode == "id") "Tutup" else "Close",
                         tint = Color.White,
                         modifier = Modifier.size(28.dp),
                     )
                 }
-                if (fullCheckIn != null && !fullCheckIn!!.note.isNullOrBlank()) {
+                if (fullCheckIn != null) {
                     Column(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .fillMaxWidth()
-                            .background(Color.Black.copy(alpha = 0.55f))
+                            .background(Color.Black.copy(alpha = 0.6f))
                             .padding(OursSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
+                        if (!fullCheckIn!!.note.isNullOrBlank()) {
+                            Text(
+                                text = fullCheckIn!!.note!!,
+                                style = OursTypography.body,
+                                color = Color.White,
+                            )
+                        }
                         Text(
-                            text = fullCheckIn!!.note!!,
-                            style = OursTypography.body,
-                            color = Color.White,
+                            text = buildString {
+                                if (!fullCheckIn!!.placeName.isNullOrBlank()) {
+                                    append(fullCheckIn!!.placeName)
+                                    append(" · ")
+                                }
+                                append(app.ours.util.Formatters.dateShort(fullCheckIn!!.createdAt))
+                            },
+                            style = OursTypography.caption,
+                            color = Color.White.copy(alpha = 0.8f),
                         )
                     }
                 }

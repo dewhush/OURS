@@ -42,8 +42,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.app.Activity
+import android.content.Intent
+import android.provider.ContactsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Image
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import app.ours.R
 import app.ours.ui.OursUiState
 import app.ours.ui.OursViewModel
+import app.ours.ui.components.OursAvatar
 import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
@@ -78,6 +85,7 @@ fun SettingsScreen(
     val colors = OursTheme.colors
     val strings = OursTheme.strings
     val layoutSpec = rememberOursLayoutSpec()
+    val context = LocalContext.current
     var serverInput by remember(state.serverUrl) { mutableStateOf(state.serverUrl) }
     var serverExpanded by remember { mutableStateOf(false) }
     var placesExpanded by remember { mutableStateOf(false) }
@@ -87,6 +95,43 @@ fun SettingsScreen(
     var safetyExpanded by remember { mutableStateOf(false) }
     var emergencyNameInput by remember(state.emergencyContactName) { mutableStateOf(state.emergencyContactName) }
     var emergencyPhoneInput by remember(state.emergencyContactPhone) { mutableStateOf(state.emergencyContactPhone) }
+
+    val avatarPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            vm.uploadAvatar(uri)
+        }
+    }
+
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+            runCatching {
+                context.contentResolver.query(
+                    uri,
+                    arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                        val numIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        val name = if (nameIdx >= 0) cursor.getString(nameIdx).orEmpty() else ""
+                        val phone = if (numIdx >= 0) cursor.getString(numIdx).orEmpty() else ""
+                        if (name.isNotBlank()) emergencyNameInput = name
+                        if (phone.isNotBlank()) emergencyPhoneInput = phone
+                    }
+                }
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -122,20 +167,34 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = colors.surfaceMuted,
-                        modifier = Modifier.size(48.dp),
+                    val meName = state.me?.name?.ifBlank { null } ?: "You"
+                    Box(
+                        modifier = Modifier.clickable { avatarPickerLauncher.launch("image/*") },
+                        contentAlignment = Alignment.BottomEnd,
                     ) {
-                        OursInterlockedRingsMark(
-                            modifier = Modifier.fillMaxSize().padding(6.dp),
-                            leftRingColor = colors.ink,
-                            rightRingColor = colors.inkMuted,
-                            backgroundColor = colors.surfaceMuted,
+                        OursAvatar(
+                            name = meName,
+                            photoUrl = state.myAvatarUrl,
+                            size = 52.dp,
+                            ringColor = colors.action,
+                            accent = true,
                         )
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = colors.action,
+                            modifier = Modifier.size(20.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = OursIcons.Camera,
+                                    contentDescription = "Change avatar",
+                                    tint = colors.onAction,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                            }
+                        }
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        val meName = state.me?.name?.ifBlank { null } ?: "You"
                         val coupleTitle = if (state.partner != null) {
                             "$meName & ${state.partner.name}"
                         } else {
@@ -476,16 +535,32 @@ fun SettingsScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        OursButton(
-                            text = "Save emergency contact",
-                            variant = OursButtonVariant.Secondary,
-                            enabled = emergencyPhoneInput.isNotBlank(),
-                            onClick = {
-                                vm.setEmergencyContact(emergencyNameInput, emergencyPhoneInput)
-                                safetyExpanded = false
-                            },
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                        )
+                            horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                        ) {
+                            OursButton(
+                                text = "Pick contact",
+                                variant = OursButtonVariant.Secondary,
+                                onClick = {
+                                    val intent = Intent(
+                                        Intent.ACTION_PICK,
+                                        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                                    )
+                                    contactPickerLauncher.launch(intent)
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                            OursButton(
+                                text = "Save contact",
+                                enabled = emergencyPhoneInput.isNotBlank(),
+                                onClick = {
+                                    vm.setEmergencyContact(emergencyNameInput, emergencyPhoneInput)
+                                    safetyExpanded = false
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }

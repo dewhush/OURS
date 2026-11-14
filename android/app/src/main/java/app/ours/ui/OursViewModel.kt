@@ -345,15 +345,17 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                         sharingPaused = meResp.sharingPaused,
                         partnerPaused = meResp.partnerPaused,
                         inviteCode = if (meResp.partner != null) null else it.inviteCode,
-                        myAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(
-                            meResp.me.avatarUrl,
-                            meResp.me.email,
-                            it.myAvatarUrl,
-                        ),
-                        partnerAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(
-                            meResp.partner?.avatarUrl,
-                            meResp.partner?.email,
-                        ),
+                        myAvatarUrl = meResp.me.avatarPhotoId?.let { photoUrl(it, thumb = true) }
+                            ?: ProfileAndSosHelper.resolveAvatarUrl(
+                                meResp.me.avatarUrl,
+                                meResp.me.email,
+                                it.myAvatarUrl,
+                            ),
+                        partnerAvatarUrl = meResp.partner?.avatarPhotoId?.let { photoUrl(it, thumb = true) }
+                            ?: ProfileAndSosHelper.resolveAvatarUrl(
+                                meResp.partner?.avatarUrl,
+                                meResp.partner?.email,
+                            ),
                     )
                 }
             }
@@ -718,6 +720,38 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             ProfileAndSosHelper.launchWhatsAppCall(app, phone)
         }
         showConfirmation(if (phone.isNotBlank()) "SOS sent & calling WhatsApp" else "SOS alert sent to partner")
+    }
+
+    fun notifyCopied(label: String = "Copied") {
+        showConfirmation(label)
+    }
+
+    fun uploadAvatar(uri: Uri) {
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, errorMessage = null) }
+            runCatching {
+                val compressed = withContext(Dispatchers.IO) {
+                    PhotoCompressor.compressToUploadFile(app, uri)
+                } ?: error("Could not read photo")
+                try {
+                    api.uploadAvatar(compressed)
+                } finally {
+                    compressed.delete()
+                }
+            }.onSuccess { updatedUser ->
+                _state.update {
+                    it.copy(
+                        busy = false,
+                        me = updatedUser,
+                        myAvatarUrl = updatedUser.avatarPhotoId?.let { pid -> photoUrl(pid, thumb = true) }
+                            ?: ProfileAndSosHelper.resolveAvatarUrl(updatedUser.avatarUrl, updatedUser.email, it.myAvatarUrl),
+                    )
+                }
+                showConfirmation("Profile photo updated")
+            }.onFailure { err ->
+                _state.update { it.copy(busy = false, errorMessage = err.message ?: "Could not upload avatar") }
+            }
+        }
     }
 
     fun updateServerUrl(url: String) {

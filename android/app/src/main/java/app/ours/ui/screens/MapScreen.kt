@@ -8,7 +8,10 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -94,11 +97,15 @@ fun MapScreen(
     val nudgeRingScale = remember { Animatable(1f) }
     val nudgeRingAlpha = remember { Animatable(0f) }
 
+    var showNudgePill by remember { mutableStateOf(false) }
     LaunchedEffect(nudgePulseKey) {
         if (nudgePulseKey > 0) {
+            showNudgePill = true
             nudgeRingScale.snapTo(1f)
             nudgeRingAlpha.snapTo(0.75f)
             nudgeRingScale.animateTo(1.22f, OursMotion.enterSpec(240))
+            kotlinx.coroutines.delay(1500)
+            showNudgePill = false
         }
     }
     LaunchedEffect(nudgePulseKey) {
@@ -161,6 +168,29 @@ fun MapScreen(
             nudgeKey = nudgePulseKey,
             modifier = Modifier.fillMaxSize(),
         )
+
+        AnimatedVisibility(
+            visible = showNudgePill,
+            enter = fadeIn(OursMotion.enterSpec()),
+            exit = fadeOut(OursMotion.exitSpec()),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(bottom = 140.dp),
+        ) {
+            androidx.compose.material3.Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = colors.glassSurfaceStrong,
+                border = androidx.compose.foundation.BorderStroke(1.dp, colors.action.copy(alpha = 0.45f)),
+                shadowElevation = 4.dp,
+            ) {
+                Text(
+                    text = if (strings.langCode == "id") "Sapaan terkirim" else "Nudge sent",
+                    style = OursTypography.label,
+                    color = colors.action,
+                    modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
+                )
+            }
+        }
 
         // Top floating partner status card + optional Pause Sharing reminder banner
         Column(

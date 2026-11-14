@@ -356,6 +356,18 @@ class OursApiClient(
         executeAuthedUnit(req)
     }
 
+    suspend fun uploadAvatar(photoFile: File): UserDto {
+        val multipart = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("photo", photoFile.name, photoFile.asRequestBody(jpegMediaType))
+            .build()
+        val req = Request.Builder()
+            .url("${base()}/api/me/avatar")
+            .post(multipart)
+            .build()
+        return executeAuthed(req) { body -> OursJson.decodeFromString(body) }
+    }
+
     suspend fun getEvents(afterId: Long): EventsResponse {
         val req = Request.Builder()
             .url("${base()}/api/events?after=$afterId")

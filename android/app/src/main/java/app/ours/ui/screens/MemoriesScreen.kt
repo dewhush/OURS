@@ -70,6 +70,7 @@ fun MemoriesScreen(
     state: OursUiState,
     vm: OursViewModel,
     onOpenFullPhoto: (CheckInDto) -> Unit,
+    onQuickCheckIn: () -> Unit = {},
 ) {
     val colors = OursTheme.colors
     val strings = OursTheme.strings
@@ -178,11 +179,23 @@ fun MemoriesScreen(
                 }
                 state.memories.isEmpty() -> {
                     OursEmptyState(
-                        title = "No saved memories yet",
+                        title = if (strings.langCode == "id") "Belum ada kenangan tersimpan" else "No saved memories yet",
                         detail = "Check-ins expire after 24 hours. Tap Save on any check-in in Chat to keep it here forever.",
                         illustrationRes = R.drawable.ic_ours_memories_empty,
-                        actionLabel = "Refresh",
-                        onAction = { vm.refreshMemories() },
+                        actionLabel = if (strings.langCode == "id") "Abadikan momen" else "Capture a moment",
+                        onAction = onQuickCheckIn,
+                    )
+                }
+                filteredMemories.isEmpty() -> {
+                    OursEmptyState(
+                        title = if (strings.langCode == "id") "Tidak ada hasil" else "No results",
+                        detail = if (strings.langCode == "id") "Coba kata kunci atau filter lain." else "Try a different search or filter.",
+                        illustrationRes = R.drawable.ic_ours_memories_empty,
+                        actionLabel = if (strings.langCode == "id") "Hapus filter" else "Clear filters",
+                        onAction = {
+                            searchQuery = ""
+                            filter = MemoryFilter.All
+                        },
                     )
                 }
                 else -> {

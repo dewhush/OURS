@@ -26,6 +26,7 @@ import org.maplibre.android.annotations.MarkerOptions
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -238,20 +239,34 @@ fun OursMapView(
         lastRecenterTrigger = recenterTrigger
         if (hasMovedInitialCamera && !manualRecenter) return@LaunchedEffect
 
-        val target = when {
-            partnerLocation != null && !partnerLocation.paused &&
-                partnerLocation.lat != null && partnerLocation.lon != null ->
-                LatLng(partnerLocation.lat, partnerLocation.lon)
+        val partnerLatLng = if (partnerLocation != null && !partnerLocation.paused &&
+            partnerLocation.lat != null && partnerLocation.lon != null
+        ) LatLng(partnerLocation.lat, partnerLocation.lon) else null
+        val myLatLng = myLocation?.let { LatLng(it.lat, it.lon) }
+
+        val update = when {
+            partnerLatLng != null && myLatLng != null &&
+                app.ours.location.AdaptiveLocationPolicy.distanceMeters(
+                    myLatLng.latitude, myLatLng.longitude,
+                    partnerLatLng.latitude, partnerLatLng.longitude,
+                ) > 60.0 -> {
+                val bounds = LatLngBounds.Builder()
+                    .include(myLatLng)
+                    .include(partnerLatLng)
+                    .build()
+                val padPx = (96f * context.resources.displayMetrics.density).toInt()
+                CameraUpdateFactory.newLatLngBounds(bounds, padPx)
+            }
+            partnerLatLng != null -> CameraUpdateFactory.newLatLngZoom(partnerLatLng, 14.5)
             highlights.firstOrNull { it.lat != null && it.lon != null } != null -> {
                 val h = highlights.first { it.lat != null && it.lon != null }
-                LatLng(h.lat!!, h.lon!!)
+                CameraUpdateFactory.newLatLngZoom(LatLng(h.lat!!, h.lon!!), 14.5)
             }
-            places.isNotEmpty() -> LatLng(places.first().lat, places.first().lon)
-            myLocation != null -> LatLng(myLocation.lat, myLocation.lon)
+            places.isNotEmpty() -> CameraUpdateFactory.newLatLngZoom(LatLng(places.first().lat, places.first().lon), 14.5)
+            myLatLng != null -> CameraUpdateFactory.newLatLngZoom(myLatLng, 14.5)
             else -> null
         }
-        if (target != null) {
-            val update = CameraUpdateFactory.newLatLngZoom(target, 14.5)
+        if (update != null) {
             if (!hasMovedInitialCamera) {
                 hasMovedInitialCamera = true
                 map.moveCamera(update)

@@ -61,6 +61,7 @@ import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursContentWidth
+import app.ours.ui.components.oursHeaderInsets
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursMotion
@@ -174,7 +175,9 @@ fun OnboardingScreen(
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .oursHeaderInsets(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
