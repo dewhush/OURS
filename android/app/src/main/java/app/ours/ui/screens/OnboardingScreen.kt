@@ -14,6 +14,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -57,11 +58,13 @@ import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
+import app.ours.ui.components.OursGlassBackdrop
 import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursHeaderInsets
+import app.ours.ui.components.oursLiquidGlass
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursMotion
@@ -160,47 +163,50 @@ fun OnboardingScreen(
 
     val layoutSpec = rememberOursLayoutSpec()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.canvas)
-            .safeDrawingPadding(),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-    Column(
-        modifier = Modifier
-            .oursContentWidth(layoutSpec)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.lg),
-        verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
-    ) {
-        Row(
+    OursGlassBackdrop {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .oursHeaderInsets(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .fillMaxSize()
+                .safeDrawingPadding(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+        Column(
+            modifier = Modifier
+                .oursContentWidth(layoutSpec)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
         ) {
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .oursHeaderInsets(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_ours_pair_rings),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                )
-                Text(
-                    text = "OURS",
-                    style = OursTypography.label.copy(fontWeight = FontWeight.Bold),
-                    color = colors.action,
+                Row(
+                    modifier = Modifier
+                        .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 3.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_ours_pair_rings),
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Text(
+                        text = "OURS · ${step + 1}/4",
+                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.action,
+                    )
+                }
+                LanguagePillToggle(
+                    current = state.language,
+                    onSelect = { vm.setLanguage(it) },
                 )
             }
-            LanguagePillToggle(
-                current = state.language,
-                onSelect = { vm.setLanguage(it) },
-            )
-        }
 
         OnboardingProgressBar(step = step, totalSteps = 4)
 
@@ -590,6 +596,7 @@ fun OnboardingScreen(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -599,8 +606,9 @@ fun LanguagePillToggle(
 ) {
     val colors = OursTheme.colors
     Surface(
-        shape = RoundedCornerShape(OursRadius.chip),
-        color = colors.surfaceMuted,
+        shape = RoundedCornerShape(999.dp),
+        color = colors.surfaceMuted.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, colors.glassBorder),
     ) {
         Row(
             modifier = Modifier.padding(2.dp),

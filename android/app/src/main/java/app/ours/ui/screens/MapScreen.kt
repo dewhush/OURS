@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -200,7 +201,10 @@ fun MapScreen(
         ) {
         OursCard(
             modifier = Modifier.fillMaxWidth(),
+            radius = 22.dp,
+            padding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
             frosted = true,
+            elevation = 6.dp,
             onClick = { showPartnerSheet = true },
         ) {
             Row(
@@ -282,7 +286,7 @@ fun MapScreen(
                 .padding(
                     start = layoutSpec.horizontalPadding,
                     end = layoutSpec.horizontalPadding,
-                    bottom = 104.dp,
+                    bottom = 86.dp,
                 ),
             horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
             verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),

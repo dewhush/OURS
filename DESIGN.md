@@ -9,10 +9,10 @@ Reading this as: private two-person location, photo check-in, and messenger comp
 - **MOTION 2 (Purposeful choreography)**: Apple fluid easing (`CubicBezierEasing(0.22f, 1f, 0.36f, 1f)`), `220ms` entrances, `160ms` exits, `0.97f` press micro-scale, and expanding Nudge ripple waves on the Map.
 
 ### Owner Override (R-37 / R-10)
-Per explicit owner direction (Audit Option 9A), **iOS 26+ Liquid Glass** is applied across floating chrome, bottom sheets, cards, pills, and input bars on all screens:
-- **Multi-stop diagonal refractive surface gradient**: `Brush.linearGradient` from luminous top-left frost (`#F7FFFFFF` light / `#EB222A38` dark) to translucent pearl/slate tint bottom-right (`#D9EDF2F8` light / `#CC121721` dark).
-- **Directional specular rim border**: `1.dp` `Brush.linearGradient` with crisp top-left highlight (`#EEFFFFFF` light / `#66FFFFFF` dark) fading to subtle bottom-right refractive edge (`#59CBD5E1` light / `#1FFFFFFF` dark).
-- **Top-edge inner specular highlight + ambient shadow hierarchy (R-12)**: Subtle `1.dp` top-edge inset luminance paired with calibrated ambient elevation (`8.dp` floating chrome/dock, `4.dp` cards/inputs, `0.dp` flat rows).
+Per explicit owner direction (Glassmorphism v2), **lightweight translucent Glassmorphism** is applied across floating chrome, capsule bottom dock, cards, pills, and single-capsule composer on all screens over a GPU-cached `OursGlassBackdrop` (3 soft radial ambient color orbs):
+- **Translucent refractive surface gradient**: `Brush.linearGradient` from luminous top-left frost (`#BDFFFFFF` light / `#A61E2B45` dark) to translucent sky/slate tint bottom-right (`#85E8F1FF` light / `#730F172A` dark), allowing ambient color orbs and live map streets to refract visibly through every panel.
+- **Directional specular rim border**: `1.dp` `Brush.linearGradient` with crisp top-left highlight (`#F2FFFFFF` light / `#73FFFFFF` dark) fading to subtle bottom-right refractive edge (`#4D93C5FD` light / `#2660A5FA` dark).
+- **Top-edge inner specular highlight + ambient shadow hierarchy (R-12)**: Subtle `1.dp` top-edge inset luminance paired with calibrated ambient elevation (`8.dp` floating capsule dock, `6.dp` floating headers/composer, `4.dp` cards, `0.dp` flat rows) rendered via `drawWithCache` + `ClipOp.Difference`.
 
 ### Concentric Corner Radii (R-11)
 `R_outer = R_inner + padding`:

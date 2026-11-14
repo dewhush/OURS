@@ -20,6 +20,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -58,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -131,8 +133,63 @@ fun Modifier.oursHeaderInsets(): Modifier = composed {
 }
 
 /**
- * iOS 26+ Liquid Glass surface modifier:
- * multi-stop diagonal refractive gradient, subtle radial specular sheen,
+ * Lightweight GPU-cached ambient mesh backdrop with 3 soft radial color orbs
+ * so translucent glassmorphism panels visibly refract color and light.
+ */
+@Composable
+fun OursGlassBackdrop(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val colors = OursTheme.colors
+    val isDark = OursTheme.isDark
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .drawWithCache {
+                val orb1Color = if (isDark) Color(0x381D4ED8) else Color(0x4038BDF8)
+                val orb2Color = if (isDark) Color(0x2E0284C7) else Color(0x332563EB)
+                val orb3Color = if (isDark) Color(0x294338CA) else Color(0x2E6366F1)
+
+                val orb1Center = Offset(size.width * 0.14f, size.height * 0.14f)
+                val orb1Radius = size.maxDimension * 0.48f
+                val orb1Brush = Brush.radialGradient(
+                    colors = listOf(orb1Color, Color.Transparent),
+                    center = orb1Center,
+                    radius = orb1Radius.coerceAtLeast(1f),
+                )
+
+                val orb2Center = Offset(size.width * 0.88f, size.height * 0.44f)
+                val orb2Radius = size.maxDimension * 0.52f
+                val orb2Brush = Brush.radialGradient(
+                    colors = listOf(orb2Color, Color.Transparent),
+                    center = orb2Center,
+                    radius = orb2Radius.coerceAtLeast(1f),
+                )
+
+                val orb3Center = Offset(size.width * 0.22f, size.height * 0.84f)
+                val orb3Radius = size.maxDimension * 0.50f
+                val orb3Brush = Brush.radialGradient(
+                    colors = listOf(orb3Color, Color.Transparent),
+                    center = orb3Center,
+                    radius = orb3Radius.coerceAtLeast(1f),
+                )
+
+                onDrawBehind {
+                    drawRect(colors.canvas)
+                    drawCircle(brush = orb1Brush, radius = orb1Radius, center = orb1Center)
+                    drawCircle(brush = orb2Brush, radius = orb2Radius, center = orb2Center)
+                    drawCircle(brush = orb3Brush, radius = orb3Radius, center = orb3Center)
+                }
+            },
+        content = content,
+    )
+}
+
+/**
+ * iOS 26+ Liquid Glass surface modifier (GPU-cached via drawWithCache):
+ * outer soft ambient shadow clipped outside via ClipOp.Difference,
+ * translucent diagonal refractive gradient, top-left radial specular sheen,
  * 1.dp top-edge inner highlight, and directional top-left-to-bottom-right rim border.
  */
 fun Modifier.oursLiquidGlass(
@@ -142,67 +199,79 @@ fun Modifier.oursLiquidGlass(
     tinted: Boolean = false,
 ): Modifier {
     val shape = RoundedCornerShape(radius)
-    val surfaceBrush = if (tinted) {
-        Brush.linearGradient(
-            colors = listOf(colors.actionSoft.copy(alpha = 0.92f), colors.glassGradientEnd),
-            start = Offset.Zero,
-            end = Offset(900f, 900f),
-        )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(colors.glassGradientStart, colors.glassGradientEnd),
-            start = Offset.Zero,
-            end = Offset(900f, 900f),
-        )
-    }
-    val rimBrush = Brush.linearGradient(
-        colors = listOf(colors.glassHighlightTopLeft, colors.glassRimBottomRight),
-        start = Offset.Zero,
-        end = Offset(700f, 700f),
-    )
     return this
-        .drawBehind {
+        .drawWithCache {
             val elevPx = elevation.toPx()
-            if (elevPx > 0f) {
-                val rPx = radius.toPx()
-                val cardPath = Path().apply {
-                    addRoundRect(RoundRect(0f, 0f, size.width, size.height, CornerRadius(rPx, rPx)))
-                }
-                clipPath(cardPath, clipOp = ClipOp.Difference) {
-                    val steps = 3
-                    for (i in 1..steps) {
-                        val spread = (elevPx * i) / steps
-                        val alpha = (0.045f * (steps - i + 1)) / steps
-                        drawRoundRect(
-                            color = Color.Black.copy(alpha = alpha),
-                            topLeft = Offset(-spread * 0.5f, spread * 0.35f),
-                            size = Size(size.width + spread, size.height + spread),
-                            cornerRadius = CornerRadius(rPx + spread * 0.5f, rPx + spread * 0.5f),
-                        )
+            val rPx = radius.toPx().coerceAtMost(size.minDimension / 2f)
+            val cardPath = Path().apply {
+                addRoundRect(RoundRect(0f, 0f, size.width, size.height, CornerRadius(rPx, rPx)))
+            }
+            val surfaceBrush = if (tinted) {
+                Brush.linearGradient(
+                    colors = listOf(colors.actionSoft.copy(alpha = 0.78f), colors.glassGradientEnd),
+                    start = Offset.Zero,
+                    end = Offset(size.width, size.height),
+                )
+            } else {
+                Brush.linearGradient(
+                    colors = listOf(colors.glassGradientStart, colors.glassGradientEnd),
+                    start = Offset.Zero,
+                    end = Offset(size.width, size.height),
+                )
+            }
+            val sheenBrush = Brush.radialGradient(
+                colors = listOf(colors.glassInnerHighlight.copy(alpha = 0.24f), Color.Transparent),
+                center = Offset(size.width * 0.18f, 0f),
+                radius = (size.maxDimension * 0.7f).coerceAtLeast(1f),
+            )
+            val rimBrush = Brush.linearGradient(
+                colors = listOf(colors.glassHighlightTopLeft, colors.glassRimBottomRight),
+                start = Offset.Zero,
+                end = Offset(size.width, size.height),
+            )
+            val strokePx = 1.dp.toPx()
+
+            onDrawWithContent {
+                if (elevPx > 0f) {
+                    clipPath(cardPath, clipOp = ClipOp.Difference) {
+                        val steps = 3
+                        for (i in 1..steps) {
+                            val spread = (elevPx * i) / steps
+                            val alpha = (0.045f * (steps - i + 1)) / steps
+                            drawRoundRect(
+                                color = Color.Black.copy(alpha = alpha),
+                                topLeft = Offset(-spread * 0.5f, spread * 0.35f),
+                                size = Size(size.width + spread, size.height + spread),
+                                cornerRadius = CornerRadius(rPx + spread * 0.5f, rPx + spread * 0.5f),
+                            )
+                        }
                     }
                 }
+                drawRoundRect(
+                    brush = surfaceBrush,
+                    cornerRadius = CornerRadius(rPx, rPx),
+                )
+                drawContent()
+                drawRoundRect(
+                    brush = sheenBrush,
+                    cornerRadius = CornerRadius(rPx, rPx),
+                )
+                if (size.width > rPx * 1.1f) {
+                    drawLine(
+                        color = colors.glassInnerHighlight,
+                        start = Offset(rPx * 0.55f, strokePx),
+                        end = Offset(size.width - rPx * 0.55f, strokePx),
+                        strokeWidth = strokePx,
+                    )
+                }
+                drawRoundRect(
+                    brush = rimBrush,
+                    cornerRadius = CornerRadius(rPx, rPx),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx),
+                )
             }
         }
         .clip(shape)
-        .background(brush = surfaceBrush, shape = shape)
-        .drawWithContent {
-            drawContent()
-            drawRoundRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(colors.glassInnerHighlight.copy(alpha = 0.22f), Color.Transparent),
-                    center = Offset(size.width * 0.18f, 0f),
-                    radius = (size.maxDimension * 0.7f).coerceAtLeast(1f),
-                ),
-                cornerRadius = CornerRadius(radius.toPx(), radius.toPx()),
-            )
-            drawLine(
-                color = colors.glassInnerHighlight,
-                start = Offset(radius.toPx() * 0.5f, 1.dp.toPx()),
-                end = Offset(size.width - radius.toPx() * 0.5f, 1.dp.toPx()),
-                strokeWidth = 1.dp.toPx(),
-            )
-        }
-        .border(width = 1.dp, brush = rimBrush, shape = shape)
 }
 
 @Composable
@@ -266,11 +335,11 @@ fun OursButton(
 
     val isSecondaryGlass = variant == OursButtonVariant.Secondary
     val effectiveAlpha = if (enabled) 1f else 0.45f
-    val buttonShape = RoundedCornerShape(OursRadius.control)
+    val buttonShape = RoundedCornerShape(999.dp)
 
     Surface(
         modifier = modifier
-            .defaultMinSize(minHeight = 48.dp)
+            .defaultMinSize(minHeight = 46.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -278,7 +347,7 @@ fun OursButton(
             }
             .then(
                 if (isSecondaryGlass) {
-                    Modifier.oursLiquidGlass(radius = OursRadius.control, colors = colors, elevation = 3.dp)
+                    Modifier.oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 3.dp)
                 } else {
                     Modifier.clip(buttonShape)
                 }

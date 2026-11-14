@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -64,6 +65,7 @@ import app.ours.ui.components.OursAvatar
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursEmptyState
+import app.ours.ui.components.OursGlassBackdrop
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursLoadingState
 import app.ours.ui.components.OursStatusChip
@@ -178,10 +180,10 @@ fun ChatScreen(
         else -> StatusTone.Muted
     }
 
+    OursGlassBackdrop {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.canvas)
             .imePadding(),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -395,12 +397,9 @@ fun ChatScreen(
             }
         }
 
-        // Floating frosted bottom composer
+        // Floating frosted bottom capsule composer
         val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        Surface(
-            shape = RoundedCornerShape(OursRadius.card),
-            color = Color.Transparent,
-            shadowElevation = 0.dp,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (imeOpen) Modifier else Modifier.navigationBarsPadding())
@@ -408,118 +407,131 @@ fun ChatScreen(
                     start = OursSpacing.md,
                     end = OursSpacing.md,
                     top = OursSpacing.xs,
-                    bottom = if (imeOpen) OursSpacing.xs else 100.dp,
-                )
-                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
+                    bottom = if (imeOpen) OursSpacing.xs else 84.dp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = OursSpacing.sm, vertical = OursSpacing.xs),
-            ) {
-                if (replyTarget != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = OursSpacing.xs)
-                            .clip(RoundedCornerShape(OursRadius.chip))
-                            .background(colors.surfaceMuted)
-                            .padding(horizontal = OursSpacing.sm, vertical = OursSpacing.xxs),
-                        verticalAlignment = Alignment.CenterVertically,
+            if (replyTarget != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .oursLiquidGlass(radius = 16.dp, colors = colors, elevation = 3.dp)
+                        .padding(horizontal = OursSpacing.sm, vertical = OursSpacing.xxs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Replying to ${replyTarget!!.senderName}",
+                            style = OursTypography.label,
+                            color = colors.action,
+                        )
+                        Text(
+                            text = replyTarget!!.preview,
+                            style = OursTypography.caption,
+                            color = colors.inkSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    IconButton(
+                        onClick = { replyTarget = null },
+                        modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp),
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Replying to ${replyTarget!!.senderName}",
-                                style = OursTypography.label,
-                                color = colors.action,
-                            )
-                            Text(
-                                text = replyTarget!!.preview,
-                                style = OursTypography.caption,
-                                color = colors.inkSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        IconButton(
-                            onClick = { replyTarget = null },
-                            modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp),
-                        ) {
-                            Icon(
-                                imageVector = OursIcons.Close,
-                                contentDescription = "Cancel reply",
-                                tint = colors.inkMuted,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
+                        Icon(
+                            imageVector = OursIcons.Close,
+                            contentDescription = "Cancel reply",
+                            tint = colors.inkMuted,
+                            modifier = Modifier.size(16.dp),
+                        )
                     }
                 }
+            }
 
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = Color.Transparent,
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 54.dp)
+                    .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 6.dp),
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
                 ) {
-                    IconButton(onClick = onLaunchCameraCheckIn) {
+                    IconButton(
+                        onClick = onLaunchCameraCheckIn,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(colors.surfaceMuted.copy(alpha = 0.55f)),
+                    ) {
                         Icon(
                             imageVector = OursIcons.Camera,
                             contentDescription = "Camera check-in",
                             tint = colors.inkSecondary,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(OursRadius.card),
-                        color = colors.surfaceMuted,
-                        border = BorderStroke(1.dp, colors.border),
-                        modifier = Modifier.weight(1f),
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = OursSpacing.xs, vertical = 8.dp),
+                        contentAlignment = Alignment.CenterStart,
                     ) {
-                        Box(
-                            modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = 10.dp),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            if (draft.isEmpty()) {
-                                Text(
-                                    text = strings.messagePlaceholder,
-                                    style = OursTypography.body,
-                                    color = colors.inkMuted,
-                                )
-                            }
-                            BasicTextField(
-                                value = draft,
-                                onValueChange = { draft = it },
-                                textStyle = OursTypography.body.copy(color = colors.ink),
-                                cursorBrush = SolidColor(colors.action),
-                                maxLines = 4,
-                                modifier = Modifier.fillMaxWidth(),
+                        if (draft.isEmpty()) {
+                            Text(
+                                text = strings.messagePlaceholder,
+                                style = OursTypography.body,
+                                color = colors.inkMuted,
                             )
                         }
+                        BasicTextField(
+                            value = draft,
+                            onValueChange = { draft = it },
+                            textStyle = OursTypography.body.copy(color = colors.ink),
+                            cursorBrush = SolidColor(colors.action),
+                            maxLines = 4,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
 
                     val canSend = draft.isNotBlank() && !state.busy
-                    IconButton(
-                        enabled = canSend,
-                        onClick = {
-                            val textToSend = draft.trim()
-                            val target = replyTarget
-                            draft = ""
-                            replyTarget = null
-                            vm.sendChatMessage(
-                                text = textToSend,
-                                replyToMessageId = target?.messageId,
-                                replyToCheckInId = target?.checkInId,
-                            )
-                        },
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .padding(2.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (canSend) colors.action else colors.surfaceMuted.copy(alpha = 0.6f))
+                            .clickable(enabled = canSend) {
+                                val textToSend = draft.trim()
+                                val target = replyTarget
+                                draft = ""
+                                replyTarget = null
+                                vm.sendChatMessage(
+                                    text = textToSend,
+                                    replyToMessageId = target?.messageId,
+                                    replyToCheckInId = target?.checkInId,
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             imageVector = OursIcons.Send,
                             contentDescription = "Send",
-                            tint = if (canSend) colors.action else colors.inkMuted,
+                            tint = if (canSend) colors.onAction else colors.inkMuted,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
             }
         }
+    }
     }
     }
 }
@@ -536,24 +548,18 @@ private fun MessageBubble(
     onCopy: (String) -> Unit,
 ) {
     val colors = OursTheme.colors
-    val bubbleBg = if (isMine) colors.glassActionTint else colors.glassSurface
-    val bubbleBorder = if (isMine) colors.action.copy(alpha = 0.25f) else colors.glassBorder
 
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
     ) {
         Surface(
-            shape = RoundedCornerShape(
-                topStart = OursRadius.card,
-                topEnd = OursRadius.card,
-                bottomStart = if (isMine) OursRadius.card else 6.dp,
-                bottomEnd = if (isMine) 6.dp else OursRadius.card,
-            ),
-            color = bubbleBg,
-            border = BorderStroke(1.dp, bubbleBorder),
+            shape = RoundedCornerShape(18.dp),
+            color = Color.Transparent,
+            shadowElevation = 0.dp,
             modifier = Modifier
                 .widthIn(max = 290.dp)
+                .oursLiquidGlass(radius = 18.dp, colors = colors, elevation = 2.dp, tinted = isMine)
                 .combinedClickable(
                     onClick = onQuote,
                     onLongClick = {

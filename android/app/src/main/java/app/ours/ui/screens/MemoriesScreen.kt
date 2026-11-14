@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -51,6 +52,7 @@ import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
 import app.ours.ui.components.OursEmptyState
 import app.ours.ui.components.OursErrorState
+import app.ours.ui.components.OursGlassBackdrop
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursLoadingState
 import app.ours.ui.components.OursMapView
@@ -98,10 +100,9 @@ fun MemoriesScreen(
         }
     }
 
+    OursGlassBackdrop {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.canvas),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter,
     ) {
         if (showMapMode) {
@@ -240,8 +241,8 @@ fun MemoriesScreen(
                             }
                             OursStaggeredItem(index = idx) {
                                 OursCard(
-                                    radius = OursRadius.mediaCard,
-                                    padding = PaddingValues(OursSpacing.sm),
+                                    radius = 22.dp,
+                                    padding = PaddingValues(12.dp),
                                     onClick = { onOpenFullPhoto(item) },
                                 ) {
                                 AsyncImage(
@@ -306,6 +307,7 @@ fun MemoriesScreen(
         }
     }
     }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -327,8 +329,9 @@ internal fun <T> OursSearchFilterBar(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 3.dp),
-            shape = RoundedCornerShape(OursRadius.card),
+                .heightIn(min = 44.dp)
+                .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 3.dp),
+            shape = RoundedCornerShape(999.dp),
             color = Color.Transparent,
         ) {
             Row(
@@ -392,7 +395,7 @@ internal fun <T> OursSearchFilterBar(
                         .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                         .oursPressScale(chipInteraction)
                         .oursLiquidGlass(
-                            radius = OursRadius.chip,
+                            radius = 999.dp,
                             colors = colors,
                             elevation = if (selected) 3.dp else 1.dp,
                             tinted = selected,
@@ -402,7 +405,7 @@ internal fun <T> OursSearchFilterBar(
                             indication = null,
                             onClick = { onSelectFilter(value) },
                         ),
-                    shape = RoundedCornerShape(OursRadius.chip),
+                    shape = RoundedCornerShape(999.dp),
                     color = Color.Transparent,
                 ) {
                     Box(

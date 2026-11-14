@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +69,7 @@ import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.components.OursCard
+import app.ours.ui.components.OursGlassBackdrop
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursStatusChip
@@ -144,12 +146,11 @@ fun SettingsScreen(
         .asPaddingValues()
         .calculateTopPadding()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.canvas),
-        contentAlignment = Alignment.TopCenter,
-    ) {
+    OursGlassBackdrop {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
     LazyColumn(
         modifier = Modifier.oursContentWidth(layoutSpec),
         contentPadding = PaddingValues(
@@ -769,6 +770,7 @@ fun SettingsScreen(
             )
         }
     }
+    }
 }
 
 @Composable
@@ -784,9 +786,9 @@ private fun ThemePillToggle(
         "dark" to labels.third,
     )
     Surface(
-        shape = RoundedCornerShape(OursRadius.chip),
-        color = colors.surfaceMuted,
-        border = BorderStroke(1.dp, colors.border),
+        shape = RoundedCornerShape(999.dp),
+        color = colors.surfaceMuted.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, colors.glassBorder),
     ) {
         Row(
             modifier = Modifier.padding(3.dp),
@@ -798,14 +800,14 @@ private fun ThemePillToggle(
                 Surface(
                     modifier = Modifier
                         .oursPressScale(interactionSource)
-                        .clip(RoundedCornerShape(OursRadius.chip))
+                        .clip(RoundedCornerShape(999.dp))
                         .clickable(
                             interactionSource = interactionSource,
                             indication = null,
                             onClick = { onSelect(mode) },
                         ),
-                    shape = RoundedCornerShape(OursRadius.chip),
-                    color = if (selected) colors.action else colors.surfaceMuted,
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (selected) colors.action else Color.Transparent,
                 ) {
                     Text(
                         text = label,
