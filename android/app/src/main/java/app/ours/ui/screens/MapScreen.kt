@@ -13,6 +13,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,11 +54,14 @@ import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursMapView
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
+import app.ours.ui.components.oursContentWidth
+import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
 import app.ours.ui.theme.OursTypography
 import app.ours.util.Formatters
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MapScreen(
     state: OursUiState,
@@ -65,6 +70,7 @@ fun MapScreen(
 ) {
     val colors = OursTheme.colors
     val strings = OursTheme.strings
+    val layoutSpec = rememberOursLayoutSpec()
     var recenterTrigger by remember { mutableIntStateOf(0) }
     var showPartnerSheet by remember { mutableStateOf(false) }
     var nudgePulseKey by remember { mutableIntStateOf(0) }
@@ -136,9 +142,9 @@ fun MapScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .oursContentWidth(layoutSpec)
                 .statusBarsPadding()
-                .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm)
-                .fillMaxWidth(),
+                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
         ) {
         OursCard(
@@ -225,13 +231,13 @@ fun MapScreen(
         }
 
         // Bottom floating actions: Check-in CTA + Nudge + Recenter
-        Row(
+        FlowRow(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = OursSpacing.md, vertical = OursSpacing.md)
-                .fillMaxWidth(),
+                .oursContentWidth(layoutSpec)
+                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.md),
             horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
         ) {
             OursButton(
                 text = strings.checkIn,
@@ -243,7 +249,7 @@ fun MapScreen(
                         modifier = Modifier.size(18.dp),
                     )
                 },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f, fill = true),
             )
             Box(contentAlignment = Alignment.Center) {
                 Box(

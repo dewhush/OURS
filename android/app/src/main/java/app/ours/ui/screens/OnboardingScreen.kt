@@ -57,7 +57,9 @@ import app.ours.ui.components.OursCard
 import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
+import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursPressScale
+import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
@@ -152,13 +154,20 @@ fun OnboardingScreen(
         notifGranted = granted
     }
 
-    Column(
+    val layoutSpec = rememberOursLayoutSpec()
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas)
-            .safeDrawingPadding()
+            .safeDrawingPadding(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+    Column(
+        modifier = Modifier
+            .oursContentWidth(layoutSpec)
             .verticalScroll(rememberScrollState())
-            .padding(OursSpacing.lg),
+            .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
     ) {
         Row(
@@ -511,6 +520,7 @@ fun OnboardingScreen(
                 }
             }
         }
+    }
     }
 
     if (showServerSheet) {

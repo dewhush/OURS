@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -56,6 +57,8 @@ import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
+import app.ours.ui.components.oursContentWidth
+import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
@@ -70,6 +73,7 @@ fun SettingsScreen(
 ) {
     val colors = OursTheme.colors
     val strings = OursTheme.strings
+    val layoutSpec = rememberOursLayoutSpec()
     var serverInput by remember(state.serverUrl) { mutableStateOf(state.serverUrl) }
     var serverExpanded by remember { mutableStateOf(false) }
     var placesExpanded by remember { mutableStateOf(false) }
@@ -77,15 +81,19 @@ fun SettingsScreen(
     var showXiaomiGuide by remember { mutableStateOf(false) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
 
-    LazyColumn(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas)
             .statusBarsPadding(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+    LazyColumn(
+        modifier = Modifier.oursContentWidth(layoutSpec),
         contentPadding = PaddingValues(
-            start = OursSpacing.md,
+            start = layoutSpec.horizontalPadding,
             top = OursSpacing.md,
-            end = OursSpacing.md,
+            end = layoutSpec.horizontalPadding,
             bottom = 116.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
@@ -442,6 +450,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
     }
 
     if (showSignOutConfirm) {

@@ -7,10 +7,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,7 +51,9 @@ import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursLoadingState
 import app.ours.ui.components.OursMapView
 import app.ours.ui.components.OursStaggeredItem
+import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursPressScale
+import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -66,6 +71,7 @@ fun MemoriesScreen(
 ) {
     val colors = OursTheme.colors
     val strings = OursTheme.strings
+    val layoutSpec = rememberOursLayoutSpec()
     var showMapMode by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(MemoryFilter.All) }
@@ -85,16 +91,22 @@ fun MemoriesScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas)
             .statusBarsPadding(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+    Column(
+        modifier = Modifier
+            .oursContentWidth(layoutSpec)
+            .fillMaxHeight(),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -248,8 +260,10 @@ fun MemoriesScreen(
             }
         }
     }
+    }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun <T> OursSearchFilterBar(
     query: String,
@@ -314,9 +328,10 @@ internal fun <T> OursSearchFilterBar(
             }
         }
 
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
         ) {
             filters.forEach { (value, label) ->
                 val selected = value == selectedFilter

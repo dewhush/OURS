@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +62,43 @@ import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
 import app.ours.ui.theme.OursTypography
+
+enum class OursBreakpoint { Compact, Standard, Expanded }
+
+data class OursLayoutSpec(
+    val breakpoint: OursBreakpoint,
+    val horizontalPadding: Dp,
+    val maxContentWidth: Dp,
+)
+
+@Composable
+fun rememberOursLayoutSpec(): OursLayoutSpec {
+    val widthDp = LocalConfiguration.current.screenWidthDp
+    return when {
+        widthDp < 360 -> OursLayoutSpec(
+            breakpoint = OursBreakpoint.Compact,
+            horizontalPadding = 14.dp,
+            maxContentWidth = Dp.Unspecified,
+        )
+        widthDp < 600 -> OursLayoutSpec(
+            breakpoint = OursBreakpoint.Standard,
+            horizontalPadding = 20.dp,
+            maxContentWidth = Dp.Unspecified,
+        )
+        else -> OursLayoutSpec(
+            breakpoint = OursBreakpoint.Expanded,
+            horizontalPadding = 24.dp,
+            maxContentWidth = 560.dp,
+        )
+    }
+}
+
+fun Modifier.oursContentWidth(spec: OursLayoutSpec): Modifier =
+    if (spec.maxContentWidth != Dp.Unspecified) {
+        this.widthIn(max = spec.maxContentWidth).fillMaxWidth()
+    } else {
+        this.fillMaxWidth()
+    }
 
 enum class OursButtonVariant { Primary, Secondary, Ghost, Destructive }
 

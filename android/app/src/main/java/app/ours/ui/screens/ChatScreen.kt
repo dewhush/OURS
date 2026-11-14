@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,6 +56,8 @@ import app.ours.ui.components.OursLoadingState
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
+import app.ours.ui.components.oursContentWidth
+import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -97,6 +100,7 @@ fun ChatScreen(
 ) {
     val colors = OursTheme.colors
     val strings = OursTheme.strings
+    val layoutSpec = rememberOursLayoutSpec()
     val partnerName = state.partner?.name ?: "Partner"
     val myId = state.me?.id ?: -1L
     val listState = rememberLazyListState()
@@ -158,10 +162,16 @@ fun ChatScreen(
         else -> StatusTone.Muted
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+    Column(
+        modifier = Modifier
+            .oursContentWidth(layoutSpec)
+            .fillMaxHeight(),
     ) {
         // Floating frosted top header
         Surface(
@@ -172,7 +182,7 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
+                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.xs),
         ) {
             Row(
                 modifier = Modifier
@@ -436,6 +446,7 @@ fun ChatScreen(
                 }
             }
         }
+    }
     }
 }
 

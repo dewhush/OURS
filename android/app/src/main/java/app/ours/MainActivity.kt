@@ -86,7 +86,9 @@ import app.ours.ui.components.OursButton
 import app.ours.ui.components.OursIcons
 import app.ours.ui.components.OursInterlockedRingsMark
 import app.ours.ui.components.OursSendConfirmation
+import app.ours.ui.components.oursContentWidth
 import app.ours.ui.components.oursPressScale
+import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.screens.ChatScreen
 import app.ours.ui.screens.MapScreen
 import app.ours.ui.screens.MemoriesScreen
@@ -533,6 +535,7 @@ private fun OursFloatingBottomNav(
     onSelect: (MainTab) -> Unit,
 ) {
     val colors = OursTheme.colors
+    val layoutSpec = rememberOursLayoutSpec()
     val items = listOf(
         Triple(MainTab.Map, OursIcons.Map, strings.navMap),
         Triple(MainTab.Memories, OursIcons.Memories, strings.navMemories),
@@ -545,9 +548,11 @@ private fun OursFloatingBottomNav(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
+            .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.xs),
+        contentAlignment = Alignment.Center,
     ) {
         Surface(
+            modifier = Modifier.oursContentWidth(layoutSpec),
             shape = RoundedCornerShape(OursRadius.card),
             color = colors.glassSurfaceStrong,
             border = BorderStroke(1.dp, colors.glassBorder),
