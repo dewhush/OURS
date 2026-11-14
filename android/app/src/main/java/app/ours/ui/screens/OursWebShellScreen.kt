@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,9 +39,37 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import app.ours.bridge.OursNativeBridge
 import app.ours.data.local.PrefsStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 private const val OFFLINE_FALLBACK_URL = "file:///android_asset/web/index.html"
+
+private fun resolveReachableServerUrl(preferred: String): String? {
+    val candidates = linkedSetOf(
+        preferred.trim().trimEnd('/'),
+        "http://127.0.0.1:8787",
+        "http://192.168.100.12:8787",
+        "http://100.120.106.95:8787",
+    ).filter { it.startsWith("http://") || it.startsWith("https://") }
+
+    for (base in candidates) {
+        val ok = runCatching {
+            val conn = (URL("$base/healthz").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 700
+                readTimeout = 700
+            }
+            val code = conn.responseCode
+            conn.disconnect()
+            code in 200..299
+        }.getOrDefault(false)
+        if (ok) return base
+    }
+    return null
+}
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -268,10 +297,22 @@ fun OursWebShellScreen(
                     }
 
                     clearCache(false)
-                    loadUrl(buildLiveUrl(prefs.serverUrl))
                     webViewRef = this
                 }
             },
         )
+    }
+
+    LaunchedEffect(webViewRef) {
+        val wv = webViewRef ?: return@LaunchedEffect
+        val reachable = withContext(Dispatchers.IO) {
+            resolveReachableServerUrl(prefs.serverUrl)
+        }
+        if (reachable != null) {
+            prefs.serverUrl = reachable
+            wv.loadUrl(buildLiveUrl(reachable))
+        } else {
+            wv.loadUrl(OFFLINE_FALLBACK_URL)
+        }
     }
 }

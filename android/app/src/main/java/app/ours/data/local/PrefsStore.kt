@@ -11,10 +11,14 @@ class PrefsStore(context: Context) {
         context.applicationContext.getSharedPreferences("ours_prefs", Context.MODE_PRIVATE)
 
     var serverUrl: String
-        get() = prefs.getString(KEY_SERVER_URL, null)
-            ?.takeIf { it.isNotBlank() }
-            ?: BuildConfig.DEFAULT_SERVER_URL.takeIf { it.isNotBlank() }
-            ?: "http://192.168.100.92:8080"
+        get() {
+            val stored = prefs.getString(KEY_SERVER_URL, null)?.takeIf { it.isNotBlank() }
+            if (stored != null && !stored.contains(":8080") && !stored.contains("192.168.100.92")) {
+                return stored
+            }
+            return BuildConfig.DEFAULT_SERVER_URL.takeIf { it.isNotBlank() }
+                ?: "http://127.0.0.1:8787"
+        }
         set(value) = prefs.edit().putString(KEY_SERVER_URL, value.trim().trimEnd('/')).apply()
 
     var language: String
