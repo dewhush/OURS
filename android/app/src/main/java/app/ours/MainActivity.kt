@@ -1,7 +1,10 @@
 package app.ours
 
+import android.Manifest
 import android.net.Uri
 import android.os.Bundle
+import androidx.compose.runtime.saveable.rememberSaveable
+import app.ours.util.ProfileAndSosHelper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -311,11 +314,29 @@ private fun OursRoot(vm: OursViewModel) {
         return
     }
 
-    var pendingPhotoUri by remember { mutableStateOf<Uri?>(null) }
-    var capturedCheckInUri by remember { mutableStateOf<Uri?>(null) }
-    var replyTargetCheckInId by remember { mutableStateOf<Long?>(null) }
+    var pendingPhotoUriStr by rememberSaveable { mutableStateOf<String?>(null) }
+    var capturedCheckInUriStr by rememberSaveable { mutableStateOf<String?>(null) }
+    var replyTargetCheckInId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val capturedCheckInUri = capturedCheckInUriStr?.let(Uri::parse)
     var fullPhotoId by remember { mutableStateOf<String?>(null) }
     var fullCheckIn by remember { mutableStateOf<CheckInDto?>(null) }
+    var askedContactsPermission by rememberSaveable { mutableStateOf(false) }
+
+    val contactsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    LaunchedEffect(state.isPaired, state.emergencyContactPhone) {
+        if (
+            state.isPaired &&
+            state.emergencyContactPhone.isNotBlank() &&
+            !askedContactsPermission &&
+            !ProfileAndSosHelper.hasContactsPermission(context)
+        ) {
+            askedContactsPermission = true
+            contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
 
     fun newCameraUri(): Uri {
         val dir = File(context.cacheDir, "photos").apply { mkdirs() }
@@ -327,32 +348,32 @@ private fun OursRoot(vm: OursViewModel) {
         ActivityResultContracts.TakePicture()
     ) { ok ->
         if (ok) {
-            capturedCheckInUri = pendingPhotoUri
+            capturedCheckInUriStr = pendingPhotoUriStr
         }
-        pendingPhotoUri = null
+        pendingPhotoUriStr = null
     }
 
     val replyCameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { ok ->
         val cid = replyTargetCheckInId
-        val uri = pendingPhotoUri
+        val uri = pendingPhotoUriStr?.let(Uri::parse)
         if (ok && cid != null && uri != null) {
             vm.sendReply(cid, null, uri)
         }
         replyTargetCheckInId = null
-        pendingPhotoUri = null
+        pendingPhotoUriStr = null
     }
 
     fun launchCheckInCamera() {
         val uri = newCameraUri()
-        pendingPhotoUri = uri
+        pendingPhotoUriStr = uri.toString()
         checkInCameraLauncher.launch(uri)
     }
 
     fun launchReplyCamera(checkInId: Long) {
         val uri = newCameraUri()
-        pendingPhotoUri = uri
+        pendingPhotoUriStr = uri.toString()
         replyTargetCheckInId = checkInId
         replyCameraLauncher.launch(uri)
     }
@@ -378,11 +399,10 @@ private fun OursRoot(vm: OursViewModel) {
                 )
             }
         },
-    ) { innerPadding ->
+    ) { _ ->
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+                .fillMaxSize(),
         ) {
             AnimatedContent(
                 targetState = state.activeTab,
@@ -444,8 +464,8 @@ private fun OursRoot(vm: OursViewModel) {
             ) {
                 Surface(
                     shape = RoundedCornerShape(999.dp),
-                    color = colors.dangerSoft,
-                    border = BorderStroke(1.dp, colors.danger.copy(alpha = 0.35f)),
+                    color = colors.glassSurfaceStrong,
+                    border = BorderStroke(1.dp, colors.danger.copy(alpha = 0.45f)),
                     shadowElevation = 4.dp,
                     onClick = { vm.clearError() },
                 ) {
@@ -496,7 +516,7 @@ private fun OursRoot(vm: OursViewModel) {
     if (capturedCheckInUri != null) {
         var note by remember { mutableStateOf("") }
         var placeName by remember { mutableStateOf("") }
-        OursBottomSheet(onDismiss = { capturedCheckInUri = null }) {
+        OursBottomSheet(onDismiss = { capturedCheckInUriStr = null }) {
             Text("Send check-in", style = OursTypography.headline, color = colors.ink)
             Spacer(Modifier.height(OursSpacing.sm))
             AsyncImage(
@@ -531,7 +551,7 @@ private fun OursRoot(vm: OursViewModel) {
                 loading = state.busy,
                 onClick = {
                     val uri = capturedCheckInUri ?: return@OursButton
-                    capturedCheckInUri = null
+                    capturedCheckInUriStr = null
                     vm.sendCheckIn(uri, note, placeName)
                 },
                 modifier = Modifier.fillMaxWidth(),

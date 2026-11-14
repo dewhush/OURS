@@ -41,6 +41,18 @@ class OursMessagingService : FirebaseMessagingService() {
                 val id = data["event_id"]?.toIntOrNull() ?: 9001
                 OursNotifier.notify(this, OursNotifier.CHANNEL_NUDGE, id, title, body)
             }
+            "sos" -> {
+                OursNotifier.buzzPhone(this)
+                val title = data["title"] ?: "SOS Alert"
+                val body = data["body"] ?: "Your partner triggered an emergency SOS alert."
+                val id = data["event_id"]?.toIntOrNull() ?: 9110
+                OursNotifier.notify(this, OursNotifier.CHANNEL_NUDGE, id, title, body)
+            }
+            "avatar" -> {
+                if (!app.prefs.sharingPaused) {
+                    LocationTrackingService.start(this, wakeFix = true)
+                }
+            }
             "checkin", "reply", "chat_message", "place", "highlight" -> {
                 val title = data["title"] ?: "OURS"
                 val body = data["body"] ?: "New update"

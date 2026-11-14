@@ -45,8 +45,15 @@ class OursApiClient(
         .pingInterval(20, TimeUnit.SECONDS)
         .build()
 
+    private val refreshLock = Any()
+
     fun createImageLoader(context: Context): ImageLoader {
+        val coilDispatcher = okhttp3.Dispatcher().apply {
+            maxRequests = 4
+            maxRequestsPerHost = 4
+        }
         val authedClient = okHttp.newBuilder()
+            .dispatcher(coilDispatcher)
             .addInterceptor { chain ->
                 val token = prefs.accessToken
                 val req = if (!token.isNullOrBlank()) {
@@ -64,8 +71,15 @@ class OursApiClient(
                     ?.removePrefix("Bearer ")
                     ?.trim()
                     .orEmpty()
-                val newToken = runBlocking {
-                    runCatching { refreshAccessToken(failedToken) }.getOrNull()
+                val newToken = synchronized(refreshLock) {
+                    val current = prefs.accessToken
+                    if (!current.isNullOrBlank() && current != failedToken) {
+                        current
+                    } else {
+                        runBlocking {
+                            runCatching { refreshAccessToken(failedToken) }.getOrNull()
+                        }
+                    }
                 } ?: return@authenticator null
                 response.request.newBuilder()
                     .header("Authorization", "Bearer $newToken")

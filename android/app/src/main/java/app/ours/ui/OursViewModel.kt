@@ -519,7 +519,7 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     showConfirmation("Check-in sent")
                 } else {
-                    showConfirmation("Queued — will upload when online")
+                    showConfirmation("Queued: will upload when online")
                 }
             }.onFailure { err ->
                 _state.update { it.copy(errorMessage = err.message ?: "Check-in failed") }

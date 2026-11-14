@@ -1,9 +1,12 @@
 package app.ours.util
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.ContactsContract
+import androidx.core.content.ContextCompat
 import java.security.MessageDigest
 
 object ProfileAndSosHelper {
@@ -21,21 +24,28 @@ object ProfileAndSosHelper {
         return gravatarUrl(email)
     }
 
-    fun queryLocalProfilePhotoUri(context: Context): String? = runCatching {
-        context.contentResolver.query(
-            ContactsContract.Profile.CONTENT_URI,
-            arrayOf(ContactsContract.Profile.PHOTO_URI, ContactsContract.Profile.PHOTO_THUMBNAIL_URI),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                cursor.getString(1) ?: cursor.getString(0)
-            } else {
-                null
+    fun hasContactsPermission(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    fun queryLocalProfilePhotoUri(context: Context): String? {
+        if (!hasContactsPermission(context)) return null
+        return runCatching {
+            context.contentResolver.query(
+                ContactsContract.Profile.CONTENT_URI,
+                arrayOf(ContactsContract.Profile.PHOTO_URI, ContactsContract.Profile.PHOTO_THUMBNAIL_URI),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(1) ?: cursor.getString(0)
+                } else {
+                    null
+                }
             }
-        }
-    }.getOrNull()
+        }.getOrNull()
+    }
 
     fun launchWhatsAppCall(context: Context, rawPhone: String): Boolean {
         val digits = rawPhone.filter { it.isDigit() }.let { d ->
@@ -43,8 +53,8 @@ object ProfileAndSosHelper {
         }
         if (digits.isBlank()) return false
 
-        // Try direct WhatsApp VoIP call MIME if contact ID is resolvable, else wa.me deep link
-        val waCallIntent = runCatching {
+        // Try direct WhatsApp VoIP call MIME if READ_CONTACTS is granted and contact ID is resolvable, else wa.me deep link
+        val waCallIntent = if (hasContactsPermission(context)) runCatching {
             val lookupUri = Uri.withAppendedPath(
                 ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
                 Uri.encode(rawPhone.trim()),
@@ -80,7 +90,7 @@ object ProfileAndSosHelper {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             }
-        }.getOrNull()
+        }.getOrNull() else null
 
         if (waCallIntent != null && runCatching { context.startActivity(waCallIntent) }.isSuccess) {
             return true

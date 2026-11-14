@@ -13,6 +13,8 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.BatteryManager
 import android.os.Build
+import android.os.CancellationSignal
+import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.content.ContextCompat
@@ -128,7 +130,7 @@ class LocationTrackingService : Service() {
 
         val providers = locationManager.allProviders
         val useFused = Build.VERSION.SDK_INT >= 31 && providers.contains(LocationManager.FUSED_PROVIDER)
-        if (useFused) {
+        val fusedOk = if (useFused) {
             runCatching {
                 locationManager.requestLocationUpdates(
                     LocationManager.FUSED_PROVIDER,
@@ -137,8 +139,10 @@ class LocationTrackingService : Service() {
                     listener,
                     Looper.getMainLooper()
                 )
-            }
-        } else {
+            }.isSuccess
+        } else false
+
+        if (!fusedOk) {
             if (providers.contains(LocationManager.GPS_PROVIDER)) {
                 runCatching {
                     locationManager.requestLocationUpdates(
@@ -150,16 +154,17 @@ class LocationTrackingService : Service() {
                     )
                 }
             }
-            if (providers.contains(LocationManager.NETWORK_PROVIDER)) {
-                runCatching {
-                    locationManager.requestLocationUpdates(
-                        LocationManager.NETWORK_PROVIDER,
-                        config.intervalMs,
-                        config.minDistanceMeters,
-                        listener,
-                        Looper.getMainLooper()
-                    )
-                }
+        }
+        // Always register NETWORK_PROVIDER as an indoor/Wi-Fi fallback when available
+        if (providers.contains(LocationManager.NETWORK_PROVIDER)) {
+            runCatching {
+                locationManager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    config.intervalMs,
+                    config.minDistanceMeters,
+                    listener,
+                    Looper.getMainLooper()
+                )
             }
         }
         registered = true
@@ -186,9 +191,13 @@ class LocationTrackingService : Service() {
             }
         }
         if (Build.VERSION.SDK_INT >= 30) {
+            val mainHandler = Handler(Looper.getMainLooper())
             providers.forEach { provider ->
+                val signal = CancellationSignal()
+                mainHandler.postDelayed({ signal.cancel() }, 10_000L)
                 runCatching {
-                    locationManager.getCurrentLocation(provider, null, mainExecutor) { loc ->
+                    locationManager.getCurrentLocation(provider, signal, mainExecutor) { loc ->
+                        mainHandler.removeCallbacksAndMessages(null)
                         if (loc != null) onLocationReceived(loc)
                     }
                 }
