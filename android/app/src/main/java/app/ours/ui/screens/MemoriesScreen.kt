@@ -97,8 +97,7 @@ fun MemoriesScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.canvas)
-            .oursHeaderInsets(),
+            .background(colors.canvas),
         contentAlignment = Alignment.TopCenter,
     ) {
     Column(
@@ -106,27 +105,43 @@ fun MemoriesScreen(
             .oursContentWidth(layoutSpec)
             .fillMaxHeight(),
     ) {
-        Row(
+        Surface(
+            shape = RoundedCornerShape(OursRadius.card),
+            color = colors.glassSurfaceStrong,
+            border = BorderStroke(1.dp, colors.glassBorder),
+            shadowElevation = 4.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .oursHeaderInsets()
+                .padding(horizontal = layoutSpec.horizontalPadding),
         ) {
-            Text(strings.memoriesTitle, style = OursTypography.display, color = colors.ink)
-            Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {
-                OursButton(
-                    text = strings.timelineTab,
-                    variant = if (!showMapMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
-                    onClick = { showMapMode = false },
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = strings.memoriesTitle,
+                    style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.ink,
                 )
-                OursButton(
-                    text = strings.mapTab,
-                    variant = if (showMapMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
-                    onClick = { showMapMode = true },
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {
+                    OursButton(
+                        text = strings.timelineTab,
+                        variant = if (!showMapMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
+                        onClick = { showMapMode = false },
+                    )
+                    OursButton(
+                        text = strings.mapTab,
+                        variant = if (showMapMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
+                        onClick = { showMapMode = true },
+                    )
+                }
             }
         }
+        Spacer(Modifier.height(OursSpacing.xs))
 
         OursSearchFilterBar(
             query = searchQuery,

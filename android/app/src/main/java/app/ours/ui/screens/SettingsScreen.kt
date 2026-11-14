@@ -16,13 +16,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -133,26 +138,26 @@ fun SettingsScreen(
         }
     }
 
+    val topHeaderInset = WindowInsets.statusBars.union(WindowInsets.displayCutout)
+        .asPaddingValues()
+        .calculateTopPadding()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.canvas)
-            .oursHeaderInsets(),
+            .background(colors.canvas),
         contentAlignment = Alignment.TopCenter,
     ) {
     LazyColumn(
         modifier = Modifier.oursContentWidth(layoutSpec),
         contentPadding = PaddingValues(
             start = layoutSpec.horizontalPadding,
-            top = OursSpacing.md,
+            top = topHeaderInset + 84.dp,
             end = layoutSpec.horizontalPadding,
             bottom = 116.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
     ) {
-        item {
-            Text(strings.settingsTitle, style = OursTypography.display, color = colors.ink)
-        }
 
         // 1. Couple Header Card
         item {
@@ -642,6 +647,41 @@ fun SettingsScreen(
             )
         }
     }
+
+        // Fixed floating frosted top header aligned below HyperIsland
+        Surface(
+            shape = RoundedCornerShape(OursRadius.card),
+            color = colors.glassSurfaceStrong,
+            border = BorderStroke(1.dp, colors.glassBorder),
+            shadowElevation = 4.dp,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .oursContentWidth(layoutSpec)
+                .oursHeaderInsets()
+                .padding(horizontal = layoutSpec.horizontalPadding),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = strings.settingsTitle,
+                    style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.ink,
+                )
+                OursStatusChip(
+                    label = if (state.partner != null) {
+                        if (strings.langCode == "id") "Terhubung" else "Paired"
+                    } else {
+                        strings.waitingForPartner
+                    },
+                    tone = if (state.partner != null) StatusTone.Live else StatusTone.Muted,
+                )
+            }
+        }
     }
 
     if (showSignOutConfirm) {

@@ -198,7 +198,7 @@ fun MapScreen(
                 .align(Alignment.TopCenter)
                 .oursContentWidth(layoutSpec)
                 .oursHeaderInsets()
-                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.xs),
+                .padding(horizontal = layoutSpec.horizontalPadding),
             verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
         ) {
         OursCard(
