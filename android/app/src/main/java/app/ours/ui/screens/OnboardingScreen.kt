@@ -227,18 +227,6 @@ fun OnboardingScreen(
             Column(verticalArrangement = Arrangement.spacedBy(OursSpacing.md)) {
                 when (currentStep) {
                     0 -> {
-                Surface(
-                    shape = RoundedCornerShape(OursRadius.chip),
-                    color = colors.actionSoft,
-                ) {
-                    Text(
-                        text = "OURS · PRIVATE FOR TWO",
-                        style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.ink,
-                        modifier = Modifier.padding(horizontal = OursSpacing.sm, vertical = 4.dp),
-                    )
-                }
-
                 Text(strings.connectGmailTitle, style = OursTypography.display, color = colors.ink)
                 Text(
                     strings.connectGmailSubtitle,

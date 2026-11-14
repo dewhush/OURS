@@ -1,5 +1,6 @@
 package app.ours.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,7 +13,10 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,7 +26,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,8 +89,12 @@ fun MemoriesScreen(
     val strings = OursTheme.strings
     val layoutSpec = rememberOursLayoutSpec()
     var showMapMode by remember { mutableStateOf(false) }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(MemoryFilter.All) }
+    val topHeaderInset = WindowInsets.statusBars.union(WindowInsets.displayCutout)
+        .asPaddingValues()
+        .calculateTopPadding()
 
     val filteredMemories = remember(state.memories, searchQuery, filter) {
         val q = searchQuery.trim().lowercase()
@@ -106,74 +117,15 @@ fun MemoriesScreen(
         contentAlignment = Alignment.TopCenter,
     ) {
         if (showMapMode) {
-            OursMapView(
-                modifier = Modifier.fillMaxSize(),
-                partnerLocation = state.partnerLocation,
-                myLocation = state.myLocation,
-                highlights = filteredMemories,
-                places = state.places,
-                onHighlightClick = onOpenFullPhoto,
-            )
-        }
-    Column(
-        modifier = Modifier
-            .oursContentWidth(layoutSpec)
-            .fillMaxHeight(),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(OursRadius.card),
-            color = Color.Transparent,
-            shadowElevation = 0.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .oursHeaderInsets()
-                .padding(horizontal = layoutSpec.horizontalPadding)
-                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = strings.memoriesTitle,
-                    style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
-                    color = colors.ink,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs)) {
-                    OursButton(
-                        text = strings.timelineTab,
-                        variant = if (!showMapMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
-                        onClick = { showMapMode = false },
-                    )
-                    OursButton(
-                        text = strings.mapTab,
-                        variant = if (showMapMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
-                        onClick = { showMapMode = true },
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(OursSpacing.sm))
-
-        OursSearchFilterBar(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            placeholder = strings.searchPlaceholder,
-            filters = listOf(
-                MemoryFilter.All to strings.filterAll,
-                MemoryFilter.Photos to strings.filterPhotos,
-                MemoryFilter.Places to strings.filterPlaces,
-            ),
-            selectedFilter = filter,
-            onSelectFilter = { filter = it },
-            modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.xxs),
-        )
-
-        if (showMapMode) {
             Box(modifier = Modifier.fillMaxSize()) {
+                OursMapView(
+                    modifier = Modifier.fillMaxSize(),
+                    partnerLocation = state.partnerLocation,
+                    myLocation = state.myLocation,
+                    highlights = filteredMemories,
+                    places = state.places,
+                    onHighlightClick = onOpenFullPhoto,
+                )
                 if (state.memories.isEmpty() && !state.memoriesLoading) {
                     OursCard(
                         modifier = Modifier
@@ -193,46 +145,58 @@ fun MemoriesScreen(
                 }
             }
         } else {
-            when {
-                state.memoriesLoading && state.memories.isEmpty() -> {
-                    OursLoadingState("Loading saved highlights...")
-                }
-                state.memoriesError != null && state.memories.isEmpty() -> {
-                    Box(Modifier.padding(OursSpacing.md)) {
-                        OursErrorState(state.memoriesError, onRetry = { vm.refreshMemories() })
+            Box(
+                modifier = Modifier
+                    .oursContentWidth(layoutSpec)
+                    .fillMaxSize(),
+            ) {
+                when {
+                    state.memoriesLoading && state.memories.isEmpty() -> {
+                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
+                            OursLoadingState("Loading saved highlights...")
+                        }
                     }
-                }
-                state.memories.isEmpty() -> {
-                    OursEmptyState(
-                        title = if (strings.langCode == "id") "Belum ada kenangan tersimpan" else "No saved memories yet",
-                        detail = "Check-ins expire after 24 hours. Tap Save on any check-in in Chat to keep it here forever.",
-                        illustrationRes = R.drawable.ic_ours_memories_empty,
-                        actionLabel = if (strings.langCode == "id") "Abadikan momen" else "Capture a moment",
-                        onAction = onQuickCheckIn,
-                    )
-                }
-                filteredMemories.isEmpty() -> {
-                    OursEmptyState(
-                        title = if (strings.langCode == "id") "Tidak ada hasil" else "No results",
-                        detail = if (strings.langCode == "id") "Coba kata kunci atau filter lain." else "Try a different search or filter.",
-                        illustrationRes = R.drawable.ic_ours_memories_empty,
-                        actionLabel = if (strings.langCode == "id") "Hapus filter" else "Clear filters",
-                        onAction = {
-                            searchQuery = ""
-                            filter = MemoryFilter.All
-                        },
-                    )
-                }
-                else -> {
-                    LazyColumn(
-                        contentPadding = PaddingValues(
-                            start = OursSpacing.md,
-                            top = OursSpacing.md,
-                            end = OursSpacing.md,
-                            bottom = 104.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
-                    ) {
+                    state.memoriesError != null && state.memories.isEmpty() -> {
+                        Box(Modifier.padding(start = OursSpacing.md, end = OursSpacing.md, top = topHeaderInset + 88.dp)) {
+                            OursErrorState(state.memoriesError, onRetry = { vm.refreshMemories() })
+                        }
+                    }
+                    state.memories.isEmpty() -> {
+                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
+                            OursEmptyState(
+                                title = if (strings.langCode == "id") "Belum ada kenangan tersimpan" else "No saved memories yet",
+                                detail = "Check-ins expire after 24 hours. Tap Save on any check-in in Chat to keep it here forever.",
+                                illustrationRes = R.drawable.ic_ours_memories_empty,
+                                actionLabel = if (strings.langCode == "id") "Abadikan momen" else "Capture a moment",
+                                onAction = onQuickCheckIn,
+                            )
+                        }
+                    }
+                    filteredMemories.isEmpty() -> {
+                        Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
+                            OursEmptyState(
+                                title = if (strings.langCode == "id") "Tidak ada hasil" else "No results",
+                                detail = if (strings.langCode == "id") "Coba kata kunci atau filter lain." else "Try a different search or filter.",
+                                illustrationRes = R.drawable.ic_ours_memories_empty,
+                                actionLabel = if (strings.langCode == "id") "Hapus filter" else "Clear filters",
+                                onAction = {
+                                    searchQuery = ""
+                                    filter = MemoryFilter.All
+                                },
+                            )
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = OursSpacing.md,
+                                top = topHeaderInset + 88.dp,
+                                end = OursSpacing.md,
+                                bottom = 148.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
+                        ) {
                         itemsIndexed(filteredMemories, key = { _, it -> it.id }) { idx, item ->
                             val authorName = if (item.authorId == state.me?.id) {
                                 state.me.name
@@ -305,7 +269,119 @@ fun MemoriesScreen(
                 }
             }
         }
-    }
+        }
+
+        // Floating glass top header + collapsible search bar
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .oursContentWidth(layoutSpec)
+                .oursHeaderInsets()
+                .padding(horizontal = layoutSpec.horizontalPadding),
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(OursRadius.card),
+                color = Color.Transparent,
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = OursSpacing.md, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = strings.memoriesTitle,
+                        style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.ink,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = colors.surfaceMuted.copy(alpha = 0.72f),
+                            border = BorderStroke(1.dp, colors.glassBorder),
+                        ) {
+                            Row(
+                                modifier = Modifier.height(36.dp).padding(3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                listOf(
+                                    false to strings.timelineTab,
+                                    true to strings.mapTab,
+                                ).forEach { (isMap, label) ->
+                                    val selected = showMapMode == isMap
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(9.dp))
+                                            .clickable { showMapMode = isMap },
+                                        shape = RoundedCornerShape(9.dp),
+                                        color = if (selected) colors.action else Color.Transparent,
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(horizontal = 12.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                style = OursTypography.label.copy(fontWeight = FontWeight.SemiBold),
+                                                color = if (selected) colors.onAction else colors.inkSecondary,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    if (showSearch) {
+                                        showSearch = false
+                                        searchQuery = ""
+                                        filter = MemoryFilter.All
+                                    } else {
+                                        showSearch = true
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = if (showSearch) OursIcons.Close else OursIcons.Search,
+                                contentDescription = if (showSearch) "Close search" else "Search memories",
+                                tint = if (showSearch) colors.action else colors.ink,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
+            AnimatedVisibility(visible = showSearch || searchQuery.isNotEmpty() || filter != MemoryFilter.All) {
+                OursSearchFilterBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    placeholder = strings.searchPlaceholder,
+                    filters = listOf(
+                        MemoryFilter.All to strings.filterAll,
+                        MemoryFilter.Photos to strings.filterPhotos,
+                        MemoryFilter.Places to strings.filterPlaces,
+                    ),
+                    selectedFilter = filter,
+                    onSelectFilter = { filter = it },
+                )
+            }
+        }
     }
     }
 }
@@ -330,8 +406,8 @@ internal fun <T> OursSearchFilterBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 44.dp)
-                .oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 3.dp),
-            shape = RoundedCornerShape(999.dp),
+                .oursLiquidGlass(radius = OursRadius.control, colors = colors, elevation = 3.dp),
+            shape = RoundedCornerShape(OursRadius.control),
             color = Color.Transparent,
         ) {
             Row(
@@ -395,7 +471,7 @@ internal fun <T> OursSearchFilterBar(
                         .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
                         .oursPressScale(chipInteraction)
                         .oursLiquidGlass(
-                            radius = 999.dp,
+                            radius = OursRadius.chip,
                             colors = colors,
                             elevation = if (selected) 3.dp else 1.dp,
                             tinted = selected,
@@ -405,7 +481,7 @@ internal fun <T> OursSearchFilterBar(
                             indication = null,
                             onClick = { onSelectFilter(value) },
                         ),
-                    shape = RoundedCornerShape(999.dp),
+                    shape = RoundedCornerShape(OursRadius.chip),
                     color = Color.Transparent,
                 ) {
                     Box(

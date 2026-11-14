@@ -1,5 +1,6 @@
 package app.ours.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,7 +28,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -125,8 +131,12 @@ fun ChatScreen(
 
     var draft by remember { mutableStateOf("") }
     var replyTarget by remember { mutableStateOf<ReplyTarget?>(null) }
+    var showSearch by rememberSaveable { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(ChatFilter.All) }
+    val topHeaderInset = WindowInsets.statusBars.union(WindowInsets.displayCutout)
+        .asPaddingValues()
+        .calculateTopPadding()
 
     val threadItems = remember(state.chatMessages, state.checkIns) {
         (state.chatMessages.map { ChatThreadItem.MessageItem(it) } +
@@ -187,79 +197,20 @@ fun ChatScreen(
             .imePadding(),
         contentAlignment = Alignment.TopCenter,
     ) {
-    Column(
-        modifier = Modifier
-            .oursContentWidth(layoutSpec)
-            .fillMaxHeight(),
-    ) {
-        // Floating frosted top header
-        Surface(
-            shape = RoundedCornerShape(OursRadius.card),
-            color = Color.Transparent,
-            shadowElevation = 0.dp,
+        // Chronological messenger thread (full-height so messages scroll under translucent chrome)
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .oursHeaderInsets()
-                .padding(horizontal = layoutSpec.horizontalPadding)
-                .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
+                .oursContentWidth(layoutSpec)
+                .fillMaxSize(),
         ) {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm)
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
-            ) {
-                OursAvatar(
-                    name = partnerName,
-                    photoUrl = state.partnerAvatarUrl,
-                    size = 40.dp,
-                    ringColor = if (isLive) colors.success else null,
-                    accent = true,
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = partnerName,
-                        style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
-                        color = colors.ink,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    OursStatusChip(label = statusText, tone = statusTone)
-                }
-                if (state.pendingUploads > 0) {
-                    Text(
-                        text = "${state.pendingUploads} queued",
-                        style = OursTypography.tabular,
-                        color = colors.paused,
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(OursSpacing.xs))
-
-        OursSearchFilterBar(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            placeholder = strings.chatSearchPlaceholder,
-            filters = listOf(
-                ChatFilter.All to strings.filterAll,
-                ChatFilter.Photos to strings.filterPhotos,
-                ChatFilter.Saved to strings.filterSaved,
-            ),
-            selectedFilter = filter,
-            onSelectFilter = { filter = it },
-            modifier = Modifier.padding(horizontal = OursSpacing.md, vertical = OursSpacing.xs),
-        )
-
-        // Chronological messenger thread
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
                 (state.checkInsLoading || state.messagesLoading) && threadItems.isEmpty() -> {
-                    OursLoadingState("Loading conversation...")
+                    Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
+                        OursLoadingState("Loading conversation...")
+                    }
                 }
                 !state.errorMessage.isNullOrBlank() && threadItems.isEmpty() -> {
-                    Box(Modifier.padding(OursSpacing.md)) {
+                    Box(Modifier.padding(start = OursSpacing.md, end = OursSpacing.md, top = topHeaderInset + 88.dp)) {
                         app.ours.ui.components.OursErrorState(
                             message = state.errorMessage!!,
                             onRetry = { vm.refreshAll() },
@@ -272,33 +223,39 @@ fun ChatScreen(
                     } else {
                         "Say hello to $partnerName"
                     }
-                    OursEmptyState(
-                        title = emptyGreeting,
-                        detail = strings.sayHelloDetail,
-                        illustrationRes = R.drawable.ic_ours_chat_empty,
-                        actionLabel = strings.takePhoto,
-                        onAction = onLaunchCameraCheckIn,
-                    )
+                    Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
+                        OursEmptyState(
+                            title = emptyGreeting,
+                            detail = strings.sayHelloDetail,
+                            illustrationRes = R.drawable.ic_ours_chat_empty,
+                            actionLabel = strings.takePhoto,
+                            onAction = onLaunchCameraCheckIn,
+                        )
+                    }
                 }
                 filteredThreadItems.isEmpty() -> {
-                    OursEmptyState(
-                        title = if (strings.langCode == "id") "Tidak ada hasil" else "No results",
-                        detail = if (strings.langCode == "id") "Coba kata kunci atau filter lain." else "Try a different search or filter.",
-                        illustrationRes = R.drawable.ic_ours_chat_empty,
-                        actionLabel = if (strings.langCode == "id") "Hapus filter" else "Clear filters",
-                        onAction = {
-                            searchQuery = ""
-                            filter = ChatFilter.All
-                        },
-                    )
+                    Box(Modifier.fillMaxSize().padding(top = topHeaderInset + 88.dp)) {
+                        OursEmptyState(
+                            title = if (strings.langCode == "id") "Tidak ada hasil" else "No results",
+                            detail = if (strings.langCode == "id") "Coba kata kunci atau filter lain." else "Try a different search or filter.",
+                            illustrationRes = R.drawable.ic_ours_chat_empty,
+                            actionLabel = if (strings.langCode == "id") "Hapus filter" else "Clear filters",
+                            onAction = {
+                                searchQuery = ""
+                                filter = ChatFilter.All
+                            },
+                        )
+                    }
                 }
                 else -> {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
-                            horizontal = OursSpacing.md,
-                            vertical = OursSpacing.sm,
+                            start = OursSpacing.md,
+                            top = topHeaderInset + 88.dp,
+                            end = OursSpacing.md,
+                            bottom = 160.dp,
                         ),
                         verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
                     ) {
@@ -397,10 +354,97 @@ fun ChatScreen(
             }
         }
 
+        // Floating frosted top header + collapsible search bar
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .oursContentWidth(layoutSpec)
+                .oursHeaderInsets()
+                .padding(horizontal = layoutSpec.horizontalPadding),
+            verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(OursRadius.card),
+                color = Color.Transparent,
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .oursLiquidGlass(radius = OursRadius.card, colors = colors, elevation = 6.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = OursSpacing.md, vertical = 10.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(OursSpacing.sm),
+                ) {
+                    OursAvatar(
+                        name = partnerName,
+                        photoUrl = state.partnerAvatarUrl,
+                        size = 40.dp,
+                        ringColor = if (isLive) colors.success else null,
+                        accent = true,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = partnerName,
+                            style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.ink,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        OursStatusChip(label = statusText, tone = statusTone)
+                    }
+                    if (state.pendingUploads > 0) {
+                        Text(
+                            text = "${state.pendingUploads} queued",
+                            style = OursTypography.tabular,
+                            color = colors.paused,
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            if (showSearch) {
+                                showSearch = false
+                                searchQuery = ""
+                                filter = ChatFilter.All
+                            } else {
+                                showSearch = true
+                            }
+                        },
+                        modifier = Modifier.sizeIn(minWidth = 44.dp, minHeight = 44.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (showSearch) OursIcons.Close else OursIcons.Search,
+                            contentDescription = if (showSearch) "Close search" else "Search messages",
+                            tint = if (showSearch) colors.action else colors.ink,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(visible = showSearch || searchQuery.isNotEmpty() || filter != ChatFilter.All) {
+                OursSearchFilterBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    placeholder = strings.chatSearchPlaceholder,
+                    filters = listOf(
+                        ChatFilter.All to strings.filterAll,
+                        ChatFilter.Photos to strings.filterPhotos,
+                        ChatFilter.Saved to strings.filterSaved,
+                    ),
+                    selectedFilter = filter,
+                    onSelectFilter = { filter = it },
+                )
+            }
+        }
+
         // Floating frosted bottom capsule composer
         val imeOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
         Column(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .oursContentWidth(layoutSpec)
                 .fillMaxWidth()
                 .then(if (imeOpen) Modifier else Modifier.navigationBarsPadding())
                 .padding(
@@ -533,7 +577,6 @@ fun ChatScreen(
         }
     }
     }
-    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -548,6 +591,8 @@ private fun MessageBubble(
     onCopy: (String) -> Unit,
 ) {
     val colors = OursTheme.colors
+    val bubbleBg = if (isMine) colors.actionSoft else colors.surface
+    val bubbleBorder = if (isMine) colors.action.copy(alpha = 0.28f) else colors.border
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -555,11 +600,11 @@ private fun MessageBubble(
     ) {
         Surface(
             shape = RoundedCornerShape(18.dp),
-            color = Color.Transparent,
+            color = bubbleBg,
+            border = BorderStroke(1.dp, bubbleBorder),
             shadowElevation = 0.dp,
             modifier = Modifier
                 .widthIn(max = 290.dp)
-                .oursLiquidGlass(radius = 18.dp, colors = colors, elevation = 2.dp, tinted = isMine)
                 .combinedClickable(
                     onClick = onQuote,
                     onLongClick = {

@@ -133,8 +133,8 @@ fun Modifier.oursHeaderInsets(): Modifier = composed {
 }
 
 /**
- * Lightweight GPU-cached ambient mesh backdrop with 3 soft radial color orbs
- * so translucent glassmorphism panels visibly refract color and light.
+ * Lightweight GPU-cached subtle vertical atmospheric backdrop (R-01):
+ * clean architectural tone without generic radial blobs.
  */
 @Composable
 fun OursGlassBackdrop(
@@ -142,44 +142,19 @@ fun OursGlassBackdrop(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val colors = OursTheme.colors
-    val isDark = OursTheme.isDark
     Box(
         modifier = modifier
             .fillMaxSize()
             .drawWithCache {
-                val orb1Color = if (isDark) Color(0x381D4ED8) else Color(0x4038BDF8)
-                val orb2Color = if (isDark) Color(0x2E0284C7) else Color(0x332563EB)
-                val orb3Color = if (isDark) Color(0x294338CA) else Color(0x2E6366F1)
-
-                val orb1Center = Offset(size.width * 0.14f, size.height * 0.14f)
-                val orb1Radius = size.maxDimension * 0.48f
-                val orb1Brush = Brush.radialGradient(
-                    colors = listOf(orb1Color, Color.Transparent),
-                    center = orb1Center,
-                    radius = orb1Radius.coerceAtLeast(1f),
+                val bgBrush = Brush.verticalGradient(
+                    colors = listOf(
+                        colors.canvas,
+                        colors.surfaceMuted.copy(alpha = 0.55f),
+                        colors.canvas,
+                    ),
                 )
-
-                val orb2Center = Offset(size.width * 0.88f, size.height * 0.44f)
-                val orb2Radius = size.maxDimension * 0.52f
-                val orb2Brush = Brush.radialGradient(
-                    colors = listOf(orb2Color, Color.Transparent),
-                    center = orb2Center,
-                    radius = orb2Radius.coerceAtLeast(1f),
-                )
-
-                val orb3Center = Offset(size.width * 0.22f, size.height * 0.84f)
-                val orb3Radius = size.maxDimension * 0.50f
-                val orb3Brush = Brush.radialGradient(
-                    colors = listOf(orb3Color, Color.Transparent),
-                    center = orb3Center,
-                    radius = orb3Radius.coerceAtLeast(1f),
-                )
-
                 onDrawBehind {
-                    drawRect(colors.canvas)
-                    drawCircle(brush = orb1Brush, radius = orb1Radius, center = orb1Center)
-                    drawCircle(brush = orb2Brush, radius = orb2Radius, center = orb2Center)
-                    drawCircle(brush = orb3Brush, radius = orb3Radius, center = orb3Center)
+                    drawRect(brush = bgBrush)
                 }
             },
         content = content,
@@ -335,11 +310,11 @@ fun OursButton(
 
     val isSecondaryGlass = variant == OursButtonVariant.Secondary
     val effectiveAlpha = if (enabled) 1f else 0.45f
-    val buttonShape = RoundedCornerShape(999.dp)
+    val buttonShape = RoundedCornerShape(OursRadius.control)
 
     Surface(
         modifier = modifier
-            .defaultMinSize(minHeight = 46.dp)
+            .defaultMinSize(minHeight = 48.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -347,7 +322,7 @@ fun OursButton(
             }
             .then(
                 if (isSecondaryGlass) {
-                    Modifier.oursLiquidGlass(radius = 999.dp, colors = colors, elevation = 3.dp)
+                    Modifier.oursLiquidGlass(radius = OursRadius.control, colors = colors, elevation = 3.dp)
                 } else {
                     Modifier.clip(buttonShape)
                 }
@@ -396,8 +371,8 @@ fun OursCard(
     modifier: Modifier = Modifier,
     radius: Dp = OursRadius.card,
     padding: PaddingValues = PaddingValues(OursSpacing.md),
-    frosted: Boolean = true,
-    elevation: Dp = 4.dp,
+    frosted: Boolean = false,
+    elevation: Dp = 2.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {

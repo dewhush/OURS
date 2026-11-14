@@ -276,4 +276,16 @@ object OursIcons {
             }
         }
     }
+
+    val Search: ImageVector by lazy {
+        icon("Search") {
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(11f, 4f)
+                arcTo(7f, 7f, 0f, isMoreThanHalf = true, isPositiveArc = false, 11f, 18f)
+                arcTo(7f, 7f, 0f, isMoreThanHalf = true, isPositiveArc = false, 11f, 4f)
+                moveTo(16.2f, 16.2f)
+                lineTo(20.5f, 20.5f)
+            }
+        }
+    }
 }
