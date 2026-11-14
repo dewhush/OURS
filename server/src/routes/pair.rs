@@ -603,6 +603,13 @@ fn decode_jwt_email_name(id_token: &str) -> (Option<String>, Option<String>) {
     (email, name)
 }
 
+fn hash_device_id(device_id: Option<&str>) -> Option<String> {
+    device_id
+        .map(str::trim)
+        .filter(|d| d.len() >= 8)
+        .map(hash_refresh_token)
+}
+
 pub async fn google_auth(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -621,6 +628,10 @@ pub async fn google_auth(
     };
     let email = normalize_email(Some(raw_email))?
         .ok_or_else(|| AppError::bad_request("valid email is required"))?;
+
+    let email_rate_key = client_rate_key(&headers, &email);
+    state.check_join_rate_limit(&email_rate_key)?;
+    let req_device_hash = hash_device_id(req.device_id.as_deref());
 
     let raw_name = req
         .name
@@ -647,27 +658,61 @@ pub async fn google_auth(
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
 
-    // Case A: Existing user login by email
+    // Case A: Existing user login by email (requires matching device_hash or valid invite_code)
     let existing = {
         let db = db.clone();
         let secret = secret.clone();
         let email_q = email.clone();
+        let req_dev_hash = req_device_hash.clone();
+        let inv_code = invite_code.clone();
         tokio::task::spawn_blocking(move || -> AppResult<Option<GoogleAuthResponse>> {
             let mut conn = db
                 .lock()
                 .map_err(|_| AppError::internal("database lock poisoned"))?;
             let tx = conn.transaction()?;
-            let uid: Option<i64> = tx
+            let found: Option<(i64, Option<String>)> = tx
                 .query_row(
-                    "SELECT id FROM users WHERE lower(email) = lower(?1) ORDER BY id DESC LIMIT 1",
+                    "SELECT id, device_hash FROM users WHERE lower(email) = lower(?1) ORDER BY id DESC LIMIT 1",
                     params![email_q],
-                    |r| r.get(0),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
                 )
                 .optional()?;
-            let Some(user_id) = uid else {
+            let Some((user_id, stored_device_hash)) = found else {
                 return Ok(None);
             };
+
             let now = now_ms();
+            if let Some(ref expected_hash) = stored_device_hash {
+                let device_ok = req_dev_hash
+                    .as_deref()
+                    .is_some_and(|h| constant_time_eq(h.as_bytes(), expected_hash.as_bytes()));
+                let invite_ok = if !device_ok {
+                    if let Some(ref code) = inv_code {
+                        tx.query_row(
+                            "SELECT code FROM invites WHERE code = ?1 AND used_at IS NULL AND expires_at > ?2",
+                            params![code, now],
+                            |r| r.get::<_, String>(0),
+                        )
+                        .optional()?
+                        .is_some()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                if !device_ok && !invite_ok {
+                    return Err(AppError::unauthorized(
+                        "device verification or valid invite code required for existing account",
+                    ));
+                }
+            } else if let Some(ref h) = req_dev_hash {
+                tx.execute(
+                    "UPDATE users SET device_hash = ?1 WHERE id = ?2",
+                    params![h, user_id],
+                )?;
+            }
+
             tx.execute(
                 "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
                 params![now, user_id],
@@ -696,17 +741,28 @@ pub async fn google_auth(
                 name: None,
             }))
         })
-        .await??
+        .await?
     };
 
-    if let Some(resp) = existing {
-        return Ok(Json(resp));
+    match existing {
+        Ok(Some(resp)) => {
+            state.clear_join_rate_limit(&email_rate_key);
+            return Ok(Json(resp));
+        }
+        Ok(None) => {}
+        Err(err) => {
+            if err.code == "unauthorized" {
+                state.record_join_failure(&email_rate_key);
+            }
+            return Err(err);
+        }
     }
 
     // Case B: New user joining with invite_code
     if let Some(code) = invite_code {
         let rate_key = client_rate_key(&headers, &code);
         state.check_join_rate_limit(&rate_key)?;
+        let dev_hash = req_device_hash.clone();
         let res = tokio::task::spawn_blocking(move || -> AppResult<GoogleAuthResponse> {
             let mut conn = db
                 .lock()
@@ -735,8 +791,8 @@ pub async fn google_auth(
                 params![now, code],
             )?;
             tx.execute(
-                "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
-                params![name, Some(email), now],
+                "INSERT INTO users (name, email, device_hash, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4)",
+                params![name, Some(email), dev_hash, now],
             )?;
             let user_id = tx.last_insert_rowid();
             let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
@@ -787,6 +843,7 @@ pub async fn google_auth(
             create_rate_key = Some(rk);
         }
 
+        let dev_hash = req_device_hash;
         let resp = tokio::task::spawn_blocking(move || -> AppResult<GoogleAuthResponse> {
             let mut conn = db
                 .lock()
@@ -800,8 +857,8 @@ pub async fn google_auth(
 
             let now = now_ms();
             tx.execute(
-                "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
-                params![name, Some(email), now],
+                "INSERT INTO users (name, email, device_hash, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4)",
+                params![name, Some(email), dev_hash, now],
             )?;
             let user_id = tx.last_insert_rowid();
             let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;

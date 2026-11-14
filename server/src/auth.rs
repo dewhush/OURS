@@ -84,9 +84,26 @@ pub fn issue_tokens(conn: &Connection, secret: &[u8], user_id: i64, now: i64) ->
     let refresh_expires_at = now + REFRESH_TOKEN_TTL_MS;
 
     conn.execute(
+        "DELETE FROM refresh_tokens WHERE expires_at <= ?1",
+        params![now],
+    )?;
+
+    conn.execute(
         "INSERT INTO refresh_tokens (token_hash, user_id, expires_at, created_at)
          VALUES (?1, ?2, ?3, ?4)",
         params![refresh_hash, user_id, refresh_expires_at, now],
+    )?;
+
+    conn.execute(
+        "DELETE FROM refresh_tokens
+         WHERE user_id = ?1
+           AND token_hash NOT IN (
+               SELECT token_hash FROM refresh_tokens
+               WHERE user_id = ?1
+               ORDER BY created_at DESC
+               LIMIT 10
+           )",
+        params![user_id],
     )?;
 
     Ok(Tokens {

@@ -154,6 +154,10 @@ pub async fn run_hourly_cleanup(state: &AppState) {
             "DELETE FROM refresh_tokens WHERE expires_at <= ?1",
             params![now],
         );
+        let _ = tx.execute(
+            "DELETE FROM invites WHERE expires_at <= ?1",
+            params![now],
+        );
 
         let _ = tx.commit();
         photo_ids

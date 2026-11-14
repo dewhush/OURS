@@ -12,12 +12,40 @@ pub mod ws;
 
 use axum::{
     Json, Router,
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, Request},
+    http::HeaderValue,
+    middleware::{self, Next},
+    response::Response,
     routing::{delete, get, post},
 };
 use serde_json::json;
 
 use crate::state::AppState;
+
+async fn security_headers(req: Request, next: Next) -> Response {
+    let mut resp = next.run(req).await;
+    let headers = resp.headers_mut();
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    headers.insert(
+        "referrer-policy",
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    headers.insert(
+        "permissions-policy",
+        HeaderValue::from_static("geolocation=(self), camera=(self), microphone=()"),
+    );
+    headers.insert(
+        "content-security-policy",
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' blob: data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; connect-src 'self' ws: wss: https://*.basemaps.cartocdn.com https://unpkg.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+        ),
+    );
+    resp
+}
 
 async fn health() -> Json<serde_json::Value> {
     Json(json!({
@@ -91,6 +119,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/sos", post(routes::events::send_sos))
         .route("/api/events", get(routes::events::get_events))
         .route("/api/ws", get(ws::ws_handler))
+        .layer(middleware::from_fn(security_headers))
         .layer(DefaultBodyLimit::max(12 * 1024 * 1024))
         .with_state(state)
 }

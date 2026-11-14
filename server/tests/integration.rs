@@ -1513,6 +1513,7 @@ async fn google_auth_creates_and_restores_session() {
         .json(&json!({
             "email": "dewhush@gmail.com",
             "name": "Dewhush",
+            "device_id": "device-alpha-1234",
             "auto_create": true,
             "setup_key": "test-setup-key"
         }))
@@ -1527,12 +1528,13 @@ async fn google_auth_creates_and_restores_session() {
     assert_eq!(invite_code.len(), 6);
     assert!(created["tokens"]["access_token"].as_str().is_some());
 
-    // 3. Existing user login (case-insensitive email) restores session and active invite code
+    // 3. Existing user login (case-insensitive email) with matching device_id restores session
     let resp = app
         .client
         .post(format!("{}/api/auth/google", app.base_url))
         .json(&json!({
-            "email": "DEWHUSH@GMAIL.COM"
+            "email": "DEWHUSH@GMAIL.COM",
+            "device_id": "device-alpha-1234"
         }))
         .send()
         .await
@@ -1551,6 +1553,7 @@ async fn google_auth_creates_and_restores_session() {
         .json(&json!({
             "email": "marchanda@gmail.com",
             "name": "Marchanda",
+            "device_id": "device-beta-5678",
             "invite_code": invite_code
         }))
         .send()
@@ -1575,4 +1578,81 @@ async fn google_auth_creates_and_restores_session() {
     let me_body: Value = me_resp.json().await.unwrap();
     assert_eq!(me_body["me"]["email"], "marchanda@gmail.com");
     assert_eq!(me_body["partner"]["email"], "dewhush@gmail.com");
+}
+
+#[tokio::test]
+async fn security_headers_present_on_root_and_healthz() {
+    let app = TestApp::start().await;
+    for path in ["/", "/healthz"] {
+        let resp = app
+            .client
+            .get(format!("{}{}", app.base_url, path))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "path={path}");
+        let headers = resp.headers();
+        assert_eq!(
+            headers.get("x-content-type-options").and_then(|v| v.to_str().ok()),
+            Some("nosniff"),
+            "path={path}"
+        );
+        assert_eq!(
+            headers.get("x-frame-options").and_then(|v| v.to_str().ok()),
+            Some("DENY"),
+            "path={path}"
+        );
+        let csp = headers
+            .get("content-security-policy")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(csp.contains("default-src 'self'"), "path={path} csp={csp}");
+        assert!(csp.contains("frame-ancestors 'none'"), "path={path} csp={csp}");
+    }
+}
+
+#[tokio::test]
+async fn google_auth_rejects_different_device_for_existing_user() {
+    let app = TestApp::start().await;
+
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "name": "Dewhush",
+            "device_id": "device-owner-9999",
+            "auto_create": true,
+            "setup_key": "test-setup-key"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Different device_id without invite code -> 401 Unauthorized
+    let hijacked = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "device_id": "device-attacker-0000"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hijacked.status(), StatusCode::UNAUTHORIZED);
+
+    // Original device_id -> 200 OK
+    let ok = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "device_id": "device-owner-9999"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
 }

@@ -5,6 +5,7 @@ use axum::{
         Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
+    http::{HeaderMap, header},
     response::Response,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -30,14 +31,25 @@ struct ClientMsg {
 
 pub async fn ws_handler(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<WsQuery>,
     ws: WebSocketUpgrade,
 ) -> AppResult<Response> {
-    let token = query
-        .token
-        .as_deref()
+    let header_token = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer ").or_else(|| v.strip_prefix("bearer ")))
         .map(str::trim)
-        .filter(|t| !t.is_empty())
+        .filter(|t| !t.is_empty());
+
+    let token = header_token
+        .or_else(|| {
+            query
+                .token
+                .as_deref()
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+        })
         .ok_or_else(|| AppError::unauthorized("missing token"))?;
 
     let now = now_ms();
@@ -71,7 +83,10 @@ pub async fn ws_handler(
         return Err(AppError::unauthorized("user no longer exists"));
     }
 
-    Ok(ws.on_upgrade(move |socket| handle_socket(state, user_id, socket)))
+    Ok(ws
+        .max_message_size(64 * 1024)
+        .max_frame_size(64 * 1024)
+        .on_upgrade(move |socket| handle_socket(state, user_id, socket)))
 }
 
 async fn send_with_timeout<S>(ws_tx: &mut S, msg: Message) -> bool
@@ -89,7 +104,11 @@ async fn handle_socket(state: AppState, user_id: i64, socket: WebSocket) {
     let (tx, mut rx) = mpsc::channel::<String>(128);
     {
         let mut guard = state.ws_senders.write().await;
-        guard.entry(user_id).or_default().push((conn_id, tx));
+        let list = guard.entry(user_id).or_default();
+        if list.len() >= 8 {
+            list.remove(0);
+        }
+        list.push((conn_id, tx));
     }
 
     let (mut ws_tx, mut ws_rx) = socket.split();

@@ -183,6 +183,7 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
     }
 
     ensure_column(&conn, "users", "avatar_photo_id", "TEXT")?;
+    ensure_column(&conn, "users", "device_hash", "TEXT")?;
     ensure_column(&conn, "latest_locations", "activity", "TEXT")?;
     ensure_column(&conn, "latest_locations", "altitude_m", "REAL")?;
     ensure_column(&conn, "latest_locations", "vertical_speed_mps", "REAL")?;

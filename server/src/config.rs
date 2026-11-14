@@ -31,6 +31,13 @@ impl Config {
         fs::create_dir_all(data_dir.join("photos"))
             .map_err(|e| format!("failed to create photos dir: {e}"))?;
 
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&data_dir, fs::Permissions::from_mode(0o700));
+            let _ = fs::set_permissions(data_dir.join("photos"), fs::Permissions::from_mode(0o700));
+        }
+
         let token_secret = match std::env::var("OURS_TOKEN_SECRET") {
             Ok(s) if !s.trim().is_empty() => s.into_bytes(),
             _ => load_or_generate_secret(&data_dir)?,

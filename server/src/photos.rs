@@ -24,8 +24,15 @@ pub fn save_jpeg_and_thumb(data_dir: &Path, bytes: &[u8]) -> AppResult<String> {
         return Err(AppError::too_large("photo exceeds 10 MB limit"));
     }
 
-    let img = image::load_from_memory_with_format(bytes, ImageFormat::Jpeg)
-        .map_err(|_| AppError::bad_request("photo must be a valid JPEG"))?;
+    let mut reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), ImageFormat::Jpeg);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(8192);
+    limits.max_image_height = Some(8192);
+    limits.max_alloc = Some(128 * 1024 * 1024);
+    reader.limits(limits);
+    let img = reader
+        .decode()
+        .map_err(|_| AppError::bad_request("invalid or oversized JPEG dimensions"))?;
 
     // Re-encode full JPEG to strip any client EXIF/GPS/device metadata.
     let mut full_buf = Vec::new();
@@ -65,6 +72,14 @@ pub fn save_jpeg_and_thumb(data_dir: &Path, bytes: &[u8]) -> AppResult<String> {
         let _ = fs::remove_file(&full_path);
         tracing::error!(error = %e, "failed to write thumbnail");
         return Err(AppError::internal("failed to write thumbnail"));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&photos_dir, fs::Permissions::from_mode(0o700));
+        let _ = fs::set_permissions(&full_path, fs::Permissions::from_mode(0o600));
+        let _ = fs::set_permissions(&thumb_path, fs::Permissions::from_mode(0o600));
     }
 
     Ok(photo_id)
