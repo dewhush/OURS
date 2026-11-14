@@ -136,18 +136,20 @@ impl FromRequestParts<AppState> for AuthUser {
             let conn = db
                 .lock()
                 .map_err(|_| AppError::internal("database lock poisoned"))?;
-            let found: Option<i64> = conn
+            let found: Option<Option<i64>> = conn
                 .query_row(
-                    "SELECT id FROM users WHERE id = ?1",
+                    "SELECT last_seen_at FROM users WHERE id = ?1",
                     params![user_id],
                     |row| row.get(0),
                 )
                 .optional()?;
-            if found.is_some() {
-                conn.execute(
-                    "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
-                    params![now, user_id],
-                )?;
+            if let Some(last_seen) = found {
+                if last_seen.is_none_or(|ts| now - ts >= 60_000) {
+                    conn.execute(
+                        "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
+                        params![now, user_id],
+                    )?;
+                }
                 Ok(true)
             } else {
                 Ok(false)

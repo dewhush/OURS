@@ -241,15 +241,15 @@ pub async fn post_locations(
                     }
                     for (place_id, place_name, p_lat, p_lon, radius_m) in &places {
                         let dist = haversine_m(p.lat, p.lon, *p_lat, *p_lon);
-                        let prev_inside: Option<i64> = tx
+                        let prev_state: Option<(i64, i64)> = tx
                             .query_row(
-                                "SELECT inside FROM place_states WHERE user_id = ?1 AND place_id = ?2",
+                                "SELECT inside, updated_at FROM place_states WHERE user_id = ?1 AND place_id = ?2",
                                 params![user_id, place_id],
-                                |r| r.get(0),
+                                |r| Ok((r.get(0)?, r.get(1)?)),
                             )
                             .optional()?;
 
-                        match prev_inside {
+                        match prev_state {
                             None => {
                                 let inside = i64::from(dist <= *radius_m);
                                 tx.execute(
@@ -258,7 +258,10 @@ pub async fn post_locations(
                                     params![user_id, place_id, inside, p.recorded_at],
                                 )?;
                             }
-                            Some(was_inside_int) => {
+                            Some((was_inside_int, updated_at)) => {
+                                if p.recorded_at < updated_at {
+                                    continue;
+                                }
                                 let was_inside = was_inside_int != 0;
                                 let transition = if !was_inside && dist <= *radius_m {
                                     Some((1_i64, "enter"))
@@ -458,6 +461,10 @@ pub async fn set_sharing(
         if paused {
             tx.execute(
                 "DELETE FROM latest_locations WHERE user_id = ?1",
+                params![user_id],
+            )?;
+            tx.execute(
+                "DELETE FROM place_states WHERE user_id = ?1",
                 params![user_id],
             )?;
         }

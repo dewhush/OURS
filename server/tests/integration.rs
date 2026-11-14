@@ -1171,3 +1171,188 @@ async fn pair_state_avatar_and_sos_endpoints() {
     assert_eq!(sos_ev["data"]["kind"], "crash");
     assert_eq!(sos_ev["data"]["lat"], -6.21);
 }
+
+#[tokio::test]
+async fn bug_fixes_highlighted_checkins_places_and_pagination() {
+    let app = TestApp::start().await;
+    let (t1, t2, id1, _id2) = app.pair_both().await;
+
+    // #33: Highlighted check-in remains in GET /api/checkins even after expires_at <= now
+    let jpg = make_test_jpeg(32, 32);
+    let form = reqwest::multipart::Form::new()
+        .part(
+            "photo",
+            reqwest::multipart::Part::bytes(jpg.clone())
+                .file_name("hl.jpg")
+                .mime_str("image/jpeg")
+                .unwrap(),
+        )
+        .text("note", "Keep forever");
+    let created: Value = app
+        .client
+        .post(format!("{}/api/checkins", app.base_url))
+        .bearer_auth(&t1)
+        .multipart(form)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let cid = created["id"].as_i64().unwrap();
+
+    let hl = app
+        .client
+        .post(format!("{}/api/checkins/{cid}/highlight", app.base_url))
+        .bearer_auth(&t2)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hl.status(), StatusCode::OK);
+
+    {
+        let conn = app.state.db.lock().unwrap();
+        conn.execute(
+            "UPDATE checkins SET expires_at = 1 WHERE id = ?1",
+            rusqlite::params![cid],
+        )
+        .unwrap();
+    }
+
+    let list: Value = app
+        .client
+        .get(format!("{}/api/checkins", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(list["checkins"].as_array().unwrap().len(), 1);
+    assert_eq!(list["checkins"][0]["id"], cid);
+
+    // #42: Out-of-order location point older than place_states.updated_at does not emit false exit,
+    // and pausing clears place_states.
+    let place: Value = app
+        .client
+        .post(format!("{}/api/places", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"name": "Home", "lat": -6.20, "lon": 106.80, "radius_m": 100.0}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(place["name"], "Home");
+
+    // Seed outside at t=1000, then enter at t=2000
+    let p_res = app
+        .client
+        .post(format!("{}/api/locations", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!([
+            {"lat": -6.25, "lon": 106.85, "accuracy_m": 10.0, "speed_mps": 0.0, "battery_pct": 80, "charging": false, "recorded_at": 1000},
+            {"lat": -6.20, "lon": 106.80, "accuracy_m": 10.0, "speed_mps": 0.0, "battery_pct": 80, "charging": false, "recorded_at": 2000}
+        ]))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(p_res.status(), StatusCode::OK);
+
+    // Send stale out-of-order point at t=1500 outside Home -> must NOT emit exit
+    let stale_res = app
+        .client
+        .post(format!("{}/api/locations", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!([
+            {"lat": -6.25, "lon": 106.85, "accuracy_m": 10.0, "speed_mps": 0.0, "battery_pct": 80, "charging": false, "recorded_at": 1500}
+        ]))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(stale_res.status(), StatusCode::OK);
+
+    let evs: Value = app
+        .client
+        .get(format!("{}/api/events?after=0", app.base_url))
+        .bearer_auth(&t2)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let place_evs: Vec<&Value> = evs["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["type"] == "place")
+        .collect();
+    assert_eq!(place_evs.len(), 1);
+    assert_eq!(place_evs[0]["data"]["transition"], "enter");
+
+    // Pausing sharing clears place_states for user
+    let pause_res = app
+        .client
+        .post(format!("{}/api/sharing", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"paused": true}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(pause_res.status(), StatusCode::OK);
+    {
+        let conn = app.state.db.lock().unwrap();
+        let ps_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM place_states WHERE user_id = ?1",
+                rusqlite::params![id1],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(ps_count, 0);
+    }
+
+    // #45: Same-millisecond tie pagination with before + before_id
+    {
+        let conn = app.state.db.lock().unwrap();
+        for txt in ["msg-a", "msg-b", "msg-c"] {
+            conn.execute(
+                "INSERT INTO messages (author_id, text, created_at) VALUES (?1, ?2, 5000000)",
+                rusqlite::params![id1, txt],
+            )
+            .unwrap();
+        }
+    }
+    let page1: Value = app
+        .client
+        .get(format!("{}/api/messages?limit=2", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(page1["items"].as_array().unwrap().len(), 2);
+    let nb = page1["next_before"].as_i64().unwrap();
+    let nbi = page1["next_before_id"].as_i64().unwrap();
+
+    let page2: Value = app
+        .client
+        .get(format!(
+            "{}/api/messages?limit=2&before={nb}&before_id={nbi}",
+            app.base_url
+        ))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(page2["items"].as_array().unwrap().len(), 1);
+    assert_eq!(page2["items"][0]["text"], "msg-a");
+}

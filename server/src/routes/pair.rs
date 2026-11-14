@@ -15,7 +15,7 @@ use crate::models::{
     CreatePairRequest, CreatePairResponse, InviteResponse, JoinPairRequest, JoinPairResponse,
     MeResponse, PairStateResponse, PushTokenRequest, RefreshRequest, Tokens, User,
 };
-use crate::photos::{MAX_PHOTO_BYTES, delete_photo_files, save_jpeg_and_thumb};
+use crate::photos::{MAX_PHOTO_BYTES, PhotoGuard, delete_photo_files, save_jpeg_and_thumb};
 use crate::state::AppState;
 
 const INVITE_TTL_MS: i64 = 24 * 60 * 60 * 1000;
@@ -398,14 +398,11 @@ pub async fn upload_avatar(
     let (user, ws_push, fcm_push) = tokio::task::spawn_blocking(
         move || -> AppResult<(User, Option<(i64, crate::models::Event)>, Option<(String, std::collections::HashMap<String, String>)>)> {
             let photo_id = save_jpeg_and_thumb(&data_dir, &photo_bytes)?;
+            let mut photo_guard = PhotoGuard::new(&data_dir, photo_id.clone());
 
-            let mut conn = match db.lock() {
-                Ok(c) => c,
-                Err(_) => {
-                    delete_photo_files(&data_dir, &photo_id);
-                    return Err(AppError::internal("database lock poisoned"));
-                }
-            };
+            let mut conn = db
+                .lock()
+                .map_err(|_| AppError::internal("database lock poisoned"))?;
             let tx = conn.transaction()?;
 
             let old_avatar: Option<String> = tx
@@ -452,6 +449,7 @@ pub async fn upload_avatar(
             };
 
             tx.commit()?;
+            photo_guard.disarm();
             if let Some(old_pid) = old_avatar {
                 delete_photo_files(&data_dir, &old_pid);
             }

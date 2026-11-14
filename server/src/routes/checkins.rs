@@ -15,7 +15,7 @@ use crate::db::{
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{CheckIn, CheckInsResponse, MemoriesResponse, Reply};
-use crate::photos::{delete_photo_files, save_jpeg_and_thumb};
+use crate::photos::{PhotoGuard, delete_photo_files, save_jpeg_and_thumb};
 use crate::state::AppState;
 
 const CHECKIN_TTL_MS: i64 = 24 * 60 * 60 * 1000;
@@ -127,14 +127,11 @@ pub async fn create_checkin(
     let (checkin, ws_push, fcm_push) = tokio::task::spawn_blocking(
         move || -> AppResult<(CheckIn, Option<(i64, crate::models::Event)>, Option<(String, HashMap<String, String>)>)> {
             let photo_id = save_jpeg_and_thumb(&data_dir, &photo_bytes)?;
+            let mut photo_guard = PhotoGuard::new(&data_dir, photo_id.clone());
 
-            let mut conn = match db.lock() {
-                Ok(c) => c,
-                Err(_) => {
-                    delete_photo_files(&data_dir, &photo_id);
-                    return Err(AppError::internal("database lock poisoned"));
-                }
-            };
+            let mut conn = db
+                .lock()
+                .map_err(|_| AppError::internal("database lock poisoned"))?;
             let tx = conn.transaction()?;
 
             let now = now_ms();
@@ -182,6 +179,7 @@ pub async fn create_checkin(
             };
 
             tx.commit()?;
+            photo_guard.disarm();
             Ok((checkin, ws_push, fcm_push))
         },
     )
@@ -211,7 +209,7 @@ pub async fn list_checkins(
             "SELECT id, author_id, photo_id, note, lat, lon, place_name,
                     created_at, expires_at, highlighted, highlighted_by, highlighted_at
              FROM checkins
-             WHERE expires_at > ?1
+             WHERE highlighted = 1 OR expires_at > ?1
              ORDER BY created_at DESC, id DESC",
         )?;
         let rows = stmt.query_map(params![now], |row| {
@@ -477,16 +475,13 @@ pub async fn create_reply(
             } else {
                 None
             };
+            let mut photo_guard = photo_id
+                .as_ref()
+                .map(|pid| PhotoGuard::new(&data_dir, pid.clone()));
 
-            let mut conn = match db.lock() {
-                Ok(c) => c,
-                Err(_) => {
-                    if let Some(ref pid) = photo_id {
-                        delete_photo_files(&data_dir, pid);
-                    }
-                    return Err(AppError::internal("database lock poisoned"));
-                }
-            };
+            let mut conn = db
+                .lock()
+                .map_err(|_| AppError::internal("database lock poisoned"))?;
             let tx = conn.transaction()?;
 
             let now = now_ms();
@@ -499,15 +494,9 @@ pub async fn create_reply(
                 .optional()?;
 
             let Some((expires_at, highlighted_int)) = row else {
-                if let Some(ref pid) = photo_id {
-                    delete_photo_files(&data_dir, pid);
-                }
                 return Err(AppError::not_found("check-in not found"));
             };
             if highlighted_int == 0 && expires_at <= now {
-                if let Some(ref pid) = photo_id {
-                    delete_photo_files(&data_dir, pid);
-                }
                 return Err(AppError::expired("check-in has expired"));
             }
 
@@ -560,6 +549,9 @@ pub async fn create_reply(
             };
 
             tx.commit()?;
+            if let Some(ref mut g) = photo_guard {
+                g.disarm();
+            }
             Ok((reply, ws_push, fcm_push))
         },
     )
@@ -578,6 +570,7 @@ pub async fn create_reply(
 #[derive(Deserialize)]
 pub struct MemoriesQuery {
     pub before: Option<i64>,
+    pub before_id: Option<i64>,
     pub limit: Option<i64>,
 }
 
@@ -587,6 +580,7 @@ pub async fn list_memories(
     Query(query): Query<MemoriesQuery>,
 ) -> AppResult<Json<MemoriesResponse>> {
     let before = query.before.unwrap_or_else(|| now_ms() + 1);
+    let before_id = query.before_id;
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
 
     let db = state.db.clone();
@@ -594,15 +588,7 @@ pub async fn list_memories(
         let conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, author_id, photo_id, note, lat, lon, place_name,
-                    created_at, expires_at, highlighted, highlighted_by, highlighted_at
-             FROM checkins
-             WHERE highlighted = 1 AND created_at < ?1
-             ORDER BY created_at DESC, id DESC
-             LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![before, limit + 1], |row| {
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<CheckIn> {
             let highlighted_int: i64 = row.get(9)?;
             Ok(CheckIn {
                 id: row.get(0)?,
@@ -619,12 +605,37 @@ pub async fn list_memories(
                 highlighted_at: row.get(11)?,
                 replies: Vec::new(),
             })
-        })?;
+        };
 
         let mut items = Vec::new();
-        for r in rows {
-            items.push(r?);
+        if let Some(bid) = before_id {
+            let mut stmt = conn.prepare(
+                "SELECT id, author_id, photo_id, note, lat, lon, place_name,
+                        created_at, expires_at, highlighted, highlighted_by, highlighted_at
+                 FROM checkins
+                 WHERE highlighted = 1 AND (created_at < ?1 OR (created_at = ?1 AND id < ?2))
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?3",
+            )?;
+            let rows = stmt.query_map(params![before, bid, limit + 1], map_row)?;
+            for r in rows {
+                items.push(r?);
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT id, author_id, photo_id, note, lat, lon, place_name,
+                        created_at, expires_at, highlighted, highlighted_by, highlighted_at
+                 FROM checkins
+                 WHERE highlighted = 1 AND created_at < ?1
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![before, limit + 1], map_row)?;
+            for r in rows {
+                items.push(r?);
+            }
         }
+
         let has_more = items.len() as i64 > limit;
         if has_more {
             items.pop();
@@ -632,13 +643,20 @@ pub async fn list_memories(
         for item in &mut items {
             item.replies = load_replies_for_checkin(&conn, item.id)?;
         }
-        let next_before = if has_more {
-            items.last().map(|c| c.created_at)
+        let (next_before, next_before_id) = if has_more {
+            (
+                items.last().map(|c| c.created_at),
+                items.last().map(|c| c.id),
+            )
         } else {
-            None
+            (None, None)
         };
 
-        Ok(MemoriesResponse { items, next_before })
+        Ok(MemoriesResponse {
+            items,
+            next_before,
+            next_before_id,
+        })
     })
     .await??;
 

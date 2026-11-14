@@ -63,23 +63,36 @@ pub async fn run_wake_check(state: &AppState) {
                 list.push(r);
             }
         }
-        for (uid, _) in &list {
-            let _ = conn.execute(
-                "UPDATE users SET last_wake_sent_at = ?1 WHERE id = ?2",
-                params![now, uid],
-            );
-        }
         list
     })
     .await
     .unwrap_or_default();
 
+    let mut succeeded_ids = Vec::new();
     for (uid, token) in targets {
         let mut data = HashMap::new();
         data.insert("type".into(), "wake".into());
-        if let Err(err) = state.fcm.send_blocking(&token, &data).await {
-            tracing::warn!(user_id = uid, error = %err, "wake FCM failed");
+        match state.fcm.send_blocking(&token, &data).await {
+            Ok(()) => succeeded_ids.push(uid),
+            Err(err) => tracing::warn!(user_id = uid, error = %err, "wake FCM failed"),
         }
+    }
+
+    if !succeeded_ids.is_empty() {
+        let db = state.db.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            let Ok(conn) = db.lock() else {
+                return;
+            };
+            let now = now_ms();
+            for uid in succeeded_ids {
+                let _ = conn.execute(
+                    "UPDATE users SET last_wake_sent_at = ?1 WHERE id = ?2",
+                    params![now, uid],
+                );
+            }
+        })
+        .await;
     }
 }
 

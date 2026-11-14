@@ -14,7 +14,7 @@ use crate::db::{
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{ChatMessage, Event, MessagesResponse};
-use crate::photos::{MAX_PHOTO_BYTES, delete_photo_files, save_jpeg_and_thumb};
+use crate::photos::{MAX_PHOTO_BYTES, PhotoGuard, save_jpeg_and_thumb};
 use crate::state::AppState;
 
 #[derive(Deserialize)]
@@ -138,16 +138,13 @@ pub async fn post_message(
             } else {
                 None
             };
+            let mut photo_guard = photo_id
+                .as_ref()
+                .map(|pid| PhotoGuard::new(&data_dir, pid.clone()));
 
-            let mut conn = match db.lock() {
-                Ok(c) => c,
-                Err(_) => {
-                    if let Some(ref pid) = photo_id {
-                        delete_photo_files(&data_dir, pid);
-                    }
-                    return Err(AppError::internal("database lock poisoned"));
-                }
-            };
+            let mut conn = db
+                .lock()
+                .map_err(|_| AppError::internal("database lock poisoned"))?;
             let tx = conn.transaction()?;
 
             if let Some(mid) = reply_to_message_id {
@@ -155,9 +152,6 @@ pub async fn post_message(
                     .query_row("SELECT id FROM messages WHERE id = ?1", params![mid], |r| r.get(0))
                     .optional()?;
                 if exists.is_none() {
-                    if let Some(ref pid) = photo_id {
-                        delete_photo_files(&data_dir, pid);
-                    }
                     return Err(AppError::not_found("reply_to_message_id not found"));
                 }
             }
@@ -167,9 +161,6 @@ pub async fn post_message(
                     .query_row("SELECT id FROM checkins WHERE id = ?1", params![cid], |r| r.get(0))
                     .optional()?;
                 if exists.is_none() {
-                    if let Some(ref pid) = photo_id {
-                        delete_photo_files(&data_dir, pid);
-                    }
                     return Err(AppError::not_found("reply_to_checkin_id not found"));
                 }
             }
@@ -232,6 +223,9 @@ pub async fn post_message(
             };
 
             tx.commit()?;
+            if let Some(ref mut g) = photo_guard {
+                g.disarm();
+            }
             Ok((msg, ws_push, fcm_push))
         },
     )
@@ -250,6 +244,7 @@ pub async fn post_message(
 #[derive(Deserialize)]
 pub struct MessagesQuery {
     pub before: Option<i64>,
+    pub before_id: Option<i64>,
     pub limit: Option<i64>,
 }
 
@@ -259,6 +254,7 @@ pub async fn list_messages(
     Query(query): Query<MessagesQuery>,
 ) -> AppResult<Json<MessagesResponse>> {
     let before = query.before.unwrap_or_else(|| now_ms() + 1);
+    let before_id = query.before_id;
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
 
     let db = state.db.clone();
@@ -266,40 +262,70 @@ pub async fn list_messages(
         let conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, author_id, text, photo_id, reply_to_message_id, reply_to_checkin_id, created_at
-             FROM messages
-             WHERE created_at < ?1
-             ORDER BY created_at DESC, id DESC
-             LIMIT ?2",
-        )?;
-        let rows = stmt.query_map(params![before, limit + 1], |r| {
-            Ok(ChatMessage {
-                id: r.get(0)?,
-                author_id: r.get(1)?,
-                text: r.get(2)?,
-                photo_id: r.get(3)?,
-                reply_to_message_id: r.get(4)?,
-                reply_to_checkin_id: r.get(5)?,
-                created_at: r.get(6)?,
-            })
-        })?;
-
         let mut items = Vec::new();
-        for r in rows {
-            items.push(r?);
+        if let Some(bid) = before_id {
+            let mut stmt = conn.prepare(
+                "SELECT id, author_id, text, photo_id, reply_to_message_id, reply_to_checkin_id, created_at
+                 FROM messages
+                 WHERE (created_at < ?1 OR (created_at = ?1 AND id < ?2))
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?3",
+            )?;
+            let rows = stmt.query_map(params![before, bid, limit + 1], |r| {
+                Ok(ChatMessage {
+                    id: r.get(0)?,
+                    author_id: r.get(1)?,
+                    text: r.get(2)?,
+                    photo_id: r.get(3)?,
+                    reply_to_message_id: r.get(4)?,
+                    reply_to_checkin_id: r.get(5)?,
+                    created_at: r.get(6)?,
+                })
+            })?;
+            for r in rows {
+                items.push(r?);
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT id, author_id, text, photo_id, reply_to_message_id, reply_to_checkin_id, created_at
+                 FROM messages
+                 WHERE created_at < ?1
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?2",
+            )?;
+            let rows = stmt.query_map(params![before, limit + 1], |r| {
+                Ok(ChatMessage {
+                    id: r.get(0)?,
+                    author_id: r.get(1)?,
+                    text: r.get(2)?,
+                    photo_id: r.get(3)?,
+                    reply_to_message_id: r.get(4)?,
+                    reply_to_checkin_id: r.get(5)?,
+                    created_at: r.get(6)?,
+                })
+            })?;
+            for r in rows {
+                items.push(r?);
+            }
         }
         let has_more = items.len() as i64 > limit;
         if has_more {
             items.pop();
         }
-        let next_before = if has_more {
-            items.last().map(|m| m.created_at)
+        let (next_before, next_before_id) = if has_more {
+            (
+                items.last().map(|m| m.created_at),
+                items.last().map(|m| m.id),
+            )
         } else {
-            None
+            (None, None)
         };
 
-        Ok(MessagesResponse { items, next_before })
+        Ok(MessagesResponse {
+            items,
+            next_before,
+            next_before_id,
+        })
     })
     .await??;
 

@@ -228,6 +228,8 @@ pub struct CheckInsResponse {
 pub struct MemoriesResponse {
     pub items: Vec<CheckIn>,
     pub next_before: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_before_id: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -250,4 +252,6 @@ pub struct ChatMessage {
 pub struct MessagesResponse {
     pub items: Vec<ChatMessage>,
     pub next_before: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_before_id: Option<i64>,
 }

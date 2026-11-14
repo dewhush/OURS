@@ -76,6 +76,33 @@ pub fn delete_photo_files(data_dir: &Path, photo_id: &str) {
     let _ = fs::remove_file(photos_dir.join(format!("{photo_id}_thumb.jpg")));
 }
 
+/// Removes written photo files on drop unless disarmed after DB commit.
+pub struct PhotoGuard<'a> {
+    data_dir: &'a Path,
+    photo_id: Option<String>,
+}
+
+impl<'a> PhotoGuard<'a> {
+    pub fn new(data_dir: &'a Path, photo_id: String) -> Self {
+        Self {
+            data_dir,
+            photo_id: Some(photo_id),
+        }
+    }
+
+    pub fn disarm(&mut self) {
+        self.photo_id = None;
+    }
+}
+
+impl Drop for PhotoGuard<'_> {
+    fn drop(&mut self) {
+        if let Some(ref pid) = self.photo_id {
+            delete_photo_files(self.data_dir, pid);
+        }
+    }
+}
+
 pub fn is_valid_photo_id(photo_id: &str) -> bool {
     photo_id.len() == 32 && photo_id.bytes().all(|b| b.is_ascii_hexdigit())
 }
