@@ -58,6 +58,7 @@ import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.oursContentWidth
+import app.ours.ui.components.oursHeaderInsets
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
@@ -80,12 +81,15 @@ fun SettingsScreen(
     var showAddPlace by remember { mutableStateOf(false) }
     var showXiaomiGuide by remember { mutableStateOf(false) }
     var showSignOutConfirm by remember { mutableStateOf(false) }
+    var safetyExpanded by remember { mutableStateOf(false) }
+    var emergencyNameInput by remember(state.emergencyContactName) { mutableStateOf(state.emergencyContactName) }
+    var emergencyPhoneInput by remember(state.emergencyContactPhone) { mutableStateOf(state.emergencyContactPhone) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas)
-            .statusBarsPadding(),
+            .oursHeaderInsets(),
         contentAlignment = Alignment.TopCenter,
     ) {
     LazyColumn(
@@ -375,7 +379,105 @@ fun SettingsScreen(
             }
         }
 
-        // 4. Collapsible Server Row
+        // 4. Safety, Crash Detection & Emergency WhatsApp Contact
+        item {
+            OursCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(OursMotion.enterSpec()),
+                padding = PaddingValues(0.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 60.dp)
+                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = OursSpacing.sm)) {
+                        Text("Crash Detection", style = OursTypography.title, color = colors.ink)
+                        Text(
+                            "10s countdown + auto SOS & WhatsApp call on impact",
+                            style = OursTypography.caption,
+                            color = colors.inkSecondary,
+                        )
+                    }
+                    Switch(
+                        checked = state.crashDetectionEnabled,
+                        onCheckedChange = { vm.setCrashDetectionEnabled(it) },
+                    )
+                }
+
+                HorizontalDivider(thickness = 1.dp, color = colors.border)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 56.dp)
+                        .clickable { safetyExpanded = !safetyExpanded }
+                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = OursSpacing.sm)) {
+                        Text("Emergency WhatsApp Contact", style = OursTypography.title, color = colors.ink)
+                        Text(
+                            state.emergencyContactPhone.ifBlank { "Tap to set phone number" },
+                            style = OursTypography.caption,
+                            color = colors.inkSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        text = if (safetyExpanded) "⌄" else "›",
+                        style = OursTypography.headline,
+                        color = colors.inkMuted,
+                    )
+                }
+
+                AnimatedVisibility(
+                    visible = safetyExpanded,
+                    enter = fadeIn(OursMotion.enterSpec()) + expandVertically(OursMotion.enterSpec()),
+                    exit = fadeOut(OursMotion.exitSpec()) + shrinkVertically(OursMotion.exitSpec()),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = OursSpacing.md, end = OursSpacing.md, bottom = OursSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
+                    ) {
+                        OutlinedTextField(
+                            value = emergencyNameInput,
+                            onValueChange = { emergencyNameInput = it },
+                            label = { Text("Contact name") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = emergencyPhoneInput,
+                            onValueChange = { emergencyPhoneInput = it },
+                            label = { Text("WhatsApp phone (e.g. +62812...)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OursButton(
+                            text = "Save emergency contact",
+                            variant = OursButtonVariant.Secondary,
+                            enabled = emergencyPhoneInput.isNotBlank(),
+                            onClick = {
+                                vm.setEmergencyContact(emergencyNameInput, emergencyPhoneInput)
+                                safetyExpanded = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+        }
+
+        // 5. Collapsible Server Row
         item {
             OursCard(
                 modifier = Modifier

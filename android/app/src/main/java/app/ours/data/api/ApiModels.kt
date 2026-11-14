@@ -28,7 +28,21 @@ data class UserDto(
     val id: Long,
     val name: String,
     val email: String? = null,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
     @SerialName("created_at") val createdAt: Long,
+)
+
+@Serializable
+data class SosRequest(
+    val kind: String,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val message: String? = null,
+)
+
+@Serializable
+data class AvatarUrlRequest(
+    @SerialName("avatar_url") val avatarUrl: String? = null,
 )
 
 @Serializable

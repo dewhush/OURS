@@ -338,6 +338,24 @@ class OursApiClient(
         executeAuthedUnit(req)
     }
 
+    suspend fun sendSos(reqBody: SosRequest) {
+        val payload = OursJson.encodeToString(reqBody)
+        val req = Request.Builder()
+            .url("${base()}/api/sos")
+            .post(payload.toRequestBody(jsonMediaType))
+            .build()
+        executeAuthedUnit(req)
+    }
+
+    suspend fun updateAvatarUrl(avatarUrl: String?) {
+        val payload = OursJson.encodeToString(AvatarUrlRequest(avatarUrl))
+        val req = Request.Builder()
+            .url("${base()}/api/me/avatar")
+            .post(payload.toRequestBody(jsonMediaType))
+            .build()
+        executeAuthedUnit(req)
+    }
+
     suspend fun getEvents(afterId: Long): EventsResponse {
         val req = Request.Builder()
             .url("${base()}/api/events?after=$afterId")

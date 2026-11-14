@@ -101,6 +101,18 @@ class PrefsStore(context: Context) {
     val isPaired: Boolean
         get() = !accessToken.isNullOrBlank() && !refreshToken.isNullOrBlank() && userId > 0
 
+    var crashDetectionEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CRASH_DETECTION, true)
+        set(value) = prefs.edit().putBoolean(KEY_CRASH_DETECTION, value).apply()
+
+    var emergencyContactName: String
+        get() = prefs.getString(KEY_EMERGENCY_NAME, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_EMERGENCY_NAME, value.trim()).apply()
+
+    var emergencyContactPhone: String
+        get() = prefs.getString(KEY_EMERGENCY_PHONE, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_EMERGENCY_PHONE, value.trim()).apply()
+
     fun saveTokens(tokens: TokensDto) {
         prefs.edit()
             .putString(KEY_ACCESS_TOKEN, TokenCipher.encrypt(tokens.accessToken))
@@ -154,5 +166,8 @@ class PrefsStore(context: Context) {
         private const val KEY_ONBOARDING_DONE = "onboarding_done"
         private const val KEY_INVITE_CODE = "invite_code"
         private const val KEY_FCM_TOKEN_SENT = "fcm_token_sent"
+        private const val KEY_CRASH_DETECTION = "crash_detection_enabled"
+        private const val KEY_EMERGENCY_NAME = "emergency_contact_name"
+        private const val KEY_EMERGENCY_PHONE = "emergency_contact_phone"
     }
 }

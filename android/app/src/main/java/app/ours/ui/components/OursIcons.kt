@@ -246,4 +246,34 @@ object OursIcons {
             }
         }
     }
+
+    val Compass: ImageVector by lazy {
+        icon("Compass") {
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(12f, 3f)
+                arcTo(9f, 9f, 0f, true, true, 11.99f, 3f)
+                close()
+                moveTo(15.5f, 8.5f)
+                lineTo(13.4f, 13.4f)
+                lineTo(8.5f, 15.5f)
+                lineTo(10.6f, 10.6f)
+                close()
+            }
+        }
+    }
+
+    val Alert: ImageVector by lazy {
+        icon("Alert") {
+            path(stroke = stroke, strokeLineWidth = 1.8f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round) {
+                moveTo(12f, 3f)
+                lineTo(21f, 19f)
+                horizontalLineTo(3f)
+                close()
+                moveTo(12f, 9.5f)
+                verticalLineTo(13.5f)
+                moveTo(12f, 16.5f)
+                verticalLineTo(16.6f)
+            }
+        }
+    }
 }

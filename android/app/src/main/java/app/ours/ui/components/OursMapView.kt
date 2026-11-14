@@ -15,6 +15,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.ours.data.api.CheckInDto
+import app.ours.data.api.LocationPointDto
 import app.ours.data.api.PartnerLocationDto
 import app.ours.data.api.PlaceDto
 import app.ours.ui.theme.OursMotion
@@ -22,6 +23,7 @@ import app.ours.ui.theme.OursTheme
 import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
@@ -33,6 +35,9 @@ fun OursMapView(
     modifier: Modifier = Modifier,
     partnerLocation: PartnerLocationDto? = null,
     partnerName: String = "Partner",
+    myLocation: LocationPointDto? = null,
+    myAzimuthDeg: Float? = null,
+    compassMode: Boolean = false,
     places: List<PlaceDto> = emptyList(),
     highlights: List<CheckInDto> = emptyList(),
     recenterTrigger: Int = 0,
@@ -50,6 +55,7 @@ fun OursMapView(
     var hasMovedInitialCamera by remember { mutableStateOf(false) }
 
     var partnerMarker by remember { mutableStateOf<Marker?>(null) }
+    var myMarker by remember { mutableStateOf<Marker?>(null) }
     var lastPartnerLatLng by remember { mutableStateOf<LatLng?>(null) }
     val staticMarkers = remember { mutableListOf<Marker>() }
 
@@ -177,6 +183,53 @@ fun OursMapView(
         }
     }
 
+    LaunchedEffect(styleReady, myLocation, myAzimuthDeg) {
+        val map = mapRef ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        if (myLocation == null) {
+            myMarker?.let {
+                @Suppress("DEPRECATION")
+                map.removeMarker(it)
+            }
+            myMarker = null
+            return@LaunchedEffect
+        }
+        val pos = LatLng(myLocation.lat, myLocation.lon)
+        val icon = IconFactory.getInstance(context)
+            .fromBitmap(MapMarkerFactory.myLocationPin(context, myAzimuthDeg))
+        val existing = myMarker
+        if (existing == null) {
+            @Suppress("DEPRECATION")
+            myMarker = map.addMarker(
+                MarkerOptions()
+                    .position(pos)
+                    .title("You")
+                    .icon(icon)
+            )
+        } else {
+            existing.position = pos
+            existing.setIcon(icon)
+            @Suppress("DEPRECATION")
+            map.updateMarker(existing)
+        }
+    }
+
+    LaunchedEffect(styleReady, compassMode, myAzimuthDeg) {
+        val map = mapRef ?: return@LaunchedEffect
+        if (!styleReady) return@LaunchedEffect
+        val targetBearing = if (compassMode && myAzimuthDeg != null && myAzimuthDeg.isFinite()) {
+            myAzimuthDeg.toDouble()
+        } else {
+            0.0
+        }
+        if (compassMode || kotlin.math.abs(map.cameraPosition.bearing) > 0.5) {
+            val pos = CameraPosition.Builder(map.cameraPosition)
+                .bearing(targetBearing)
+                .build()
+            map.moveCamera(CameraUpdateFactory.newCameraPosition(pos))
+        }
+    }
+
     var lastRecenterTrigger by remember { mutableStateOf(recenterTrigger) }
     LaunchedEffect(styleReady, partnerLocation, places, highlights, recenterTrigger) {
         val map = mapRef ?: return@LaunchedEffect
@@ -194,6 +247,7 @@ fun OursMapView(
                 LatLng(h.lat!!, h.lon!!)
             }
             places.isNotEmpty() -> LatLng(places.first().lat, places.first().lon)
+            myLocation != null -> LatLng(myLocation.lat, myLocation.lon)
             else -> null
         }
         if (target != null) {

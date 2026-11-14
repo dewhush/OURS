@@ -52,6 +52,7 @@ import app.ours.ui.components.OursLoadingState
 import app.ours.ui.components.OursMapView
 import app.ours.ui.components.OursStaggeredItem
 import app.ours.ui.components.oursContentWidth
+import app.ours.ui.components.oursHeaderInsets
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursRadius
@@ -95,7 +96,7 @@ fun MemoriesScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.canvas)
-            .statusBarsPadding(),
+            .oursHeaderInsets(),
         contentAlignment = Alignment.TopCenter,
     ) {
     Column(

@@ -23,6 +23,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class LocationTrackingService : Service() {
@@ -45,7 +51,12 @@ class LocationTrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        motionPipeline = MotionTelemetryPipeline(this)
+        motionPipeline = MotionTelemetryPipeline(this) { gForce, _ ->
+            val app = application as OursApp
+            if (app.prefs.isPaired && app.prefs.crashDetectionEnabled) {
+                _crashEvents.tryEmit(gForce)
+            }
+        }
         motionPipeline.start()
     }
 
@@ -84,10 +95,8 @@ class LocationTrackingService : Service() {
 
         WatchdogScheduler.schedule(this)
         registerUpdates(currentConfig)
-
-        if (intent?.action == ACTION_WAKE_FIX) {
-            triggerImmediateFix()
-        } else {
+        triggerImmediateFix()
+        if (intent?.action != ACTION_WAKE_FIX) {
             scope.launch { flushQueue() }
         }
 
@@ -169,8 +178,21 @@ class LocationTrackingService : Service() {
             if (Build.VERSION.SDK_INT >= 31 && locationManager.allProviders.contains(LocationManager.FUSED_PROVIDER)) {
                 add(LocationManager.FUSED_PROVIDER)
             }
-            add(LocationManager.GPS_PROVIDER)
-            add(LocationManager.NETWORK_PROVIDER)
+            if (locationManager.allProviders.contains(LocationManager.NETWORK_PROVIDER)) {
+                add(LocationManager.NETWORK_PROVIDER)
+            }
+            if (locationManager.allProviders.contains(LocationManager.GPS_PROVIDER)) {
+                add(LocationManager.GPS_PROVIDER)
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            providers.forEach { provider ->
+                runCatching {
+                    locationManager.getCurrentLocation(provider, null, mainExecutor) { loc ->
+                        if (loc != null) onLocationReceived(loc)
+                    }
+                }
+            }
         }
         val best = providers.mapNotNull { p ->
             runCatching { locationManager.getLastKnownLocation(p) }.getOrNull()
@@ -227,6 +249,7 @@ class LocationTrackingService : Service() {
             verticalSpeedMps = motion.verticalSpeedMps?.takeIf { it.isFinite() },
         )
 
+        _latestMyLocation.value = point
         val app = application as OursApp
         app.db.enqueueLocation(point)
         scope.launch {
@@ -274,6 +297,12 @@ class LocationTrackingService : Service() {
     companion object {
         const val ACTION_START = "app.ours.action.START_LOCATION"
         const val ACTION_WAKE_FIX = "app.ours.action.WAKE_FIX"
+
+        private val _latestMyLocation = MutableStateFlow<LocationPointDto?>(null)
+        val latestMyLocation: StateFlow<LocationPointDto?> = _latestMyLocation.asStateFlow()
+
+        private val _crashEvents = MutableSharedFlow<Double>(extraBufferCapacity = 1)
+        val crashEvents: SharedFlow<Double> = _crashEvents.asSharedFlow()
 
         fun start(context: Context, wakeFix: Boolean = false) {
             val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==

@@ -119,4 +119,46 @@ object MapMarkerFactory {
 
         return bmp
     }
+
+    fun myLocationPin(context: Context, azimuthDeg: Float? = null): Bitmap {
+        val density = context.resources.displayMetrics.density
+        val sizePx = (64f * density).toInt()
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val cx = sizePx / 2f
+        val cy = sizePx / 2f
+
+        val green = Color.parseColor("#228B54")
+        if (azimuthDeg != null && azimuthDeg.isFinite()) {
+            canvas.save()
+            canvas.rotate(azimuthDeg, cx, cy)
+            val conePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = green
+                alpha = 65
+            }
+            val r = 28f * density
+            val oval = RectF(cx - r, cy - r, cx + r, cy + r)
+            canvas.drawArc(oval, -120f, 60f, true, conePaint)
+            canvas.restore()
+        }
+
+        val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = green
+            alpha = 45
+        }
+        canvas.drawCircle(cx, cy, 18f * density, haloPaint)
+
+        val whitePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            setShadowLayer(3f * density, 0f, 1.5f * density, Color.argb(60, 0, 0, 0))
+        }
+        canvas.drawCircle(cx, cy, 11f * density, whitePaint)
+
+        val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = green
+        }
+        canvas.drawCircle(cx, cy, 7.5f * density, corePaint)
+
+        return bmp
+    }
 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -57,6 +58,7 @@ import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursPressScale
 import app.ours.ui.components.oursContentWidth
+import app.ours.ui.components.oursHeaderInsets
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.theme.OursSpacing
@@ -165,7 +167,8 @@ fun ChatScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.canvas),
+            .background(colors.canvas)
+            .imePadding(),
         contentAlignment = Alignment.TopCenter,
     ) {
     Column(
@@ -181,8 +184,8 @@ fun ChatScreen(
             shadowElevation = 4.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.xs),
+                .oursHeaderInsets()
+                .padding(horizontal = layoutSpec.horizontalPadding),
         ) {
             Row(
                 modifier = Modifier
@@ -193,8 +196,9 @@ fun ChatScreen(
             ) {
                 OursAvatar(
                     name = partnerName,
+                    photoUrl = state.partnerAvatarUrl,
                     size = 40.dp,
-                    ringColor = if (isLive) colors.live else null,
+                    ringColor = if (isLive) colors.success else null,
                     accent = true,
                 )
                 Column(modifier = Modifier.weight(1f)) {

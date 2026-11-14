@@ -25,13 +25,18 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -99,6 +104,13 @@ fun Modifier.oursContentWidth(spec: OursLayoutSpec): Modifier =
     } else {
         this.fillMaxWidth()
     }
+
+/**
+ * Shared top inset below the status bar and HyperIsland / display cutout (~60dp)
+ * so Map, Memories, Chat, and Settings headers align identically.
+ */
+fun Modifier.oursHeaderInsets(): Modifier =
+    this.statusBarsPadding().displayCutoutPadding().padding(top = 12.dp)
 
 enum class OursButtonVariant { Primary, Secondary, Ghost, Destructive }
 
@@ -263,6 +275,7 @@ fun OursBottomSheet(
 fun OursAvatar(
     name: String,
     modifier: Modifier = Modifier,
+    photoUrl: String? = null,
     size: Dp = 40.dp,
     ringColor: Color? = null,
     accent: Boolean = false,
@@ -288,6 +301,14 @@ fun OursAvatar(
             style = OursTypography.title.copy(fontWeight = FontWeight.SemiBold),
             color = fg,
         )
+        if (!photoUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = photoUrl,
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
@@ -301,10 +322,10 @@ fun OursStatusChip(
 ) {
     val colors = OursTheme.colors
     val (bg, fg, dot) = when (tone) {
-        StatusTone.Live -> Triple(colors.liveSoft, colors.live, colors.live)
+        StatusTone.Live -> Triple(colors.successSoft, colors.success, colors.success)
         StatusTone.Paused -> Triple(colors.pausedSoft, colors.paused, colors.paused)
         StatusTone.Muted -> Triple(colors.surfaceMuted, colors.inkSecondary, colors.inkMuted)
-        StatusTone.Error -> Triple(colors.errorSoft, colors.error, colors.error)
+        StatusTone.Error -> Triple(colors.dangerSoft, colors.danger, colors.danger)
     }
 
     Row(

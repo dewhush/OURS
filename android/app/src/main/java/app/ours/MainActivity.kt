@@ -30,10 +30,12 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -63,6 +65,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +83,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.ours.data.api.CheckInDto
 import app.ours.location.LocationTrackingService
 import app.ours.ui.MainTab
+import app.ours.ui.components.OursButtonVariant
 import app.ours.ui.OursViewModel
 import app.ours.ui.components.OursBottomSheet
 import app.ours.ui.components.OursButton
@@ -355,16 +359,23 @@ private fun OursRoot(vm: OursViewModel) {
 
     val colors = OursTheme.colors
     val strings = OursTheme.strings
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     Scaffold(
         containerColor = colors.canvas,
         bottomBar = {
-            OursFloatingBottomNav(
-                activeTab = state.activeTab,
-                strings = strings,
-                unreadChatCount = state.unreadChatCount,
-                onSelect = vm::selectTab,
-            )
+            AnimatedVisibility(
+                visible = !imeVisible,
+                enter = fadeIn(OursMotion.enterSpec()),
+                exit = fadeOut(OursMotion.exitSpec()),
+            ) {
+                OursFloatingBottomNav(
+                    activeTab = state.activeTab,
+                    strings = strings,
+                    unreadChatCount = state.unreadChatCount,
+                    onSelect = vm::selectTab,
+                )
+            }
         },
     ) { innerPadding ->
         Box(
@@ -418,6 +429,38 @@ private fun OursRoot(vm: OursViewModel) {
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
                     .padding(top = OursSpacing.sm),
+            )
+        }
+    }
+
+    if (state.sosCountdownSec != null) {
+        OursBottomSheet(onDismiss = { vm.cancelSosCountdown() }) {
+            Text(
+                text = if (state.sosKind == "crash") "Crash detected" else "Sending SOS",
+                style = OursTypography.headline,
+                color = colors.danger,
+            )
+            Spacer(Modifier.height(OursSpacing.xs))
+            Text(
+                text = "Alerting ${state.partner?.name ?: "your partner"}${
+                    if (state.emergencyContactPhone.isNotBlank()) " and calling ${state.emergencyContactName.ifBlank { state.emergencyContactPhone }} on WhatsApp" else ""
+                } in ${state.sosCountdownSec}s.",
+                style = OursTypography.body,
+                color = colors.inkSecondary,
+            )
+            Spacer(Modifier.height(OursSpacing.md))
+            OursButton(
+                text = "Send SOS now",
+                variant = OursButtonVariant.Destructive,
+                onClick = { vm.triggerSosNow() },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(OursSpacing.xs))
+            OursButton(
+                text = "I'm okay · Cancel",
+                variant = OursButtonVariant.Secondary,
+                onClick = { vm.cancelSosCountdown() },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -574,7 +617,7 @@ private fun OursFloatingBottomNav(
                     modifier = Modifier
                         .offset(x = indicatorOffset)
                         .width(tabWidth)
-                        .height(52.dp)
+                        .height(48.dp)
                         .clip(RoundedCornerShape(OursRadius.inner))
                         .background(colors.actionSoft),
                 )
@@ -588,10 +631,10 @@ private fun OursFloatingBottomNav(
                             animationSpec = OursMotion.enterSpec(),
                             label = "nav-tint-${tab.name}",
                         )
-                        Column(
+                        Box(
                             modifier = Modifier
                                 .width(tabWidth)
-                                .height(52.dp)
+                                .height(48.dp)
                                 .oursPressScale(interactionSource)
                                 .clip(RoundedCornerShape(OursRadius.inner))
                                 .clickable(
@@ -599,37 +642,26 @@ private fun OursFloatingBottomNav(
                                     indication = null,
                                     onClick = { onSelect(tab) },
                                 ),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
+                            contentAlignment = Alignment.Center,
                         ) {
                             Box {
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = label,
                                     tint = tint,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(22.dp),
                                 )
                                 if (tab == MainTab.Chat && unreadChatCount > 0) {
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.TopEnd)
-                                            .offset(x = 6.dp, y = (-3).dp)
+                                            .offset(x = 5.dp, y = (-2).dp)
                                             .size(8.dp)
                                             .clip(CircleShape)
-                                            .background(colors.ink),
+                                            .background(colors.danger),
                                     )
                                 }
                             }
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = label,
-                                style = OursTypography.label.copy(
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                                ),
-                                color = tint,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
                         }
                     }
                 }

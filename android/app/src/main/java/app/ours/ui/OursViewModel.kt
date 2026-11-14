@@ -14,15 +14,18 @@ import app.ours.data.api.EventDto
 import app.ours.data.api.EventHighlightData
 import app.ours.data.api.EventReplyData
 import app.ours.data.api.EventSharingData
+import app.ours.data.api.LocationPointDto
 import app.ours.data.api.OursJson
 import app.ours.data.api.PartnerLocationDto
 import app.ours.data.api.PlaceDto
+import app.ours.data.api.SosRequest
 import app.ours.data.api.UserDto
 import app.ours.location.LocationTrackingService
 import app.ours.location.WatchdogScheduler
 import app.ours.notifications.OursNotifier
 import app.ours.push.FirebaseBootstrap
 import app.ours.util.PhotoCompressor
+import app.ours.util.ProfileAndSosHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -51,6 +54,14 @@ data class OursUiState(
     val sharingPaused: Boolean = false,
     val partnerPaused: Boolean = false,
     val partnerLocation: PartnerLocationDto? = null,
+    val myLocation: LocationPointDto? = null,
+    val myAvatarUrl: String? = null,
+    val partnerAvatarUrl: String? = null,
+    val crashDetectionEnabled: Boolean = true,
+    val emergencyContactName: String = "",
+    val emergencyContactPhone: String = "",
+    val sosCountdownSec: Int? = null,
+    val sosKind: String = "manual",
     val checkIns: List<CheckInDto> = emptyList(),
     val checkInsLoading: Boolean = false,
     val checkInsError: String? = null,
@@ -86,14 +97,20 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             serverUrl = prefs.serverUrl,
             inviteCode = prefs.inviteCode,
             me = if (prefs.userId > 0 && prefs.userName != null) {
-                UserDto(prefs.userId, prefs.userName!!, prefs.userEmail, 0L)
+                UserDto(id = prefs.userId, name = prefs.userName!!, email = prefs.userEmail, createdAt = 0L)
             } else null,
             partner = if (prefs.partnerId != null && prefs.partnerName != null) {
-                UserDto(prefs.partnerId!!, prefs.partnerName!!, prefs.partnerEmail, 0L)
+                UserDto(id = prefs.partnerId!!, name = prefs.partnerName!!, email = prefs.partnerEmail, createdAt = 0L)
             } else null,
             sharingPaused = prefs.sharingPaused,
             partnerPaused = prefs.partnerPaused,
             partnerLocation = db.loadPartnerLocationCache(),
+            myLocation = LocationTrackingService.latestMyLocation.value,
+            myAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(null, prefs.userEmail),
+            partnerAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(null, prefs.partnerEmail),
+            crashDetectionEnabled = prefs.crashDetectionEnabled,
+            emergencyContactName = prefs.emergencyContactName,
+            emergencyContactPhone = prefs.emergencyContactPhone,
             checkIns = db.loadCheckInsCache(),
             places = db.loadPlacesCache(),
             pendingUploads = db.pendingUploadCount(),
@@ -104,9 +121,36 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
     private var webSocket: WebSocket? = null
     private var wsReconnectJob: Job? = null
     private var confirmationJob: Job? = null
+    private var sosCountdownJob: Job? = null
     private var isForeground = false
 
     init {
+        viewModelScope.launch {
+            LocationTrackingService.latestMyLocation.collect { loc ->
+                if (loc != null) {
+                    _state.update { it.copy(myLocation = loc) }
+                }
+            }
+        }
+        viewModelScope.launch {
+            LocationTrackingService.crashEvents.collect {
+                startSosCountdown(kind = "crash")
+            }
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val localPhoto = ProfileAndSosHelper.queryLocalProfilePhotoUri(app)
+            if (!localPhoto.isNullOrBlank()) {
+                _state.update { s ->
+                    s.copy(
+                        myAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(
+                            s.me?.avatarUrl,
+                            s.me?.email ?: prefs.userEmail,
+                            localPhoto,
+                        )
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             app.sessionExpiredEvents.collect {
                 disconnectWebSocket()
@@ -301,6 +345,15 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                         sharingPaused = meResp.sharingPaused,
                         partnerPaused = meResp.partnerPaused,
                         inviteCode = if (meResp.partner != null) null else it.inviteCode,
+                        myAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(
+                            meResp.me.avatarUrl,
+                            meResp.me.email,
+                            it.myAvatarUrl,
+                        ),
+                        partnerAvatarUrl = ProfileAndSosHelper.resolveAvatarUrl(
+                            meResp.partner?.avatarUrl,
+                            meResp.partner?.email,
+                        ),
                     )
                 }
             }
@@ -604,6 +657,69 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setCrashDetectionEnabled(enabled: Boolean) {
+        prefs.crashDetectionEnabled = enabled
+        _state.update { it.copy(crashDetectionEnabled = enabled) }
+    }
+
+    fun setEmergencyContact(name: String, phone: String) {
+        prefs.emergencyContactName = name
+        prefs.emergencyContactPhone = phone
+        _state.update {
+            it.copy(
+                emergencyContactName = prefs.emergencyContactName,
+                emergencyContactPhone = prefs.emergencyContactPhone,
+            )
+        }
+        showConfirmation("Emergency contact saved")
+    }
+
+    fun startSosCountdown(kind: String = "manual") {
+        if (sosCountdownJob?.isActive == true) return
+        _state.update { it.copy(sosCountdownSec = 10, sosKind = kind) }
+        sosCountdownJob = viewModelScope.launch {
+            for (sec in 10 downTo 1) {
+                _state.update { it.copy(sosCountdownSec = sec) }
+                delay(1_000L)
+            }
+            _state.update { it.copy(sosCountdownSec = null) }
+            dispatchSos(kind)
+        }
+    }
+
+    fun cancelSosCountdown() {
+        sosCountdownJob?.cancel()
+        sosCountdownJob = null
+        _state.update { it.copy(sosCountdownSec = null) }
+    }
+
+    fun triggerSosNow() {
+        val kind = _state.value.sosKind
+        sosCountdownJob?.cancel()
+        sosCountdownJob = null
+        _state.update { it.copy(sosCountdownSec = null) }
+        viewModelScope.launch {
+            dispatchSos(kind)
+        }
+    }
+
+    private suspend fun dispatchSos(kind: String) {
+        val myLoc = _state.value.myLocation
+        val msg = if (kind == "crash") {
+            "Possible crash detected. Please check in."
+        } else {
+            "SOS alert sent from OURS."
+        }
+        runCatching {
+            api.sendSos(SosRequest(kind = kind, lat = myLoc?.lat, lon = myLoc?.lon, message = msg))
+        }
+        val phone = prefs.emergencyContactPhone
+        if (phone.isNotBlank()) {
+            ProfileAndSosHelper.launchWhatsAppCall(app, phone)
+        }
+        showConfirmation(if (phone.isNotBlank()) "SOS sent & calling WhatsApp" else "SOS alert sent to partner")
+    }
+
     fun updateServerUrl(url: String) {
         prefs.serverUrl = url
         _state.update { it.copy(serverUrl = prefs.serverUrl) }
@@ -703,6 +819,16 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
                         prefs.partnerPaused = loc.paused
                         _state.update { it.copy(partnerLocation = loc, partnerPaused = loc.paused) }
                     }
+            }
+            "sos" -> {
+                OursNotifier.buzzPhone(app)
+                OursNotifier.notify(
+                    app,
+                    OursNotifier.CHANNEL_NUDGE,
+                    9110,
+                    "${prefs.partnerName ?: "Partner"} · SOS",
+                    "Emergency alert triggered",
+                )
             }
             "checkin" -> {
                 runCatching { OursJson.decodeFromJsonElement<EventCheckInData>(event.data) }

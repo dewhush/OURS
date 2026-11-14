@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -40,7 +41,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.ours.location.AdaptiveLocationPolicy
+import app.ours.location.CompassSensorManager
 import app.ours.ui.theme.OursMotion
 import app.ours.ui.theme.OursRadius
 import app.ours.ui.OursUiState
@@ -55,6 +58,7 @@ import app.ours.ui.components.OursMapView
 import app.ours.ui.components.OursStatusChip
 import app.ours.ui.components.StatusTone
 import app.ours.ui.components.oursContentWidth
+import app.ours.ui.components.oursHeaderInsets
 import app.ours.ui.components.rememberOursLayoutSpec
 import app.ours.ui.theme.OursSpacing
 import app.ours.ui.theme.OursTheme
@@ -71,6 +75,14 @@ fun MapScreen(
     val colors = OursTheme.colors
     val strings = OursTheme.strings
     val layoutSpec = rememberOursLayoutSpec()
+    val context = LocalContext.current
+    val compassManager = remember { CompassSensorManager(context) }
+    DisposableEffect(compassManager) {
+        compassManager.start()
+        onDispose { compassManager.stop() }
+    }
+    val azimuthDeg by compassManager.azimuthDeg.collectAsStateWithLifecycle()
+    var compassMode by remember { mutableStateOf(false) }
     var recenterTrigger by remember { mutableIntStateOf(0) }
     var showPartnerSheet by remember { mutableStateOf(false) }
     var nudgePulseKey by remember { mutableIntStateOf(0) }
@@ -90,7 +102,6 @@ fun MapScreen(
         }
     }
 
-    val context = LocalContext.current
     val partnerName = state.partner?.name ?: "Partner"
     val loc = state.partnerLocation
     val isPaused = state.partnerPaused || loc?.paused == true
@@ -133,6 +144,9 @@ fun MapScreen(
             modifier = Modifier.fillMaxSize(),
             partnerLocation = loc,
             partnerName = partnerName,
+            myLocation = state.myLocation,
+            myAzimuthDeg = azimuthDeg,
+            compassMode = compassMode,
             places = state.places,
             highlights = state.memories,
             recenterTrigger = recenterTrigger,
@@ -143,8 +157,8 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .oursContentWidth(layoutSpec)
-                .statusBarsPadding()
-                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.sm),
+                .oursHeaderInsets()
+                .padding(horizontal = layoutSpec.horizontalPadding, vertical = OursSpacing.xs),
             verticalArrangement = Arrangement.spacedBy(OursSpacing.xs),
         ) {
         OursCard(
@@ -159,7 +173,8 @@ fun MapScreen(
             ) {
                 OursAvatar(
                     name = partnerName,
-                    ringColor = if (statusTone == StatusTone.Live) colors.live else null,
+                    photoUrl = state.partnerAvatarUrl,
+                    ringColor = if (statusTone == StatusTone.Live) colors.success else null,
                     accent = true,
                 )
                 Column(modifier = Modifier.weight(1f)) {
@@ -190,10 +205,9 @@ fun MapScreen(
                             ?.takeIf { it.isNotBlank() && it != "still" }
                             ?.replaceFirstChar { it.uppercase() }
                             ?.let { "$it · " } ?: ""
-                        val updatedText = loc.recordedAt?.let { Formatters.relativeTime(it, nowMs) } ?: "--"
                         val distPart = distanceText?.let { "  |  $it" } ?: ""
                         Text(
-                            text = "$activityPrefix$speedText  |  $batteryText$distPart  |  $updatedText",
+                            text = "$activityPrefix$speedText  |  $batteryText$distPart",
                             style = OursTypography.tabular,
                             color = colors.inkSecondary,
                         )
@@ -289,6 +303,30 @@ fun MapScreen(
                     Icon(
                         imageVector = OursIcons.Crosshair,
                         contentDescription = strings.center,
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+            )
+            OursButton(
+                text = "Compass",
+                variant = if (compassMode) OursButtonVariant.Primary else OursButtonVariant.Secondary,
+                onClick = { compassMode = !compassMode },
+                leadingIcon = {
+                    Icon(
+                        imageVector = OursIcons.Compass,
+                        contentDescription = "Compass",
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+            )
+            OursButton(
+                text = "SOS",
+                variant = OursButtonVariant.Destructive,
+                onClick = { vm.startSosCountdown(kind = "manual") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = OursIcons.Alert,
+                        contentDescription = "SOS",
                         modifier = Modifier.size(18.dp),
                     )
                 },

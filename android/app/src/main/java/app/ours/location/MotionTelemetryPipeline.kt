@@ -30,6 +30,9 @@ class MotionTelemetryPipeline(
     private var lastAltitudeM: Double? = null
     private var latestAltitudeM: Double? = null
     private var latestVerticalSpeedMps: Double = 0.0
+    private var lastImpactTimeMs: Long = 0L
+    private var lastImpactG: Double = 0.0
+    private var lastCrashTriggerMs: Long = 0L
     private var started = false
 
     fun start() {
@@ -65,6 +68,16 @@ class MotionTelemetryPipeline(
             stepCadenceHz = cadence,
             verticalSpeedMps = vspeed,
         )
+        // Crash confirmation: high-G impact followed by 5-12s of stillness/low motion
+        val impactAgeMs = nowMs - lastImpactTimeMs
+        if (lastImpactTimeMs > 0L && impactAgeMs in CRASH_STILLNESS_MIN_MS..CRASH_STILLNESS_MAX_MS &&
+            nowMs - lastCrashTriggerMs > CRASH_DEBOUNCE_MS &&
+            speedMps < 1.0 && cadence < 0.2
+        ) {
+            lastCrashTriggerMs = nowMs
+            lastImpactTimeMs = 0L
+            onImpactCandidate?.invoke(lastImpactG, nowMs)
+        }
         return MotionSnapshot(
             activity = activity,
             altitudeM = latestAltitudeM,
@@ -106,7 +119,8 @@ class MotionTelemetryPipeline(
                 val z = event.values.getOrNull(2) ?: return
                 val g = sqrt((x * x + y * y + z * z).toDouble()) / SensorManager.GRAVITY_EARTH
                 if (g.isFinite() && g >= CRASH_IMPACT_THRESHOLD_G) {
-                    onImpactCandidate?.invoke(g, nowMs)
+                    lastImpactTimeMs = nowMs
+                    lastImpactG = g
                 }
             }
         }
@@ -118,5 +132,8 @@ class MotionTelemetryPipeline(
         private const val STEP_WINDOW_MS = 10_000L
         private const val PRESSURE_STALE_MS = 15_000L
         private const val CRASH_IMPACT_THRESHOLD_G = 4.0
+        private const val CRASH_STILLNESS_MIN_MS = 5_000L
+        private const val CRASH_STILLNESS_MAX_MS = 12_000L
+        private const val CRASH_DEBOUNCE_MS = 60_000L
     }
 }
