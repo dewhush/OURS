@@ -307,31 +307,6 @@ fun SettingsScreen(
                     .animateContentSize(OursMotion.enterSpec()),
                 padding = PaddingValues(0.dp),
             ) {
-                // Pause sharing row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 60.dp)
-                        .padding(horizontal = OursSpacing.md, vertical = OursSpacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = OursSpacing.sm)) {
-                        Text(strings.pauseSharingTitle, style = OursTypography.title, color = colors.ink)
-                        Text(
-                            strings.pauseSharingSubtitle,
-                            style = OursTypography.caption,
-                            color = colors.inkSecondary,
-                        )
-                    }
-                    Switch(
-                        checked = state.sharingPaused,
-                        onCheckedChange = { vm.toggleSharingPaused(it) },
-                    )
-                }
-
-                HorizontalDivider(thickness = 1.dp, color = colors.border)
-
                 // Saved places row (expands inline)
                 Row(
                     modifier = Modifier

@@ -102,7 +102,7 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             partner = if (prefs.partnerId != null && prefs.partnerName != null) {
                 UserDto(id = prefs.partnerId!!, name = prefs.partnerName!!, email = prefs.partnerEmail, createdAt = 0L)
             } else null,
-            sharingPaused = prefs.sharingPaused,
+            sharingPaused = false.also { prefs.sharingPaused = false },
             partnerPaused = prefs.partnerPaused,
             partnerLocation = db.loadPartnerLocationCache(),
             myLocation = LocationTrackingService.latestMyLocation.value,

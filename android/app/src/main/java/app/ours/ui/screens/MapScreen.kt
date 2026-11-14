@@ -263,20 +263,6 @@ fun MapScreen(
                 }
             }
         }
-
-        if (state.sharingPaused) {
-            OursCard(
-                modifier = Modifier.fillMaxWidth(),
-                frosted = true,
-                onClick = { vm.toggleSharingPaused(false) },
-            ) {
-                Text(
-                    text = strings.sharingPausedBanner,
-                    style = OursTypography.caption.copy(fontWeight = FontWeight.Medium),
-                    color = colors.ink,
-                )
-            }
-        }
         }
 
         // Bottom floating actions: Check-in CTA + Nudge + Recenter
