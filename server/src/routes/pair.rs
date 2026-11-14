@@ -46,21 +46,46 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
+fn client_rate_key(headers: &HeaderMap, fallback_subkey: &str) -> String {
+    let forwarded = headers
+        .get("CF-Connecting-IP")
+        .or_else(|| headers.get("X-Real-IP"))
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            headers
+                .get("X-Forwarded-For")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.split(',').next())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        });
+
+    match forwarded {
+        Some(ip) => format!("ip:{ip}"),
+        None => format!("key:{fallback_subkey}"),
+    }
+}
+
 pub async fn create_pair(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<CreatePairRequest>,
 ) -> AppResult<(StatusCode, Json<CreatePairResponse>)> {
+    let mut create_rate_key: Option<String> = None;
     if let Some(ref expected_key) = state.config.setup_key {
-        state.check_create_rate_limit()?;
         let provided_key = headers
             .get("X-Setup-Key")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
+        let rk = client_rate_key(&headers, &hash_refresh_token(provided_key)[..16]);
+        state.check_create_rate_limit(&rk)?;
         if !constant_time_eq(provided_key.as_bytes(), expected_key.as_bytes()) {
-            state.record_create_failure();
+            state.record_create_failure(&rk);
             return Err(AppError::forbidden("invalid or missing X-Setup-Key"));
         }
+        create_rate_key = Some(rk);
     }
 
     let name = req.name.trim().to_string();
@@ -108,7 +133,9 @@ pub async fn create_pair(
     })
     .await??;
 
-    state.clear_create_rate_limit();
+    if let Some(ref rk) = create_rate_key {
+        state.clear_create_rate_limit(rk);
+    }
     Ok((StatusCode::CREATED, Json(resp)))
 }
 
@@ -151,13 +178,15 @@ pub async fn reissue_invite(
 
 pub async fn join_pair(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<JoinPairRequest>,
 ) -> AppResult<(StatusCode, Json<JoinPairResponse>)> {
-    state.check_join_rate_limit()?;
-
     let code = req.code.trim().to_ascii_uppercase();
+    let rate_key = client_rate_key(&headers, if code.is_empty() { "empty" } else { &code });
+    state.check_join_rate_limit(&rate_key)?;
+
     if code.is_empty() {
-        state.record_join_failure();
+        state.record_join_failure(&rate_key);
         return Err(AppError::invite_not_found());
     }
     let name = req.name.trim().to_string();
@@ -210,12 +239,12 @@ pub async fn join_pair(
 
     match res {
         Ok(resp) => {
-            state.clear_join_rate_limit();
+            state.clear_join_rate_limit(&rate_key);
             Ok((StatusCode::CREATED, Json(resp)))
         }
         Err(err) => {
             if err.code == "invite_not_found" {
-                state.record_join_failure();
+                state.record_join_failure(&rate_key);
             }
             Err(err)
         }
@@ -224,16 +253,18 @@ pub async fn join_pair(
 
 pub async fn refresh_auth(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<RefreshRequest>,
 ) -> AppResult<Json<Tokens>> {
-    state.check_refresh_rate_limit()?;
-
     let raw = req.refresh_token.trim().to_string();
+    let token_hash = hash_refresh_token(&raw);
+    let rate_key = client_rate_key(&headers, &token_hash[..16]);
+    state.check_refresh_rate_limit(&rate_key)?;
+
     if raw.is_empty() {
-        state.record_refresh_failure();
+        state.record_refresh_failure(&rate_key);
         return Err(AppError::invalid_refresh_token("missing refresh token"));
     }
-    let token_hash = hash_refresh_token(&raw);
 
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
@@ -280,12 +311,12 @@ pub async fn refresh_auth(
 
     match res {
         Ok(tokens) => {
-            state.clear_refresh_rate_limit();
+            state.clear_refresh_rate_limit(&rate_key);
             Ok(Json(tokens))
         }
         Err(err) => {
             if err.code == "invalid_refresh_token" {
-                state.record_refresh_failure();
+                state.record_refresh_failure(&rate_key);
             }
             Err(err)
         }

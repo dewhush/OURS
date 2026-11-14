@@ -43,7 +43,7 @@ Check methods: **B** build/test command, **C** curl/websocket against a locally 
 
 | ID | Check | Method | Status |
 | --- | --- | --- | --- |
-| X1-X10 | Map-first home, 4 tabs, Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#0A84FF` Apple System Blue), motion 220ms/160ms EaseOut/EaseInOut (no `spring`/bounce), `PRESS_SCALE=0.97f`, `tnum`, nested radius (`mediaCard = inner + padding`), onboarding order | R | PASS |
+| X1-X10 | Map-first home, 4 tabs, Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#006EE6` Apple System Blue), motion 220ms/160ms EaseOut/EaseInOut (no `spring`/bounce), `PRESS_SCALE=0.97f`, `tnum`, nested radius (`mediaCard = inner + padding`), onboarding order | R | PASS |
 
 ## 4. Technical requirements (PRD §10)
 

@@ -287,7 +287,7 @@ This section adds to the full PRD above. Where it differs, this section wins.
 
 - Map-first home screen showing the partner's position, last-updated time, battery and status, with check-in reachable in one tap.
 - Few screens: Map, Memories (timeline and map of photos), Chat/replies, and Settings (places, pause, setup guide).
-- Build the design system first: Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#0A84FF` Apple System Blue), tokens for color, type, spacing, radius and motion, plus a small component set (buttons, cards, bottom sheet, avatar, status chip).
+- Build the design system first: Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#006EE6` Apple System Blue), tokens for color, type, spacing, radius and motion, plus a small component set (buttons, cards, bottom sheet, avatar, status chip).
 - One action color, consistent icons, clear headlines, loading states, and animated feedback on send and upload, following the saved design and animation lists.
 - Keep motion simple and fast: ease-out entrances, 150 to 250 ms, no bounce on everyday UI.
 - Large touch targets and few choices per screen (Fitts's, Hick's and Miller's laws).
@@ -424,7 +424,7 @@ Two users, me and my girlfriend, each on the same phone model, a Poco X8 (Xiaomi
 
 - Map-first home screen showing the partner's position, speed, last-updated time and battery, with check-in reachable in one tap.
 - Few screens: Map, Memories (highlights as a timeline and map), Chat and replies, and Settings (places, pause, setup guide).
-- Build the design system first: Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#0A84FF` Apple System Blue), tokens for color, type, spacing, radius and motion, plus a small component set (buttons, cards, bottom sheet, avatar, status chip).
+- Build the design system first: Apple HIG Light/Dark palette (`#F2F2F7` / `#FFFFFF` light, `#000000` / `#1C1C1E` / `#2C2C2E` dark, `#0066CC` / `#006EE6` Apple System Blue), tokens for color, type, spacing, radius and motion, plus a small component set (buttons, cards, bottom sheet, avatar, status chip).
 - A custom map style that matches the design system.
 - One action color, consistent icons, clear headlines, loading states and animated feedback on send and upload, following the saved design and animation lists.
 - Fast, simple motion: ease-out entrances, 150 to 250 ms, no bounce on everyday UI.

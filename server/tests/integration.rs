@@ -1356,3 +1356,91 @@ async fn bug_fixes_highlighted_checkins_places_and_pagination() {
     assert_eq!(page2["items"].as_array().unwrap().len(), 1);
     assert_eq!(page2["items"][0]["text"], "msg-a");
 }
+
+#[tokio::test]
+async fn rate_limiter_isolates_clients_and_keys() {
+    let app = TestApp::start().await;
+
+    let create_res: Value = app
+        .client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .header("X-Setup-Key", "test-setup-key")
+        .json(&json!({"name": "Dew"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let invite_code = create_res["invite_code"].as_str().unwrap().to_string();
+    let valid_refresh = create_res["tokens"]["refresh_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Attacker exhausts refresh failures from 1.2.3.4 (and with invalid token)
+    for _ in 0..20 {
+        let r = app
+            .client
+            .post(format!("{}/api/auth/refresh", app.base_url))
+            .header("X-Forwarded-For", "1.2.3.4")
+            .json(&json!({"refresh_token": "attacker-bad-token"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+    }
+    let blocked_attacker = app
+        .client
+        .post(format!("{}/api/auth/refresh", app.base_url))
+        .header("X-Forwarded-For", "1.2.3.4")
+        .json(&json!({"refresh_token": "attacker-bad-token"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked_attacker.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Legitimate user from 5.6.7.8 (or another key) can still refresh
+    let ok_refresh = app
+        .client
+        .post(format!("{}/api/auth/refresh", app.base_url))
+        .header("X-Forwarded-For", "5.6.7.8")
+        .json(&json!({"refresh_token": valid_refresh}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok_refresh.status(), StatusCode::OK);
+
+    // Attacker exhausts join failures on WRONG1 / 1.2.3.4
+    for _ in 0..10 {
+        let r = app
+            .client
+            .post(format!("{}/api/pair/join", app.base_url))
+            .header("X-Forwarded-For", "1.2.3.4")
+            .json(&json!({"code": "WRONG1", "name": "Attacker"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::NOT_FOUND);
+    }
+    let blocked_join = app
+        .client
+        .post(format!("{}/api/pair/join", app.base_url))
+        .header("X-Forwarded-For", "1.2.3.4")
+        .json(&json!({"code": "WRONG1", "name": "Attacker"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked_join.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    // Legitimate partner from 5.6.7.8 can still join with valid invite code
+    let ok_join = app
+        .client
+        .post(format!("{}/api/pair/join", app.base_url))
+        .header("X-Forwarded-For", "5.6.7.8")
+        .json(&json!({"code": invite_code, "name": "Nadia"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok_join.status(), StatusCode::CREATED);
+}
