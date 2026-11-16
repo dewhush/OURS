@@ -58,9 +58,10 @@
     const container = document.getElementById("tp-spacing");
     if (!container) return;
     container.replaceChildren();
-    SPACING.forEach((sp) => {
+    SPACING.forEach((sp, idx) => {
       const row = document.createElement("div");
       row.className = "tp-spacing-row";
+      row.dataset.idx = String(idx);
 
       const label = document.createElement("span");
       label.className = "tp-spacing-label";

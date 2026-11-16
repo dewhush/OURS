@@ -26,14 +26,15 @@
       <h2 id="sec-colors" class="tp-panel-title">Broken White &amp; Electric Blue Tokens</h2>
       <div id="tp-swatches" class="tp-swatch-grid"></div>
 
-      <h3 class="tp-subhead">Native Liquid Glass Refraction (Zero Orange)</h3>
+      <h3 class="tp-glass-heading">Native Liquid Glass Refraction (Zero Orange)</h3>
       <div class="tp-glass-stage">
         <div class="tp-orb tp-orb-1" aria-hidden="true"></div>
         <div class="tp-orb tp-orb-2" aria-hidden="true"></div>
-        <div class="tp-refr-road" aria-hidden="true"></div>
-        <div class="tp-glass-dark-half" aria-hidden="true">
-          <div class="tp-orb tp-orb-3"></div>
-        </div>
+        <svg class="tp-refr-road" viewBox="0 0 490 70" width="490" height="70" aria-hidden="true">
+          <line x1="0" y1="70" x2="490" y2="0" stroke="currentColor" stroke-width="18" />
+        </svg>
+        <div class="tp-glass-dark-half" aria-hidden="true"></div>
+        <div class="tp-orb tp-orb-3" aria-hidden="true"></div>
         <div class="tp-glass-list">
           <div class="tp-glass-sample tp-glass-capsule-light">
             <strong>Glass/CapsuleLight</strong>
@@ -88,16 +89,18 @@
         </div>
       </div>
 
-      <h3 class="tp-subhead">Nested Radius Rule: outer = inner + padding</h3>
+      <h3 class="tp-radius-title">Nested Radius Rule: outer = inner + padding</h3>
       <div class="tp-radius-demo">
-        <div class="tp-radius-inner">inner = 12px</div>
+        <div class="tp-radius-inner">
+          <span class="tp-inner-lbl">inner = 12px</span>
+        </div>
         <div class="tp-radius-meta">
           <p>Padding: 12px<br />Inner radius: 12px<br />Outer radius: 24px</p>
           <p>Chip: 10px · Control: 14px<br />Card: 22px · Sheet: 28px</p>
         </div>
       </div>
 
-      <h3 class="tp-subhead">Spacing &amp; Apple Fluid Motion</h3>
+      <h3 class="tp-motion-title">Spacing &amp; Apple Fluid Motion</h3>
       <div class="tp-spacing-box">
         <div id="tp-spacing" class="tp-spacing-list"></div>
         <div class="tp-motion-spec">
@@ -110,17 +113,17 @@
         </div>
       </div>
 
-      <h3 class="tp-subhead tp-subhead-bp">Web App &amp; PWA Breakpoints</h3>
+      <h3 class="tp-resp-title">Web App &amp; PWA Breakpoints</h3>
       <div class="tp-bp-box">
-        <div class="tp-bp-pill">
+        <div class="tp-bp-pill tp-bp-1">
           <strong>Mobile PWA</strong>
           <span>&lt;600px · Full</span>
         </div>
-        <div class="tp-bp-pill">
+        <div class="tp-bp-pill tp-bp-2">
           <strong>Tablet Glass</strong>
           <span>600-1023px · 480</span>
         </div>
-        <div class="tp-bp-pill">
+        <div class="tp-bp-pill tp-bp-3">
           <strong>Desktop Web</strong>
           <span>&gt;=1024px · Split</span>
         </div>
