@@ -125,6 +125,14 @@ Extracted verbatim from [OURS-Design.figcraft](./OURS-Design.figcraft) (`01 Desi
 - Tablet Glass: `600px - 1023px` (`480px` centered column)
 - Desktop Web: `>= 1024px` (Split layout)
 
+- `--radius-badge-sm`: `8px`
+- `--radius-chip`: `10px`
+- `--radius-input-md`: `16px`
+- `--radius-input-lg`: `18px`
+- `--focus-ring`: `0 0 0 3px var(--action-soft)`
+- `--focus-outline`: `2px solid var(--action)`
+- `--shadow-btn-primary`: `0 8px 20px rgba(0, 85, 255, 0.24)`
+
 ### Fixed Specimen Swatch Tokens (Palette Reference)
 - `--swatch-broken-white`: `#FAF9F5`
 - `--swatch-midnight-ink`: `#111318`

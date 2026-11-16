@@ -90,12 +90,18 @@
   --space-lg: 24px;
   --space-xl: 32px;
   --radius-chip: 10px;
+  --radius-badge-sm: 8px;
   --radius-inner: 12px;
   --radius-control: 14px;
+  --radius-input-md: 16px;
+  --radius-input-lg: 18px;
   --radius-card: 22px;
   --radius-media-card: 24px;
   --radius-sheet: 28px;
   --radius-pill: 999px;
+  --focus-ring: 0 0 0 3px var(--action-soft);
+  --focus-outline: 2px solid var(--action);
+  --shadow-btn-primary: 0 8px 20px rgba(0, 85, 255, 0.24);
   --icon-xs: 14px;
   --icon-sm: 17px;
   --icon-md: 19px;
