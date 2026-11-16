@@ -124,3 +124,17 @@ Extracted verbatim from [OURS-Design.figcraft](./OURS-Design.figcraft) (`01 Desi
 - Mobile PWA: `< 600px` (Full width)
 - Tablet Glass: `600px - 1023px` (`480px` centered column)
 - Desktop Web: `>= 1024px` (Split layout)
+
+### Fixed Specimen Swatch Tokens (Palette Reference)
+- `--swatch-broken-white`: `#FAF9F5`
+- `--swatch-midnight-ink`: `#111318`
+- `--swatch-warm-ivory`: `#FFFFFC`
+- `--swatch-soft-stone`: `#F0EFE9`
+- `--swatch-electric-blue`: `#0055FF`
+- `--swatch-pressed-blue`: `#0044D6`
+- `--swatch-luminous-blue`: `#4D8BFF`
+- `--swatch-electric-tint`: `#EBF1FF`
+- `--swatch-deep-obsidian`: `#090B10`
+- `--swatch-elevated-dark`: `#131722`
+- `--swatch-live-green`: `#146C43`
+- `--swatch-sos-red`: `#C9182B`

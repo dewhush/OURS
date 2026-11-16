@@ -12,7 +12,7 @@
     <div class="tp-header-inner">
       <div>
         <h1>OURS Design System Specimen</h1>
-        <p class="tp-subtitle">Slice 1: Tokens extracted verbatim from OURS-Design.figcraft (01 Design System)</p>
+        <p class="tp-subtitle">1:1 FigCraft Tokens (Tokens_Colors_Glass + Tokens_Type_Radius)</p>
       </div>
       <div class="tp-theme-controls" role="group" aria-label="Theme mode">
         <button type="button" id="theme-light" class="tp-theme-btn" aria-pressed="true">Light</button>
@@ -22,40 +22,52 @@
   </header>
 
   <main class="tp-main">
-    <section class="tp-panel" aria-labelledby="sec-colors">
-      <h2 id="sec-colors">1. Color Swatches (Broken White &amp; Electric Blue)</h2>
+    <section id="panel-colors" class="tp-panel" aria-labelledby="sec-colors">
+      <h2 id="sec-colors" class="tp-panel-title">Broken White &amp; Electric Blue Tokens</h2>
       <div id="tp-swatches" class="tp-swatch-grid"></div>
 
-      <h3 class="tp-subhead">Liquid Glass Presets (S:1 - S:5)</h3>
+      <h3 class="tp-subhead">Native Liquid Glass Refraction (Zero Orange)</h3>
       <div class="tp-glass-stage">
         <div class="tp-orb tp-orb-1" aria-hidden="true"></div>
         <div class="tp-orb tp-orb-2" aria-hidden="true"></div>
+        <div class="tp-refr-road" aria-hidden="true"></div>
+        <div class="tp-glass-dark-half" aria-hidden="true">
+          <div class="tp-orb tp-orb-3"></div>
+        </div>
         <div class="tp-glass-list">
-          <div class="tp-glass-sample tp-glass-capsule">
-            <strong>Glass/CapsuleLight &amp; Glass/CapsuleDark</strong>
-            <span>frost 14px-15px | refraction 0.88 | specular rim</span>
+          <div class="tp-glass-sample tp-glass-capsule-light">
+            <strong>Glass/CapsuleLight</strong>
+            <span>glass · refraction 0.88 · frost 14 · specular rim</span>
           </div>
-          <div class="tp-glass-sample tp-glass-card">
+          <div class="tp-glass-sample tp-glass-card-light">
             <strong>Glass/CardLight</strong>
-            <span>frost 16px | refraction 0.72 | specular rim</span>
+            <span>glass · refraction 0.72 · frost 16 · soft frost</span>
           </div>
-          <div class="tp-glass-sample tp-glass-electric">
-            <strong>Glass/ElectricTint &amp; Glass/ElectricDark</strong>
-            <span>frost 14px-15px | refraction 0.88 | electric rim</span>
+          <div class="tp-glass-sample tp-glass-electric-light">
+            <strong>Glass/ElectricTint</strong>
+            <span>glass · electric blue tint · specular rim</span>
+          </div>
+          <div class="tp-glass-sample tp-glass-capsule-dark">
+            <strong>Glass/CapsuleDark</strong>
+            <span>glass · dark obsidian #131722B5 · #4D8BFF rim</span>
+          </div>
+          <div class="tp-glass-sample tp-glass-electric-dark">
+            <strong>Glass/ElectricDark</strong>
+            <span>glass · luminous electric dark #162A52CC</span>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="tp-panel" aria-labelledby="sec-type">
-      <h2 id="sec-type">2. Typography, Nested Radii &amp; Spacing</h2>
+    <section id="panel-type" class="tp-panel" aria-labelledby="sec-type">
+      <h2 id="sec-type" class="tp-panel-title">Typography, Tabular Numerals &amp; Nested Radius</h2>
       <div class="tp-type-list">
         <div class="tp-type-row">
-          <span class="tp-meta">Display / Title · 24px SemiBold · -0.03em</span>
+          <span class="tp-meta">Display / Title · 24px SemiBold</span>
           <span class="tp-sample-display">Stay close, quietly.</span>
         </div>
         <div class="tp-type-row">
-          <span class="tp-meta">Heading · 20px SemiBold · -0.02em</span>
+          <span class="tp-meta">Heading · 20px SemiBold</span>
           <span class="tp-sample-heading">Marchanda is live</span>
         </div>
         <div class="tp-type-row">
@@ -80,19 +92,38 @@
       <div class="tp-radius-demo">
         <div class="tp-radius-inner">inner = 12px</div>
         <div class="tp-radius-meta">
-          <p>Padding: 12px | Inner: 12px | Outer: 24px</p>
-          <p>Chip: 10px | Control: 14px | Card: 22px | Sheet: 28px</p>
+          <p>Padding: 12px<br />Inner radius: 12px<br />Outer radius: 24px</p>
+          <p>Chip: 10px · Control: 14px<br />Card: 22px · Sheet: 28px</p>
         </div>
       </div>
 
-      <h3 class="tp-subhead">Spacing Scale (4px - 32px)</h3>
-      <div id="tp-spacing" class="tp-spacing-list"></div>
+      <h3 class="tp-subhead">Spacing &amp; Apple Fluid Motion</h3>
+      <div class="tp-spacing-box">
+        <div id="tp-spacing" class="tp-spacing-list"></div>
+        <div class="tp-motion-spec">
+          <div>FluidEase:</div>
+          <div>cubic-bezier(0.22, 1, 0.36, 1)</div>
+          <div>Enter: 200ms · Exit: 160ms</div>
+          <div>Press scale: 0.97</div>
+          <div>Liquid indicator: spring pill</div>
+          <div>Display tracking: -0.03em</div>
+        </div>
+      </div>
 
-      <h3 class="tp-subhead">Shadows &amp; Z-Layers</h3>
-      <div class="tp-z-grid">
-        <div class="tp-z-card tp-shadow-sm">z-base (0) / z-content (10) · shadow-sm</div>
-        <div class="tp-z-card tp-shadow-card">z-chrome (30) · shadow-card</div>
-        <div class="tp-z-card tp-shadow-capsule">z-sheet (50) / z-toast (70) · shadow-capsule</div>
+      <h3 class="tp-subhead tp-subhead-bp">Web App &amp; PWA Breakpoints</h3>
+      <div class="tp-bp-box">
+        <div class="tp-bp-pill">
+          <strong>Mobile PWA</strong>
+          <span>&lt;600px · Full</span>
+        </div>
+        <div class="tp-bp-pill">
+          <strong>Tablet Glass</strong>
+          <span>600-1023px · 480</span>
+        </div>
+        <div class="tp-bp-pill">
+          <strong>Desktop Web</strong>
+          <span>&gt;=1024px · Split</span>
+        </div>
       </div>
     </section>
   </main>

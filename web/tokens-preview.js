@@ -2,30 +2,30 @@
 
 (function () {
   const SWATCHES = [
-    { name: "Broken White", varName: "--bg-canvas", light: "#FAF9F5", dark: "#090B10" },
-    { name: "Warm Ivory", varName: "--bg-surface", light: "#FFFFFC", dark: "#131722" },
-    { name: "Soft Stone", varName: "--bg-surface-muted", light: "#F0EFE9", dark: "#1E2433" },
-    { name: "Midnight Ink", varName: "--ink", light: "#111318", dark: "#FAF9F5" },
-    { name: "Ink Secondary", varName: "--ink-secondary", light: "#373B44", dark: "#C5CAD6" },
-    { name: "Ink Muted", varName: "--ink-muted", light: "#555B68", dark: "#8E96A8" },
-    { name: "Electric Blue", varName: "--action", light: "#0055FF", dark: "#4D8BFF" },
-    { name: "Pressed Blue", varName: "--action-pressed", light: "#0044D6", dark: "#3C7EFF" },
-    { name: "Electric Tint", varName: "--action-soft", light: "#EBF1FF", dark: "#132240" },
-    { name: "Live Green", varName: "--success", light: "#146C43", dark: "#3CD084" },
-    { name: "SOS Red", varName: "--danger", light: "#C9182B", dark: "#FF6B78" },
-    { name: "Hairline Line", varName: "--line", light: "#E2E0D8", dark: "#283044" }
+    { name: "Broken White", varName: "--swatch-broken-white", hex: "#FAF9F5" },
+    { name: "Midnight Ink", varName: "--swatch-midnight-ink", hex: "#111318" },
+    { name: "Warm Ivory", varName: "--swatch-warm-ivory", hex: "#FFFFFC" },
+    { name: "Soft Stone", varName: "--swatch-soft-stone", hex: "#F0EFE9" },
+    { name: "Electric Blue", varName: "--swatch-electric-blue", hex: "#0055FF" },
+    { name: "Pressed Blue", varName: "--swatch-pressed-blue", hex: "#0044D6" },
+    { name: "Luminous Blue", varName: "--swatch-luminous-blue", hex: "#4D8BFF" },
+    { name: "Electric Tint", varName: "--swatch-electric-tint", hex: "#EBF1FF" },
+    { name: "Deep Obsidian", varName: "--swatch-deep-obsidian", hex: "#090B10" },
+    { name: "Elevated Dark", varName: "--swatch-elevated-dark", hex: "#131722" },
+    { name: "Live Green", varName: "--swatch-live-green", hex: "#146C43" },
+    { name: "SOS Red", varName: "--swatch-sos-red", hex: "#C9182B" }
   ];
 
   const SPACING = [
-    { name: "xxs", px: 4 },
-    { name: "xs", px: 8 },
-    { name: "sm", px: 12 },
-    { name: "md", px: 16 },
-    { name: "lg", px: 24 },
-    { name: "xl", px: 32 }
+    { name: "xxs 4", px: 4 },
+    { name: "xs 8", px: 8 },
+    { name: "sm 12", px: 12 },
+    { name: "md 16", px: 16 },
+    { name: "lg 24", px: 24 },
+    { name: "xl 32", px: 32 }
   ];
 
-  function renderSwatches(theme) {
+  function renderSwatches() {
     const container = document.getElementById("tp-swatches");
     if (!container) return;
     container.replaceChildren();
@@ -44,7 +44,7 @@
       title.textContent = s.name;
 
       const hex = document.createElement("span");
-      hex.textContent = `${theme === "dark" ? s.dark : s.light} (${s.varName})`;
+      hex.textContent = s.hex;
 
       info.appendChild(title);
       info.appendChild(hex);
@@ -64,7 +64,7 @@
 
       const label = document.createElement("span");
       label.className = "tp-spacing-label";
-      label.textContent = `${sp.name} ${sp.px}px`;
+      label.textContent = sp.name;
 
       const bar = document.createElement("div");
       bar.className = "tp-spacing-bar";
@@ -82,7 +82,6 @@
     const darkBtn = document.getElementById("theme-dark");
     if (lightBtn) lightBtn.setAttribute("aria-pressed", String(theme === "light"));
     if (darkBtn) darkBtn.setAttribute("aria-pressed", String(theme === "dark"));
-    renderSwatches(theme);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -90,6 +89,7 @@
     const darkBtn = document.getElementById("theme-dark");
     if (lightBtn) lightBtn.addEventListener("click", () => setTheme("light"));
     if (darkBtn) darkBtn.addEventListener("click", () => setTheme("dark"));
+    renderSwatches();
     renderSpacing();
     setTheme("light");
   });
