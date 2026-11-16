@@ -1471,6 +1471,12 @@ async fn web_app_assets_served_with_no_cache_headers() {
         ("/sw.js", "application/javascript"),
         ("/tokens-preview.html", "text/html"),
         ("/tokens-preview.js", "application/javascript"),
+        ("/assets-preview.html", "text/html"),
+        ("/assets-preview.js", "application/javascript"),
+        ("/fonts/Inter-VF.woff2", "font/woff2"),
+        ("/fonts/GeistMono-VF.woff2", "font/woff2"),
+        ("/assets/icons/ours-icon-dark.svg", "image/svg+xml"),
+        ("/assets/map-style-light.json", "application/json"),
     ] {
         let resp = app
             .client

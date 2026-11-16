@@ -41,7 +41,7 @@ async fn security_headers(req: Request, next: Next) -> Response {
     headers.insert(
         "content-security-policy",
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self' https://unpkg.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com/gsi/style; img-src 'self' blob: data: https://tiles.openfreemap.org https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://lh3.googleusercontent.com; connect-src 'self' ws: wss: https://tiles.openfreemap.org https://*.basemaps.cartocdn.com https://unpkg.com https://accounts.google.com/gsi/; frame-src 'self' https://accounts.google.com/gsi/; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+            "default-src 'self'; font-src 'self'; script-src 'self' https://unpkg.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://tiles.openfreemap.org https://*.basemaps.cartocdn.com https://unpkg.com https://accounts.google.com/gsi/; frame-src 'self' https://accounts.google.com/gsi/; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
         ),
     );
     resp
@@ -70,6 +70,16 @@ pub fn build_router(state: AppState) -> Router {
         .route("/web/tokens-preview.html", get(routes::web::tokens_preview_html))
         .route("/tokens-preview.js", get(routes::web::tokens_preview_js))
         .route("/web/tokens-preview.js", get(routes::web::tokens_preview_js))
+        .route("/assets-preview.html", get(routes::web::assets_preview_html))
+        .route("/web/assets-preview.html", get(routes::web::assets_preview_html))
+        .route("/assets-preview.js", get(routes::web::assets_preview_js))
+        .route("/web/assets-preview.js", get(routes::web::assets_preview_js))
+        .route("/fonts/{name}", get(routes::web::serve_font))
+        .route("/web/fonts/{name}", get(routes::web::serve_font))
+        .route("/assets/icons/{name}", get(routes::web::serve_asset_icon))
+        .route("/web/assets/icons/{name}", get(routes::web::serve_asset_icon))
+        .route("/assets/{name}", get(routes::web::serve_asset_file))
+        .route("/web/assets/{name}", get(routes::web::serve_asset_file))
         .route("/health", get(health))
         .route("/healthz", get(health))
         .route("/api/config", get(routes::pair::public_config))
