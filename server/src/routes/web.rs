@@ -11,6 +11,8 @@ const EMBED_STYLES: &str = include_str!("../../../web/styles.css");
 const EMBED_APP: &str = include_str!("../../../web/app.js");
 const EMBED_MANIFEST: &str = include_str!("../../../web/manifest.webmanifest");
 const EMBED_SW: &str = include_str!("../../../web/sw.js");
+const EMBED_TOKENS_HTML: &str = include_str!("../../../web/tokens-preview.html");
+const EMBED_TOKENS_JS: &str = include_str!("../../../web/tokens-preview.js");
 
 async fn serve_web_asset(
     state: &AppState,
@@ -72,6 +74,26 @@ pub async fn sw_js(State(state): State<AppState>) -> Response {
         "sw.js",
         "application/javascript; charset=utf-8",
         EMBED_SW,
+    )
+    .await
+}
+
+pub async fn tokens_preview_html(State(state): State<AppState>) -> Response {
+    serve_web_asset(
+        &state,
+        "tokens-preview.html",
+        "text/html; charset=utf-8",
+        EMBED_TOKENS_HTML,
+    )
+    .await
+}
+
+pub async fn tokens_preview_js(State(state): State<AppState>) -> Response {
+    serve_web_asset(
+        &state,
+        "tokens-preview.js",
+        "application/javascript; charset=utf-8",
+        EMBED_TOKENS_JS,
     )
     .await
 }

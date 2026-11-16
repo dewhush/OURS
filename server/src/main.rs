@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::process::ExitCode;
 
 use tokio::net::TcpListener;
@@ -58,9 +59,12 @@ async fn main() -> ExitCode {
     tracing::info!(bind = %bind, "ours-server listening");
     let app = build_router(state);
 
-    if let Err(err) = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
+    if let Err(err) = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
     {
         tracing::error!(error = %err, "server error");
         return ExitCode::FAILURE;

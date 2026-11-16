@@ -13,7 +13,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
 use tokio::sync::mpsc;
 
-use crate::auth::verify_access_token;
+use crate::auth::verify_access_claims;
 use crate::db::now_ms;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -29,12 +29,92 @@ struct ClientMsg {
     msg_type: Option<String>,
 }
 
+fn extract_authority_host(raw: &str) -> String {
+    let without_scheme = raw
+        .trim()
+        .strip_prefix("https://")
+        .or_else(|| raw.trim().strip_prefix("http://"))
+        .unwrap_or(raw.trim());
+    let authority = without_scheme.split('/').next().unwrap_or("");
+    if let Some(bracketed) = authority.strip_prefix('[') {
+        bracketed.split(']').next().unwrap_or("").to_ascii_lowercase()
+    } else {
+        authority
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+    }
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1" | "10.0.2.2")
+}
+
+fn validate_ws_origin(headers: &HeaderMap) -> AppResult<()> {
+    let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
+        return Ok(());
+    };
+    let trimmed = origin.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if trimmed == "file://" || trimmed == "null" {
+        // Offline Android WebView asset fallback emits file:// or null Origin on local upgrades.
+        let host = headers
+            .get(header::HOST)
+            .and_then(|v| v.to_str().ok())
+            .map(extract_authority_host)
+            .unwrap_or_default();
+        if trimmed == "file://" || is_loopback_host(&host) {
+            return Ok(());
+        }
+        return Err(AppError::forbidden("untrusted websocket origin"));
+    }
+
+    let origin_host = extract_authority_host(trimmed);
+    let req_host = headers
+        .get("X-Forwarded-Host")
+        .or_else(|| headers.get(header::HOST))
+        .and_then(|v| v.to_str().ok())
+        .map(extract_authority_host)
+        .unwrap_or_default();
+
+    if !origin_host.is_empty()
+        && (origin_host == req_host || (is_loopback_host(&origin_host) && is_loopback_host(&req_host)))
+    {
+        return Ok(());
+    }
+
+    Err(AppError::forbidden("untrusted websocket origin"))
+}
+
+fn extract_ws_subprotocol_token(headers: &HeaderMap) -> (Option<&str>, bool) {
+    let Some(raw) = headers.get("Sec-WebSocket-Protocol").and_then(|v| v.to_str().ok()) else {
+        return (None, false);
+    };
+    let mut token = None;
+    let mut has_ours_proto = false;
+    for part in raw.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        if part == "ours.v1" {
+            has_ours_proto = true;
+        } else if let Some(rest) = part.strip_prefix("bearer.")
+            && !rest.is_empty()
+        {
+            token = Some(rest);
+        }
+    }
+    (token, has_ours_proto)
+}
+
 pub async fn ws_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<WsQuery>,
     ws: WebSocketUpgrade,
 ) -> AppResult<Response> {
+    validate_ws_origin(&headers)?;
+
     let header_token = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -42,7 +122,10 @@ pub async fn ws_handler(
         .map(str::trim)
         .filter(|t| !t.is_empty());
 
+    let (proto_token, has_ours_proto) = extract_ws_subprotocol_token(&headers);
+
     let token = header_token
+        .or(proto_token)
         .or_else(|| {
             query
                 .token
@@ -53,7 +136,8 @@ pub async fn ws_handler(
         .ok_or_else(|| AppError::unauthorized("missing token"))?;
 
     let now = now_ms();
-    let user_id = verify_access_token(&state.config.token_secret, token, now)?;
+    let claims = verify_access_claims(&state.config.token_secret, token, now)?;
+    let user_id = claims.user_id;
 
     let db = state.db.clone();
     let exists = tokio::task::spawn_blocking(move || -> AppResult<bool> {
@@ -62,12 +146,15 @@ pub async fn ws_handler(
             .map_err(|_| AppError::internal("database lock poisoned"))?;
         let found: Option<i64> = conn
             .query_row(
-                "SELECT id FROM users WHERE id = ?1",
+                "SELECT COALESCE(tokens_revoked_before, 0) FROM users WHERE id = ?1",
                 params![user_id],
                 |r| r.get(0),
             )
             .optional()?;
-        if found.is_some() {
+        if let Some(revoked_before) = found {
+            if revoked_before > 0 && claims.iat_ms <= revoked_before {
+                return Err(AppError::unauthorized("access token revoked"));
+            }
             conn.execute(
                 "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
                 params![now, user_id],
@@ -82,6 +169,12 @@ pub async fn ws_handler(
     if !exists {
         return Err(AppError::unauthorized("user no longer exists"));
     }
+
+    let ws = if has_ours_proto {
+        ws.protocols(["ours.v1"])
+    } else {
+        ws
+    };
 
     Ok(ws
         .max_message_size(64 * 1024)

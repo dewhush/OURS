@@ -1,5 +1,8 @@
+use std::convert::Infallible;
+use std::net::IpAddr;
+
 use axum::{
-    extract::FromRequestParts,
+    extract::{ConnectInfo, FromRequestParts},
     http::{header, request::Parts},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -20,15 +23,26 @@ pub const ACCESS_TOKEN_TTL_MS: i64 = 60 * 60 * 1000;
 pub const REFRESH_TOKEN_TTL_MS: i64 = 180 * 24 * 60 * 60 * 1000;
 const INVITE_ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
+pub struct VerifiedAccess {
+    pub user_id: i64,
+    pub iat_ms: i64,
+}
+
 #[derive(Serialize, Deserialize)]
 struct AccessPayload {
     uid: i64,
     exp: i64,
+    #[serde(default)]
+    iat_ms: i64,
 }
 
 pub fn sign_access_token(secret: &[u8], user_id: i64, now: i64) -> AppResult<(String, i64)> {
     let exp = now + ACCESS_TOKEN_TTL_MS;
-    let payload = AccessPayload { uid: user_id, exp };
+    let payload = AccessPayload {
+        uid: user_id,
+        exp,
+        iat_ms: now,
+    };
     let payload_json =
         serde_json::to_vec(&payload).map_err(|_| AppError::internal("token serialize error"))?;
     let payload_b64 = URL_SAFE_NO_PAD.encode(payload_json);
@@ -41,7 +55,7 @@ pub fn sign_access_token(secret: &[u8], user_id: i64, now: i64) -> AppResult<(St
     Ok((format!("{payload_b64}.{sig_b64}"), exp))
 }
 
-pub fn verify_access_token(secret: &[u8], token: &str, now: i64) -> AppResult<i64> {
+pub fn verify_access_claims(secret: &[u8], token: &str, now: i64) -> AppResult<VerifiedAccess> {
     let Some((payload_b64, sig_b64)) = token.split_once('.') else {
         return Err(AppError::unauthorized("malformed access token"));
     };
@@ -65,7 +79,14 @@ pub fn verify_access_token(secret: &[u8], token: &str, now: i64) -> AppResult<i6
         return Err(AppError::unauthorized("access token expired"));
     }
 
-    Ok(payload.uid)
+    Ok(VerifiedAccess {
+        user_id: payload.uid,
+        iat_ms: payload.iat_ms,
+    })
+}
+
+pub fn verify_access_token(secret: &[u8], token: &str, now: i64) -> AppResult<i64> {
+    verify_access_claims(secret, token, now).map(|c| c.user_id)
 }
 
 pub fn hash_refresh_token(token: &str) -> String {
@@ -75,7 +96,17 @@ pub fn hash_refresh_token(token: &str) -> String {
 }
 
 pub fn issue_tokens(conn: &Connection, secret: &[u8], user_id: i64, now: i64) -> AppResult<Tokens> {
-    let (access_token, access_expires_at) = sign_access_token(secret, user_id, now)?;
+    let revoked_before: i64 = conn
+        .query_row(
+            "SELECT COALESCE(tokens_revoked_before, 0) FROM users WHERE id = ?1",
+            params![user_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .unwrap_or(0);
+    // Keep issued timestamps strictly after any prior revocation even within the same millisecond.
+    let issued_at = now.max(revoked_before.saturating_add(1));
+    let (access_token, access_expires_at) = sign_access_token(secret, user_id, issued_at)?;
 
     let mut raw_refresh = [0u8; 32];
     rand::rng().fill_bytes(&mut raw_refresh);
@@ -123,6 +154,20 @@ pub fn generate_invite_code() -> String {
         .collect()
 }
 
+pub struct OptionalPeerIp(pub Option<IpAddr>);
+
+impl<S: Send + Sync> FromRequestParts<S> for OptionalPeerIp {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let ip = parts
+            .extensions
+            .get::<ConnectInfo<std::net::SocketAddr>>()
+            .map(|ci| ci.0.ip());
+        Ok(Self(ip))
+    }
+}
+
 pub struct AuthUser(pub i64);
 
 impl FromRequestParts<AppState> for AuthUser {
@@ -146,35 +191,38 @@ impl FromRequestParts<AppState> for AuthUser {
             .ok_or_else(|| AppError::unauthorized("invalid authorization header"))?;
 
         let now = now_ms();
-        let user_id = verify_access_token(&state.config.token_secret, token, now)?;
+        let claims = verify_access_claims(&state.config.token_secret, token, now)?;
+        let user_id = claims.user_id;
 
         let db = state.db.clone();
-        let exists = tokio::task::spawn_blocking(move || -> AppResult<bool> {
+        let valid = tokio::task::spawn_blocking(move || -> AppResult<bool> {
             let conn = db
                 .lock()
                 .map_err(|_| AppError::internal("database lock poisoned"))?;
-            let found: Option<Option<i64>> = conn
+            let found: Option<(Option<i64>, i64)> = conn
                 .query_row(
-                    "SELECT last_seen_at FROM users WHERE id = ?1",
+                    "SELECT last_seen_at, COALESCE(tokens_revoked_before, 0) FROM users WHERE id = ?1",
                     params![user_id],
-                    |row| row.get(0),
+                    |row| Ok((row.get(0)?, row.get(1)?)),
                 )
                 .optional()?;
-            if let Some(last_seen) = found {
-                if last_seen.is_none_or(|ts| now - ts >= 60_000) {
-                    conn.execute(
-                        "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
-                        params![now, user_id],
-                    )?;
-                }
-                Ok(true)
-            } else {
-                Ok(false)
+            let Some((last_seen, revoked_before)) = found else {
+                return Ok(false);
+            };
+            if revoked_before > 0 && claims.iat_ms <= revoked_before {
+                return Err(AppError::unauthorized("access token revoked"));
             }
+            if last_seen.is_none_or(|ts| now - ts >= 60_000) {
+                conn.execute(
+                    "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
+                    params![now, user_id],
+                )?;
+            }
+            Ok(true)
         })
         .await??;
 
-        if !exists {
+        if !valid {
             return Err(AppError::unauthorized("user no longer exists"));
         }
 

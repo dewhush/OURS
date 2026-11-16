@@ -106,6 +106,8 @@ pub struct Event {
 pub struct CreatePairRequest {
     pub name: String,
     pub email: Option<String>,
+    #[serde(default)]
+    pub space_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -114,6 +116,8 @@ pub struct CreatePairResponse {
     pub tokens: Tokens,
     pub invite_code: String,
     pub invite_expires_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -133,6 +137,8 @@ pub struct JoinPairRequest {
 pub struct JoinPairResponse {
     pub user: User,
     pub tokens: Tokens,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -145,6 +151,8 @@ pub struct GoogleAuthRequest {
     #[serde(default)]
     pub email: String,
     pub name: Option<String>,
+    #[serde(default)]
+    pub space_name: Option<String>,
     pub id_token: Option<String>,
     pub device_id: Option<String>,
     pub invite_code: Option<String>,
@@ -167,6 +175,8 @@ pub struct GoogleAuthResponse {
     pub email: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -176,6 +186,8 @@ pub struct MeResponse {
     pub sharing_paused: bool,
     pub partner_paused: bool,
     pub server_time: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -187,6 +199,8 @@ pub struct PairStateResponse {
     pub me_location: Option<PartnerLocation>,
     pub partner_location: Option<PartnerLocation>,
     pub server_time: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub space_name: Option<String>,
 }
 
 #[derive(Deserialize)]

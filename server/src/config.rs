@@ -8,6 +8,7 @@ pub struct Config {
     pub bind: String,
     pub data_dir: PathBuf,
     pub setup_key: Option<String>,
+    pub google_client_id: Option<String>,
     pub token_secret: Vec<u8>,
     pub history_days: i64,
     pub stale_minutes: i64,
@@ -84,6 +85,10 @@ impl Config {
             bind,
             data_dir,
             setup_key,
+            google_client_id: std::env::var("OURS_GOOGLE_CLIENT_ID")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
             token_secret,
             history_days,
             stale_minutes,

@@ -49,28 +49,44 @@ impl SlidingLimiter {
 }
 
 #[derive(Clone)]
+pub struct CachedJwks {
+    pub keys: HashMap<String, (String, String)>,
+    pub fetched_at: Instant,
+}
+
+#[derive(Clone)]
 pub struct AppState {
     pub config: Config,
     pub db: Db,
     pub ws_senders: WsSenders,
     pub fcm: FcmClient,
+    pub http_client: reqwest::Client,
+    google_jwks: Arc<RwLock<Option<CachedJwks>>>,
     next_ws_id: Arc<AtomicU64>,
     join_failures: SlidingLimiter,
     create_failures: SlidingLimiter,
     refresh_failures: SlidingLimiter,
+    google_auth_failures: SlidingLimiter,
 }
 
 impl AppState {
     pub fn new(config: Config, db: Db, fcm: FcmClient) -> Self {
+        let http_client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(6))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         Self {
             config,
             db,
             ws_senders: Arc::new(RwLock::new(HashMap::new())),
             fcm,
+            http_client,
+            google_jwks: Arc::new(RwLock::new(None)),
             next_ws_id: Arc::new(AtomicU64::new(1)),
             join_failures: SlidingLimiter::default(),
             create_failures: SlidingLimiter::default(),
             refresh_failures: SlidingLimiter::default(),
+            google_auth_failures: SlidingLimiter::default(),
         }
     }
 
@@ -127,6 +143,73 @@ impl AppState {
 
     pub fn clear_refresh_rate_limit(&self, key: &str) {
         self.refresh_failures.clear(key);
+    }
+
+    pub fn check_google_auth_rate_limit(&self, key: &str) -> AppResult<()> {
+        self.google_auth_failures.check(
+            key,
+            12,
+            Duration::from_secs(60),
+            "too many sign-in attempts; try again in a minute",
+        )
+    }
+
+    pub fn record_google_auth_failure(&self, key: &str) {
+        self.google_auth_failures.record(key);
+    }
+
+    pub fn clear_google_auth_rate_limit(&self, key: &str) {
+        self.google_auth_failures.clear(key);
+    }
+
+    pub async fn get_google_jwk(&self, kid: &str, force_refresh: bool) -> AppResult<Option<(String, String)>> {
+        const JWKS_TTL: Duration = Duration::from_secs(3600);
+        if !force_refresh {
+            let guard = self.google_jwks.read().await;
+            if let Some(cached) = guard.as_ref()
+                && cached.fetched_at.elapsed() < JWKS_TTL
+                && let Some(pair) = cached.keys.get(kid)
+            {
+                return Ok(Some(pair.clone()));
+            }
+        }
+
+        let resp = self
+            .http_client
+            .get("https://www.googleapis.com/oauth2/v3/certs")
+            .send()
+            .await
+            .map_err(|e| AppError::internal(format!("failed to fetch google certs: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(AppError::internal("google certs endpoint error"));
+        }
+        #[derive(serde::Deserialize)]
+        struct JwkEntry {
+            kid: Option<String>,
+            n: Option<String>,
+            e: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct JwksDoc {
+            keys: Vec<JwkEntry>,
+        }
+        let doc: JwksDoc = resp
+            .json()
+            .await
+            .map_err(|e| AppError::internal(format!("invalid google certs json: {e}")))?;
+        let mut keys = HashMap::new();
+        for k in doc.keys {
+            if let (Some(id), Some(n), Some(e)) = (k.kid, k.n, k.e) {
+                keys.insert(id, (n, e));
+            }
+        }
+        let found = keys.get(kid).cloned();
+        let mut guard = self.google_jwks.write().await;
+        *guard = Some(CachedJwks {
+            keys,
+            fetched_at: Instant::now(),
+        });
+        Ok(found)
     }
 
     pub async fn push_ws_event(&self, recipient_id: i64, event: &Event) {

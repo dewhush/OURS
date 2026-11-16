@@ -41,7 +41,7 @@ async fn security_headers(req: Request, next: Next) -> Response {
     headers.insert(
         "content-security-policy",
         HeaderValue::from_static(
-            "default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' blob: data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; connect-src 'self' ws: wss: https://*.basemaps.cartocdn.com https://unpkg.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+            "default-src 'self'; script-src 'self' https://unpkg.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com/gsi/style; img-src 'self' blob: data: https://tiles.openfreemap.org https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org https://lh3.googleusercontent.com; connect-src 'self' ws: wss: https://tiles.openfreemap.org https://*.basemaps.cartocdn.com https://unpkg.com https://accounts.google.com/gsi/; frame-src 'self' https://accounts.google.com/gsi/; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
         ),
     );
     resp
@@ -66,8 +66,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/web/manifest.webmanifest", get(routes::web::manifest_webmanifest))
         .route("/sw.js", get(routes::web::sw_js))
         .route("/web/sw.js", get(routes::web::sw_js))
+        .route("/tokens-preview.html", get(routes::web::tokens_preview_html))
+        .route("/web/tokens-preview.html", get(routes::web::tokens_preview_html))
+        .route("/tokens-preview.js", get(routes::web::tokens_preview_js))
+        .route("/web/tokens-preview.js", get(routes::web::tokens_preview_js))
         .route("/health", get(health))
         .route("/healthz", get(health))
+        .route("/api/config", get(routes::pair::public_config))
         .route("/api/pair/create", post(routes::pair::create_pair))
         .route("/api/pair/invite", get(routes::pair::reissue_invite))
         .route("/api/pair/join", post(routes::pair::join_pair))

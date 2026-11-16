@@ -88,6 +88,11 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
         );
         CREATE INDEX IF NOT EXISTS idx_loc_hist_user_time ON location_history(user_id, recorded_at);
 
+        CREATE TABLE IF NOT EXISTS space_meta (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            space_name TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS places (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -184,6 +189,7 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
 
     ensure_column(&conn, "users", "avatar_photo_id", "TEXT")?;
     ensure_column(&conn, "users", "device_hash", "TEXT")?;
+    ensure_column(&conn, "users", "tokens_revoked_before", "INTEGER NOT NULL DEFAULT 0")?;
     ensure_column(&conn, "latest_locations", "activity", "TEXT")?;
     ensure_column(&conn, "latest_locations", "altitude_m", "REAL")?;
     ensure_column(&conn, "latest_locations", "vertical_speed_mps", "REAL")?;
@@ -268,6 +274,28 @@ pub fn get_user_name(conn: &Connection, user_id: i64) -> AppResult<String> {
         |row| row.get(0),
     )?;
     Ok(name)
+}
+
+pub fn get_space_name(conn: &Connection) -> AppResult<Option<String>> {
+    Ok(conn
+        .query_row("SELECT space_name FROM space_meta WHERE id = 1", [], |r| r.get(0))
+        .optional()?
+        .flatten())
+}
+
+pub fn set_space_name(conn: &Connection, raw: Option<&str>) -> AppResult<Option<String>> {
+    let cleaned = raw
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.chars().take(40).collect::<String>());
+    if let Some(ref name) = cleaned {
+        conn.execute(
+            "INSERT INTO space_meta (id, space_name) VALUES (1, ?1)
+             ON CONFLICT(id) DO UPDATE SET space_name = excluded.space_name",
+            params![name],
+        )?;
+    }
+    Ok(cleaned)
 }
 
 pub fn get_user_fcm_token(conn: &Connection, user_id: i64) -> AppResult<Option<String>> {

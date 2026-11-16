@@ -1,3 +1,5 @@
+use std::net::IpAddr;
+
 use axum::{
     Json,
     extract::{Multipart, State},
@@ -5,10 +7,10 @@ use axum::{
 };
 use rusqlite::{OptionalExtension, params};
 
-use crate::auth::{AuthUser, generate_invite_code, hash_refresh_token, issue_tokens};
+use crate::auth::{AuthUser, OptionalPeerIp, generate_invite_code, hash_refresh_token, issue_tokens};
 use crate::db::{
-    get_partner, get_partner_id, get_partner_location_for, get_user, get_user_fcm_token,
-    get_user_name, insert_partner_event, now_ms,
+    get_partner, get_partner_id, get_partner_location_for, get_space_name, get_user,
+    get_user_fcm_token, get_user_name, insert_partner_event, now_ms, set_space_name,
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -47,29 +49,44 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-fn client_rate_key(headers: &HeaderMap, fallback_subkey: &str) -> String {
-    let forwarded = headers
-        .get("CF-Connecting-IP")
-        .or_else(|| headers.get("X-Real-IP"))
-        .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            headers
-                .get("X-Forwarded-For")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.split(',').next())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-        });
+pub fn client_rate_key(
+    peer_ip: Option<IpAddr>,
+    headers: &HeaderMap,
+    fallback_subkey: &str,
+) -> String {
+    // Honor proxy headers only when the TCP peer itself is loopback (local Nginx/Caddy/tunnel),
+    // or in direct in-process unit tests without ConnectInfo wiring.
+    let trust_forwarded = peer_ip.is_none_or(|ip| ip.is_loopback());
+    if trust_forwarded {
+        let forwarded = headers
+            .get("CF-Connecting-IP")
+            .or_else(|| headers.get("X-Real-IP"))
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                headers
+                    .get("X-Forwarded-For")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.split(',').next())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+            })
+            .and_then(|s| s.parse::<IpAddr>().ok());
 
-    match forwarded {
-        Some(ip) => format!("ip:{ip}"),
-        None => format!("key:{fallback_subkey}"),
+        if let Some(ip) = forwarded {
+            return format!("ip:{ip}");
+        }
+    }
+
+    match peer_ip {
+        Some(ip) if !ip.is_loopback() => format!("ip:{ip}"),
+        _ => format!("key:{fallback_subkey}"),
     }
 }
 
 pub async fn create_pair(
+    OptionalPeerIp(peer_ip): OptionalPeerIp,
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<CreatePairRequest>,
@@ -80,7 +97,7 @@ pub async fn create_pair(
             .get("X-Setup-Key")
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
-        let rk = client_rate_key(&headers, &hash_refresh_token(provided_key)[..16]);
+        let rk = client_rate_key(peer_ip, &headers, "setup_key");
         state.check_create_rate_limit(&rk)?;
         if !constant_time_eq(provided_key.as_bytes(), expected_key.as_bytes()) {
             state.record_create_failure(&rk);
@@ -94,6 +111,7 @@ pub async fn create_pair(
         return Err(AppError::bad_request("name must be 1-40 characters"));
     }
     let email = normalize_email(req.email)?;
+    let raw_space_name = req.space_name;
 
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
@@ -109,6 +127,7 @@ pub async fn create_pair(
         }
 
         let now = now_ms();
+        let space_name = set_space_name(&tx, raw_space_name.as_deref())?;
         tx.execute(
             "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
             params![name, email, now],
@@ -130,6 +149,7 @@ pub async fn create_pair(
             tokens,
             invite_code,
             invite_expires_at,
+            space_name,
         })
     })
     .await??;
@@ -178,12 +198,13 @@ pub async fn reissue_invite(
 }
 
 pub async fn join_pair(
+    OptionalPeerIp(peer_ip): OptionalPeerIp,
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<JoinPairRequest>,
 ) -> AppResult<(StatusCode, Json<JoinPairResponse>)> {
     let code = req.code.trim().to_ascii_uppercase();
-    let rate_key = client_rate_key(&headers, if code.is_empty() { "empty" } else { &code });
+    let rate_key = client_rate_key(peer_ip, &headers, "invite_attempt");
     state.check_join_rate_limit(&rate_key)?;
 
     if code.is_empty() {
@@ -232,9 +253,10 @@ pub async fn join_pair(
         let user_id = tx.last_insert_rowid();
         let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
         let tokens = issue_tokens(&tx, &secret, user_id, now)?;
+        let space_name = get_space_name(&tx)?;
 
         tx.commit()?;
-        Ok(JoinPairResponse { user, tokens })
+        Ok(JoinPairResponse { user, tokens, space_name })
     })
     .await?;
 
@@ -253,13 +275,14 @@ pub async fn join_pair(
 }
 
 pub async fn refresh_auth(
+    OptionalPeerIp(peer_ip): OptionalPeerIp,
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<RefreshRequest>,
 ) -> AppResult<Json<Tokens>> {
     let raw = req.refresh_token.trim().to_string();
     let token_hash = hash_refresh_token(&raw);
-    let rate_key = client_rate_key(&headers, &token_hash[..16]);
+    let rate_key = client_rate_key(peer_ip, &headers, &token_hash[..16]);
     state.check_refresh_rate_limit(&rate_key)?;
 
     if raw.is_empty() {
@@ -336,20 +359,27 @@ pub async fn logout(
         .map(|s| hash_refresh_token(&s));
 
     tokio::task::spawn_blocking(move || -> AppResult<()> {
-        let conn = db
+        let mut conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
+        let tx = conn.transaction()?;
+        let now = now_ms();
+        tx.execute(
+            "UPDATE users SET tokens_revoked_before = MAX(COALESCE(tokens_revoked_before, 0), ?1) WHERE id = ?2",
+            params![now, user_id],
+        )?;
         if let Some(token_hash) = specific_hash {
-            conn.execute(
+            tx.execute(
                 "DELETE FROM refresh_tokens WHERE user_id = ?1 AND token_hash = ?2",
                 params![user_id, token_hash],
             )?;
         } else {
-            conn.execute(
+            tx.execute(
                 "DELETE FROM refresh_tokens WHERE user_id = ?1",
                 params![user_id],
             )?;
         }
+        tx.commit()?;
         Ok(())
     })
     .await??;
@@ -393,6 +423,8 @@ pub async fn get_pair_state(
             None
         };
 
+        let space_name = get_space_name(&conn)?;
+
         Ok(PairStateResponse {
             me,
             partner,
@@ -401,6 +433,7 @@ pub async fn get_pair_state(
             me_location,
             partner_location,
             server_time: now_ms(),
+            space_name,
         })
     })
     .await??;
@@ -535,12 +568,15 @@ pub async fn get_me(
             false
         };
 
+        let space_name = get_space_name(&conn)?;
+
         Ok(MeResponse {
             me,
             partner,
             sharing_paused: sharing_paused != 0,
             partner_paused,
             server_time: now_ms(),
+            space_name,
         })
     })
     .await??;
@@ -574,33 +610,84 @@ pub async fn set_push_token(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn decode_jwt_email_name(id_token: &str) -> (Option<String>, Option<String>) {
-    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-    let mut parts = id_token.split('.');
-    let Some(_hdr) = parts.next() else {
-        return (None, None);
+pub async fn public_config(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "google_client_id": state.config.google_client_id,
+        "setup_key_required": state.config.setup_key.is_some(),
+        "version": env!("CARGO_PKG_VERSION"),
+    }))
+}
+
+#[derive(serde::Deserialize)]
+struct GoogleIdTokenClaims {
+    #[allow(dead_code)]
+    iss: Option<String>,
+    #[allow(dead_code)]
+    aud: Option<String>,
+    email: Option<String>,
+    email_verified: Option<bool>,
+    name: Option<String>,
+}
+
+pub fn verify_google_jwt_with_rsa_components(
+    id_token: &str,
+    n: &str,
+    e: &str,
+    expected_client_id: Option<&str>,
+) -> AppResult<(String, Option<String>)> {
+    let key = jsonwebtoken::DecodingKey::from_rsa_components(n, e)
+        .map_err(|_| AppError::unauthorized("invalid google public key"))?;
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
+    validation.set_issuer(&["https://accounts.google.com", "accounts.google.com"]);
+    if let Some(cid) = expected_client_id {
+        validation.set_audience(&[cid]);
+    } else {
+        validation.validate_aud = false;
+    }
+    let decoded = jsonwebtoken::decode::<GoogleIdTokenClaims>(id_token, &key, &validation)
+        .map_err(|_| AppError::unauthorized("invalid or expired Google ID token"))?;
+    if decoded.claims.email_verified != Some(true) {
+        return Err(AppError::unauthorized("Google email is not verified"));
+    }
+    let email = decoded
+        .claims
+        .email
+        .and_then(|s| {
+            let t = s.trim().to_ascii_lowercase();
+            if t.is_empty() || !t.contains('@') || t.len() > 254 {
+                None
+            } else {
+                Some(t)
+            }
+        })
+        .ok_or_else(|| AppError::unauthorized("Google token missing verified email"))?;
+    let name = decoded
+        .claims
+        .name
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    Ok((email, name))
+}
+
+async fn verify_google_id_token(state: &AppState, id_token: &str) -> AppResult<(String, Option<String>)> {
+    let expected_cid = state.config.google_client_id.as_deref().ok_or_else(|| {
+        AppError::unauthorized("server Google OAuth client ID is not configured")
+    })?;
+    let header = jsonwebtoken::decode_header(id_token)
+        .map_err(|_| AppError::unauthorized("malformed Google ID token header"))?;
+    let kid = header
+        .kid
+        .as_deref()
+        .ok_or_else(|| AppError::unauthorized("Google ID token missing key id"))?;
+
+    let pair = match state.get_google_jwk(kid, false).await? {
+        Some(p) => p,
+        None => state
+            .get_google_jwk(kid, true)
+            .await?
+            .ok_or_else(|| AppError::unauthorized("unrecognized Google signing key"))?,
     };
-    let Some(payload_b64) = parts.next() else {
-        return (None, None);
-    };
-    let Some(_sig) = parts.next() else {
-        return (None, None);
-    };
-    let Ok(bytes) = URL_SAFE_NO_PAD.decode(payload_b64) else {
-        return (None, None);
-    };
-    let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        return (None, None);
-    };
-    let email = val
-        .get("email")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let name = val
-        .get("name")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    (email, name)
+    verify_google_jwt_with_rsa_components(id_token, &pair.0, &pair.1, Some(expected_cid))
 }
 
 fn hash_device_id(device_id: Option<&str>) -> Option<String> {
@@ -611,26 +698,38 @@ fn hash_device_id(device_id: Option<&str>) -> Option<String> {
 }
 
 pub async fn google_auth(
+    OptionalPeerIp(peer_ip): OptionalPeerIp,
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(req): Json<GoogleAuthRequest>,
 ) -> AppResult<Json<GoogleAuthResponse>> {
-    let (jwt_email, jwt_name) = req
-        .id_token
-        .as_deref()
-        .map(decode_jwt_email_name)
-        .unwrap_or((None, None));
+    let mut verified_by_google = false;
+    let mut jwt_email: Option<String> = None;
+    let mut jwt_name: Option<String> = None;
 
-    let raw_email = if req.email.trim().is_empty() {
-        jwt_email.unwrap_or_default()
+    if let Some(raw_tok) = req.id_token.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        let (v_email, v_name) = verify_google_id_token(&state, raw_tok).await?;
+        verified_by_google = true;
+        jwt_email = Some(v_email);
+        jwt_name = v_name;
+    }
+
+    let raw_email = if let Some(ref verified_email) = jwt_email {
+        if !req.email.trim().is_empty() && req.email.trim().to_ascii_lowercase() != *verified_email {
+            return Err(AppError::unauthorized("email does not match verified Google token"));
+        }
+        verified_email.clone()
     } else {
         req.email.clone()
     };
     let email = normalize_email(Some(raw_email))?
         .ok_or_else(|| AppError::bad_request("valid email is required"))?;
 
-    let email_rate_key = client_rate_key(&headers, &email);
+    let email_rate_key = client_rate_key(peer_ip, &headers, &email);
+    let scoped_email_key = format!("email:{email}");
     state.check_join_rate_limit(&email_rate_key)?;
+    state.check_google_auth_rate_limit(&email_rate_key)?;
+    state.check_google_auth_rate_limit(&scoped_email_key)?;
     let req_device_hash = hash_device_id(req.device_id.as_deref());
 
     let raw_name = req
@@ -655,10 +754,18 @@ pub async fn google_auth(
         .map(|s| s.trim().to_ascii_uppercase())
         .filter(|s| !s.is_empty());
 
+    let setup_key_ok = state.config.setup_key.as_deref().is_some_and(|expected| {
+        req.setup_key
+            .as_deref()
+            .or_else(|| headers.get("X-Setup-Key").and_then(|v| v.to_str().ok()))
+            .map(str::trim)
+            .is_some_and(|provided| constant_time_eq(provided.as_bytes(), expected.as_bytes()))
+    });
+
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
 
-    // Case A: Existing user login by email (requires matching device_hash or valid invite_code)
+    // Case A: Existing user login by email (requires verified Google token, matching device_hash, valid setup_key, or valid invite_code)
     let existing = {
         let db = db.clone();
         let secret = secret.clone();
@@ -682,35 +789,49 @@ pub async fn google_auth(
             };
 
             let now = now_ms();
-            if let Some(ref expected_hash) = stored_device_hash {
-                let device_ok = req_dev_hash
+            let device_ok = stored_device_hash.as_deref().is_some_and(|expected_hash| {
+                req_dev_hash
                     .as_deref()
-                    .is_some_and(|h| constant_time_eq(h.as_bytes(), expected_hash.as_bytes()));
-                let invite_ok = if !device_ok {
-                    if let Some(ref code) = inv_code {
-                        tx.query_row(
-                            "SELECT code FROM invites WHERE code = ?1 AND used_at IS NULL AND expires_at > ?2",
-                            params![code, now],
-                            |r| r.get::<_, String>(0),
-                        )
-                        .optional()?
-                        .is_some()
-                    } else {
-                        false
-                    }
+                    .is_some_and(|h| constant_time_eq(h.as_bytes(), expected_hash.as_bytes()))
+            });
+            let invite_ok = if !verified_by_google && !device_ok && !setup_key_ok {
+                if let Some(ref code) = inv_code {
+                    tx.query_row(
+                        "SELECT code FROM invites WHERE code = ?1 AND used_at IS NULL AND expires_at > ?2",
+                        params![code, now],
+                        |r| r.get::<_, String>(0),
+                    )
+                    .optional()?
+                    .is_some()
                 } else {
                     false
-                };
-                if !device_ok && !invite_ok {
-                    return Err(AppError::unauthorized(
-                        "device verification or valid invite code required for existing account",
-                    ));
                 }
-            } else if let Some(ref h) = req_dev_hash {
-                tx.execute(
-                    "UPDATE users SET device_hash = ?1 WHERE id = ?2",
-                    params![h, user_id],
-                )?;
+            } else {
+                false
+            };
+
+            if stored_device_hash.is_some()
+                && !verified_by_google
+                && !device_ok
+                && !invite_ok
+                && !setup_key_ok
+            {
+                return Err(AppError::unauthorized(
+                    "device verification, verified Google sign-in, setup key, or valid invite code required for existing account",
+                ));
+            }
+
+            if let Some(ref h) = req_dev_hash {
+                let needs_update = stored_device_hash
+                    .as_deref()
+                    .map(|prev| !constant_time_eq(prev.as_bytes(), h.as_bytes()))
+                    .unwrap_or(true);
+                if needs_update && (stored_device_hash.is_none() || verified_by_google || invite_ok || setup_key_ok) {
+                    tx.execute(
+                        "UPDATE users SET device_hash = ?1 WHERE id = ?2",
+                        params![h, user_id],
+                    )?;
+                }
             }
 
             tx.execute(
@@ -730,6 +851,7 @@ pub async fn google_auth(
                 None
             };
             let tokens = issue_tokens(&tx, &secret, user_id, now)?;
+            let space_name = get_space_name(&tx)?;
             tx.commit()?;
             Ok(Some(GoogleAuthResponse {
                 status: "authenticated".to_string(),
@@ -739,6 +861,7 @@ pub async fn google_auth(
                 tokens: Some(tokens),
                 email: None,
                 name: None,
+                space_name,
             }))
         })
         .await?
@@ -747,12 +870,16 @@ pub async fn google_auth(
     match existing {
         Ok(Some(resp)) => {
             state.clear_join_rate_limit(&email_rate_key);
+            state.clear_google_auth_rate_limit(&email_rate_key);
+            state.clear_google_auth_rate_limit(&scoped_email_key);
             return Ok(Json(resp));
         }
         Ok(None) => {}
         Err(err) => {
             if err.code == "unauthorized" {
                 state.record_join_failure(&email_rate_key);
+                state.record_google_auth_failure(&email_rate_key);
+                state.record_google_auth_failure(&scoped_email_key);
             }
             return Err(err);
         }
@@ -760,7 +887,7 @@ pub async fn google_auth(
 
     // Case B: New user joining with invite_code
     if let Some(code) = invite_code {
-        let rate_key = client_rate_key(&headers, &code);
+        let rate_key = client_rate_key(peer_ip, &headers, "invite_attempt");
         state.check_join_rate_limit(&rate_key)?;
         let dev_hash = req_device_hash.clone();
         let res = tokio::task::spawn_blocking(move || -> AppResult<GoogleAuthResponse> {
@@ -798,6 +925,7 @@ pub async fn google_auth(
             let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
             let partner = get_partner(&tx, user_id)?;
             let tokens = issue_tokens(&tx, &secret, user_id, now)?;
+            let space_name = get_space_name(&tx)?;
             tx.commit()?;
             Ok(GoogleAuthResponse {
                 status: "authenticated".to_string(),
@@ -807,6 +935,7 @@ pub async fn google_auth(
                 tokens: Some(tokens),
                 email: None,
                 name: None,
+                space_name,
             })
         })
         .await?;
@@ -834,7 +963,7 @@ pub async fn google_auth(
                 .as_deref()
                 .or_else(|| headers.get("X-Setup-Key").and_then(|v| v.to_str().ok()))
                 .unwrap_or("");
-            let rk = client_rate_key(&headers, &hash_refresh_token(provided_key)[..16]);
+            let rk = client_rate_key(peer_ip, &headers, "setup_key");
             state.check_create_rate_limit(&rk)?;
             if !constant_time_eq(provided_key.as_bytes(), expected_key.as_bytes()) {
                 state.record_create_failure(&rk);
@@ -844,6 +973,7 @@ pub async fn google_auth(
         }
 
         let dev_hash = req_device_hash;
+        let raw_space_name = req.space_name.clone();
         let resp = tokio::task::spawn_blocking(move || -> AppResult<GoogleAuthResponse> {
             let mut conn = db
                 .lock()
@@ -856,6 +986,7 @@ pub async fn google_auth(
             }
 
             let now = now_ms();
+            let space_name = set_space_name(&tx, raw_space_name.as_deref())?;
             tx.execute(
                 "INSERT INTO users (name, email, device_hash, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4)",
                 params![name, Some(email), dev_hash, now],
@@ -878,6 +1009,7 @@ pub async fn google_auth(
                 tokens: Some(tokens),
                 email: None,
                 name: None,
+                space_name,
             })
         })
         .await??;
@@ -896,6 +1028,7 @@ pub async fn google_auth(
         tokens: None,
         email: Some(email),
         name: Some(name),
+        space_name: None,
     }))
 }
 

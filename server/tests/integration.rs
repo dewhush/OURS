@@ -37,6 +37,7 @@ impl TestApp {
             bind: "127.0.0.1:0".to_string(),
             data_dir: data_dir.clone(),
             setup_key: setup_key.map(str::to_string),
+            google_client_id: None,
             token_secret: b"0123456789abcdef0123456789abcdef".to_vec(),
             history_days: 30,
             stale_minutes: 15,
@@ -1003,7 +1004,23 @@ async fn logout_revokes_refresh_token_and_create_rate_limits() {
     let access = create_res["tokens"]["access_token"].as_str().unwrap();
     let refresh = create_res["tokens"]["refresh_token"].as_str().unwrap();
 
-    // Logout revokes refresh token
+    // Orphaned photo file on disk (not in DB) returns 404 while logged in
+    let orphan_id = "abcdef0123456789abcdef0123456789";
+    std::fs::write(
+        app2._tmp.path().join("photos").join(format!("{orphan_id}_full.jpg")),
+        make_test_jpeg(50, 50),
+    )
+    .unwrap();
+    let orphan_res = app2
+        .client
+        .get(format!("{}/api/photos/{orphan_id}?size=full", app2.base_url))
+        .bearer_auth(access)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(orphan_res.status(), StatusCode::NOT_FOUND);
+
+    // Logout revokes refresh token AND invalidates active access token immediately
     let out = app2
         .client
         .post(format!("{}/api/auth/logout", app2.base_url))
@@ -1022,21 +1039,17 @@ async fn logout_revokes_refresh_token_and_create_rate_limits() {
         .unwrap();
     assert_eq!(ref_after.status(), StatusCode::UNAUTHORIZED);
 
-    // Orphaned photo file on disk (not in DB) returns 404
-    let orphan_id = "abcdef0123456789abcdef0123456789";
-    std::fs::write(
-        app2._tmp.path().join("photos").join(format!("{orphan_id}_full.jpg")),
-        make_test_jpeg(50, 50),
-    )
-    .unwrap();
-    let orphan_res = app2
+    let state_after = app2
         .client
-        .get(format!("{}/api/photos/{orphan_id}?size=full", app2.base_url))
+        .get(format!("{}/api/pair/state", app2.base_url))
         .bearer_auth(access)
         .send()
         .await
         .unwrap();
-    assert_eq!(orphan_res.status(), StatusCode::NOT_FOUND);
+    assert_eq!(state_after.status(), StatusCode::UNAUTHORIZED);
+
+    let ws_after = tokio_tungstenite::connect_async(format!("{}/api/ws?token={access}", app2.ws_base_url)).await;
+    assert!(ws_after.is_err(), "revoked access token must fail new WS handshake");
 }
 
 #[tokio::test]
@@ -1456,6 +1469,8 @@ async fn web_app_assets_served_with_no_cache_headers() {
         ("/styles.css", "text/css"),
         ("/manifest.webmanifest", "application/manifest+json"),
         ("/sw.js", "application/javascript"),
+        ("/tokens-preview.html", "text/html"),
+        ("/tokens-preview.js", "application/javascript"),
     ] {
         let resp = app
             .client
@@ -1655,4 +1670,247 @@ async fn google_auth_rejects_different_device_for_existing_user() {
         .await
         .unwrap();
     assert_eq!(ok.status(), StatusCode::OK);
+
+    // Different device_id WITH valid setup_key -> 200 OK & rebinds device
+    let recovered = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "device_id": "device-reinstalled-7777",
+            "setup_key": "test-setup-key"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::OK);
+
+    // Newly bound device_id now works without setup_key -> 200 OK
+    let rebound = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "device_id": "device-reinstalled-7777"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rebound.status(), StatusCode::OK);
+
+    // Forged / unverified id_token -> 401 Unauthorized
+    let forged = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "device_id": "device-attacker-0000",
+            "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZha2UifQ.eyJlbWFpbCI6ImRld2h1c2hAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWV9.fakesig"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(forged.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn public_config_exposes_non_secret_client_metadata() {
+    let app = TestApp::start().await;
+    let resp = app
+        .client
+        .get(format!("{}/api/config", app.base_url))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: Value = resp.json().await.unwrap();
+    assert_eq!(body["setup_key_required"], true);
+    assert!(body["google_client_id"].is_null());
+    assert!(body["version"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn ws_rejects_untrusted_origin_and_accepts_subprotocol_auth() {
+    let app = TestApp::start().await;
+    let (t1, _t2, _id1, _id2) = app.pair_both().await;
+    let host = app.ws_base_url.trim_start_matches("ws://");
+
+    // Cross-origin webpage attempting CSWSH must be rejected with 403 Forbidden
+    let bad_req = tokio_tungstenite::tungstenite::http::Request::builder()
+        .uri(format!("{}/api/ws?token={t1}", app.ws_base_url))
+        .header("Host", host)
+        .header("Origin", "https://evil.example")
+        .header("Connection", "Upgrade")
+        .header("Upgrade", "websocket")
+        .header("Sec-WebSocket-Version", "13")
+        .header("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+        .body(())
+        .unwrap();
+    let bad_res = tokio_tungstenite::connect_async(bad_req).await;
+    assert!(bad_res.is_err(), "untrusted Origin must be rejected");
+
+    // Subprotocol bearer.<token> without query string and with matching loopback Origin succeeds
+    let proto_req = tokio_tungstenite::tungstenite::http::Request::builder()
+        .uri(format!("{}/api/ws", app.ws_base_url))
+        .header("Host", host)
+        .header("Origin", format!("http://{host}"))
+        .header("Sec-WebSocket-Protocol", format!("ours.v1, bearer.{t1}"))
+        .header("Connection", "Upgrade")
+        .header("Upgrade", "websocket")
+        .header("Sec-WebSocket-Version", "13")
+        .header("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+        .body(())
+        .unwrap();
+    let (mut ws, resp) = tokio_tungstenite::connect_async(proto_req).await.unwrap();
+    assert_eq!(
+        resp.headers()
+            .get("sec-websocket-protocol")
+            .and_then(|v| v.to_str().ok()),
+        Some("ours.v1")
+    );
+    ws.send(WsMessage::Text(r#"{"type":"ping"}"#.into())).await.unwrap();
+    let pong = tokio::time::timeout(Duration::from_secs(2), ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(pong.to_text().unwrap().contains("pong"));
+}
+
+#[test]
+fn client_rate_key_ignores_spoofed_headers_from_non_loopback_peer() {
+    use std::net::{IpAddr, Ipv4Addr};
+    use axum::http::HeaderMap;
+    use ours_server::routes::pair::client_rate_key;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("X-Forwarded-For", "198.51.100.42".parse().unwrap());
+    headers.insert("CF-Connecting-IP", "198.51.100.43".parse().unwrap());
+
+    // Direct non-loopback client cannot spoof forwarded IP headers
+    let direct_peer = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 9));
+    assert_eq!(
+        client_rate_key(Some(direct_peer), &headers, "fallback"),
+        "ip:203.0.113.9"
+    );
+
+    // Loopback reverse proxy trusts valid forwarded IP
+    let loopback_peer = IpAddr::V4(Ipv4Addr::LOCALHOST);
+    assert_eq!(
+        client_rate_key(Some(loopback_peer), &headers, "fallback"),
+        "ip:198.51.100.43"
+    );
+
+    // Non-IP header injection falls back safely instead of creating unbounded rate buckets
+    let mut dirty = HeaderMap::new();
+    dirty.insert("X-Real-IP", "not-an-ip-spoof".parse().unwrap());
+    assert_eq!(
+        client_rate_key(Some(loopback_peer), &dirty, "safe"),
+        "key:safe"
+    );
+}
+
+#[tokio::test]
+async fn google_auth_locks_target_email_across_rotating_proxy_ips() {
+    let app = TestApp::start().await;
+    let first: Value = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "name": "Dewantoro",
+            "device_id": "owner-device-1",
+            "setup_key": "test-setup-key",
+            "auto_create": true
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(first["status"], "authenticated");
+
+    // Failed device-check probes from rotating X-Forwarded-For IPs still lock the scoped email bucket
+    let mut saw_rate_limit = false;
+    for i in 0..15 {
+        let r = app
+            .client
+            .post(format!("{}/api/auth/google", app.base_url))
+            .header("X-Forwarded-For", format!("198.51.100.{}", i + 10))
+            .json(&json!({
+                "email": "dewhush@gmail.com",
+                "device_id": format!("attacker-device-{i}")
+            }))
+            .send()
+            .await
+            .unwrap();
+        if r.status() == StatusCode::TOO_MANY_REQUESTS {
+            saw_rate_limit = true;
+            break;
+        }
+        assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+    }
+    assert!(saw_rate_limit, "scoped email limiter must trip even across rotating IPs");
+
+    let locked = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .header("X-Forwarded-For", "198.51.100.250")
+        .json(&json!({
+            "email": "dewhush@gmail.com",
+            "device_id": "attacker-device-99"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(locked.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn space_name_persists_across_pair_create_join_and_state() {
+    let app = TestApp::start().await;
+    let create_res = app
+        .client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .header("X-Setup-Key", "test-setup-key")
+        .json(&json!({
+            "name": "Alex",
+            "email": null,
+            "space_name": "Rumah Kita"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(create_res.status(), StatusCode::CREATED);
+    let created: Value = create_res.json().await.unwrap();
+    assert_eq!(created["space_name"], "Rumah Kita");
+    let code = created["invite_code"].as_str().unwrap();
+
+    let join_res = app
+        .client
+        .post(format!("{}/api/pair/join", app.base_url))
+        .json(&json!({
+            "name": "Maya",
+            "code": code,
+            "email": null
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(join_res.status(), StatusCode::CREATED);
+    let joined: Value = join_res.json().await.unwrap();
+    assert_eq!(joined["space_name"], "Rumah Kita");
+    let tok_b = joined["tokens"]["access_token"].as_str().unwrap();
+
+    let state_res = app
+        .client
+        .get(format!("{}/api/pair/state", app.base_url))
+        .bearer_auth(tok_b)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(state_res.status(), StatusCode::OK);
+    let st: Value = state_res.json().await.unwrap();
+    assert_eq!(st["space_name"], "Rumah Kita");
 }
