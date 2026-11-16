@@ -133,6 +133,19 @@ Extracted verbatim from [OURS-Design.figcraft](./OURS-Design.figcraft) (`01 Desi
 - `--focus-outline`: `2px solid var(--action)`
 - `--shadow-btn-primary`: `0 8px 20px rgba(0, 85, 255, 0.24)`
 
+- `--white`: `#FFFFFF`
+- `--border-dark`: `#283044`
+- `--radius-bubble`: `18px`
+- `--radius-photo-card`: `20px`
+- `--radius-nav`: `31px`
+- `--radius-nav-tab`: `24px`
+- `--radius-toast`: `34px`
+- `--radius-row`: `18px`
+- `--radius-row-sm`: `16px`
+- `--radius-switch`: `14px`
+- `--radius-handle`: `3px`
+- `--photo-art-grad`: `linear-gradient(160deg, #CFE2F5 0%, #EBF1FF 58%, #F0EFE9 100%)`
+
 ### Fixed Specimen Swatch Tokens (Palette Reference)
 - `--swatch-broken-white`: `#FAF9F5`
 - `--swatch-midnight-ink`: `#111318`
