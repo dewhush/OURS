@@ -74,7 +74,7 @@
   --tracking-display: -0.03em;
   --text-heading: 20px;
   --leading-heading: 24px;
-  --tracking-heading: -0.02em;
+  --tracking-heading: 0;
   --text-title: 16px;
   --leading-title: 19px;
   --text-body: 15px;
@@ -2960,6 +2960,10 @@ button:disabled, [aria-disabled="true"] {
 }
 
 /* Slice 1 Token Specimen Preview (Exact 1:1 FigCraft 520x1060 Coordinates) */
+:root, body, .tp-body {
+  font-optical-sizing: none;
+}
+
 .tp-body {
   background: var(--bg-canvas);
   color: var(--ink);
@@ -3590,8 +3594,8 @@ button:disabled, [aria-disabled="true"] {
   top: 98px;
   width: 454px;
   height: 176px;
-  border-radius: var(--radius-card);
-  background: var(--bg-surface);
+  border-radius: 20px;
+  background: var(--bg-surface-muted);
   border: var(--border-hairline) solid var(--line);
   box-sizing: border-box;
 }
@@ -3620,7 +3624,7 @@ button:disabled, [aria-disabled="true"] {
   top: 40px;
   width: 142px;
   font-size: 12px;
-  line-height: 16px;
+  line-height: 15px;
   color: var(--ink-secondary);
 }
 
@@ -3630,7 +3634,7 @@ button:disabled, [aria-disabled="true"] {
   top: 326px;
   width: 454px;
   height: 112px;
-  border-radius: var(--radius-card);
+  border-radius: 18px;
   background: var(--bg-surface);
   border: var(--border-hairline) solid var(--line);
   box-sizing: border-box;
@@ -3661,9 +3665,10 @@ button:disabled, [aria-disabled="true"] {
   top: 18px;
   width: 76px;
   height: 28px;
-  padding: 2px;
-  border-radius: var(--radius-pill);
+  padding: 2px 3px;
+  border-radius: 14px;
   background: var(--bg-surface-muted);
+  border: var(--border-hairline) solid var(--line);
   display: flex;
   align-items: center;
   box-sizing: border-box;
@@ -3672,25 +3677,26 @@ button:disabled, [aria-disabled="true"] {
 .ap-lang-pill {
   flex: 1;
   height: 24px;
-  border-radius: var(--radius-pill);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  color: var(--ink-secondary);
+  color: var(--ink-muted);
 }
 
 .ap-lang-active {
-  background: var(--action);
-  color: var(--on-action);
+  background: var(--bg-surface);
+  color: var(--ink);
 }
 
 .ap-lang-sample {
   position: absolute;
   left: 18px;
   top: 74px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: 600;
   font-size: 12px;
   line-height: 15px;
   color: var(--action);
@@ -3703,7 +3709,7 @@ button:disabled, [aria-disabled="true"] {
   width: 454px;
   height: 430px;
   border-radius: var(--radius-card);
-  background: var(--bg-surface-muted);
+  background: var(--map-canvas-bg);
   border: var(--border-hairline) solid var(--line);
   box-sizing: border-box;
 }
@@ -3725,67 +3731,89 @@ button:disabled, [aria-disabled="true"] {
   left: 20px;
   width: 414px;
   height: 68px;
-  border-radius: var(--radius-pill);
-  background: var(--glass-capsule-light);
+  border-radius: 34px;
   border: var(--border-hairline) solid var(--border-glass);
-  box-shadow: var(--glass-rim), var(--shadow-capsule);
-  display: flex;
-  align-items: center;
-  padding: 0 var(--space-md);
-  gap: var(--space-sm);
+  box-shadow: var(--shadow-capsule);
   box-sizing: border-box;
 }
 
-.ap-di-arrival { top: 46px; }
-.ap-di-nudge { top: 168px; background: var(--glass-electric-light); }
+.ap-di-arrival {
+  top: 46px;
+  background: var(--glass-capsule-dark);
+}
+
+.ap-di-nudge {
+  top: 168px;
+  background: var(--glass-electric-dark);
+}
 
 .ap-di-badge {
-  width: 38px;
-  height: 38px;
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-pill);
-  background: var(--success-soft);
-  color: var(--success);
+  background: var(--swatch-luminous-blue);
+  color: var(--on-action);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 14px;
-  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 16px;
 }
 
 .ap-di-badge-blue {
-  background: var(--action-soft);
-  color: var(--action);
+  background: var(--swatch-electric-tint);
+}
+
+.ap-di-heart-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--swatch-electric-blue);
 }
 
 .ap-di-copy {
-  flex: 1;
+  position: absolute;
+  left: 68px;
+  top: 14px;
+  right: 48px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .ap-di-copy strong {
   font-size: 14px;
   line-height: 17px;
   font-weight: 600;
-  color: var(--swatch-midnight-ink);
+  color: var(--swatch-broken-white);
 }
 
 .ap-di-copy span {
   font-size: 12px;
   line-height: 15px;
-  color: var(--ink-muted);
+  color: var(--ink-secondary);
+}
+
+.ap-di-arrival .ap-di-copy span,
+.ap-di-nudge .ap-di-copy span {
+  color: var(--swatch-soft-stone);
+  opacity: 0.78;
 }
 
 .ap-di-dot {
-  width: 10px;
-  height: 10px;
+  position: absolute;
+  left: 376px;
+  top: 26px;
+  width: 16px;
+  height: 16px;
   border-radius: var(--radius-pill);
 }
 
 .ap-di-dot-live { background: var(--success); }
-.ap-di-dot-blue { background: var(--action); }
+.ap-di-dot-blue { background: var(--swatch-luminous-blue); }
 
 .ap-di-note {
   position: absolute;
@@ -3793,7 +3821,7 @@ button:disabled, [aria-disabled="true"] {
   top: 268px;
   width: 414px;
   font-size: 12px;
-  line-height: 17px;
+  line-height: 15px;
   color: var(--ink-secondary);
 }
 
@@ -3812,7 +3840,7 @@ button:disabled, [aria-disabled="true"] {
   position: relative;
   width: 224px;
   height: 172px;
-  border-radius: var(--radius-card);
+  border-radius: 18px;
   background: var(--bg-surface);
   border: var(--border-hairline) solid var(--line);
   box-sizing: border-box;
@@ -3861,9 +3889,9 @@ button:disabled, [aria-disabled="true"] {
   top: 666px;
   width: 224px;
   height: 172px;
-  border-radius: var(--radius-card);
-  background: var(--bg-surface);
-  border: var(--border-hairline) solid var(--line);
+  border-radius: 18px;
+  background: var(--action-soft);
+  border: var(--border-hairline) solid var(--action);
   box-sizing: border-box;
 }
 
@@ -3872,10 +3900,10 @@ button:disabled, [aria-disabled="true"] {
   left: 16px;
   top: 16px;
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 16px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--action);
 }
 
 .ap-audit-card p {
@@ -3885,7 +3913,7 @@ button:disabled, [aria-disabled="true"] {
   width: 192px;
   margin: 0;
   font-size: 11px;
-  line-height: 15px;
+  line-height: 13px;
   color: var(--ink-secondary);
 }
 
