@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OURS Design Tokens Specimen (Slice 1)</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/tokens-preview.js" defer></script>
+</head>
+<body class="tp-body">
+  <header class="tp-header">
+    <div class="tp-header-inner">
+      <div>
+        <h1>OURS Design System Specimen</h1>
+        <p class="tp-subtitle">Slice 1: Tokens extracted verbatim from OURS-Design.figcraft (01 Design System)</p>
+      </div>
+      <div class="tp-theme-controls" role="group" aria-label="Theme mode">
+        <button type="button" id="theme-light" class="tp-theme-btn" aria-pressed="true">Light</button>
+        <button type="button" id="theme-dark" class="tp-theme-btn" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="tp-main">
+    <section class="tp-panel" aria-labelledby="sec-colors">
+      <h2 id="sec-colors">1. Color Swatches (Broken White &amp; Electric Blue)</h2>
+      <div id="tp-swatches" class="tp-swatch-grid"></div>
+
+      <h3 class="tp-subhead">Liquid Glass Presets (S:1 - S:5)</h3>
+      <div class="tp-glass-stage">
+        <div class="tp-orb tp-orb-1" aria-hidden="true"></div>
+        <div class="tp-orb tp-orb-2" aria-hidden="true"></div>
+        <div class="tp-glass-list">
+          <div class="tp-glass-sample tp-glass-capsule">
+            <strong>Glass/CapsuleLight &amp; Glass/CapsuleDark</strong>
+            <span>frost 14px-15px | refraction 0.88 | specular rim</span>
+          </div>
+          <div class="tp-glass-sample tp-glass-card">
+            <strong>Glass/CardLight</strong>
+            <span>frost 16px | refraction 0.72 | specular rim</span>
+          </div>
+          <div class="tp-glass-sample tp-glass-electric">
+            <strong>Glass/ElectricTint &amp; Glass/ElectricDark</strong>
+            <span>frost 14px-15px | refraction 0.88 | electric rim</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tp-panel" aria-labelledby="sec-type">
+      <h2 id="sec-type">2. Typography, Nested Radii &amp; Spacing</h2>
+      <div class="tp-type-list">
+        <div class="tp-type-row">
+          <span class="tp-meta">Display / Title · 24px SemiBold · -0.03em</span>
+          <span class="tp-sample-display">Stay close, quietly.</span>
+        </div>
+        <div class="tp-type-row">
+          <span class="tp-meta">Heading · 20px SemiBold · -0.02em</span>
+          <span class="tp-sample-heading">Marchanda is live</span>
+        </div>
+        <div class="tp-type-row">
+          <span class="tp-meta">Card Title · 16px SemiBold</span>
+          <span class="tp-sample-title">Saved Places · Home</span>
+        </div>
+        <div class="tp-type-row">
+          <span class="tp-meta">Body · 15px Regular</span>
+          <span class="tp-sample-body">Just left the studio, 5 mins away</span>
+        </div>
+        <div class="tp-type-row">
+          <span class="tp-meta">Caption / Meta · 12px SemiBold</span>
+          <span class="tp-sample-caption">Kemang Raya · 2m ago</span>
+        </div>
+        <div class="tp-type-row">
+          <span class="tp-meta">Tabular (Geist Mono tnum) · 13.5px SemiBold</span>
+          <span class="tp-sample-mono">14:24 · 24 km/h · 84% · 23h left</span>
+        </div>
+      </div>
+
+      <h3 class="tp-subhead">Nested Radius Rule: outer = inner + padding</h3>
+      <div class="tp-radius-demo">
+        <div class="tp-radius-inner">inner = 12px</div>
+        <div class="tp-radius-meta">
+          <p>Padding: 12px | Inner: 12px | Outer: 24px</p>
+          <p>Chip: 10px | Control: 14px | Card: 22px | Sheet: 28px</p>
+        </div>
+      </div>
+
+      <h3 class="tp-subhead">Spacing Scale (4px - 32px)</h3>
+      <div id="tp-spacing" class="tp-spacing-list"></div>
+
+      <h3 class="tp-subhead">Shadows &amp; Z-Layers</h3>
+      <div class="tp-z-grid">
+        <div class="tp-z-card tp-shadow-sm">z-base (0) / z-content (10) · shadow-sm</div>
+        <div class="tp-z-card tp-shadow-card">z-chrome (30) · shadow-card</div>
+        <div class="tp-z-card tp-shadow-capsule">z-sheet (50) / z-toast (70) · shadow-capsule</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
