@@ -13,17 +13,28 @@ class PrefsStore(context: Context) {
     var serverUrl: String
         get() {
             val stored = prefs.getString(KEY_SERVER_URL, null)?.takeIf { it.isNotBlank() }
-            if (stored != null &&
-                !stored.contains(":8080") &&
-                !stored.contains("127.0.0.1") &&
-                !stored.contains("192.168.100.12")
-            ) {
-                return stored
+            if (stored != null && !stored.contains("trycloudflare.com")) {
+                val releaseLegacyDev = !BuildConfig.DEBUG && (
+                    stored.contains(":8080") ||
+                        stored.contains("127.0.0.1") ||
+                        stored.contains("192.168.100.12")
+                    )
+                if (!releaseLegacyDev) {
+                    return stored
+                }
             }
             return BuildConfig.DEFAULT_SERVER_URL.takeIf { it.isNotBlank() }
-                ?: "https://rebate-engines-reproduced-hereby.trycloudflare.com"
+                ?: "https://ours.mnemonic.my.id"
         }
         set(value) = prefs.edit().putString(KEY_SERVER_URL, value.trim().trimEnd('/')).apply()
+
+    fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+    }
 
     var language: String
         get() = prefs.getString(KEY_LANGUAGE, "en") ?: "en"

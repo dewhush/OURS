@@ -1,8 +1,12 @@
 package app.ours
 
 import android.Manifest
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import app.ours.util.ProfileAndSosHelper
 import androidx.activity.ComponentActivity
@@ -93,6 +97,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.ours.bridge.OursNativeBridge
 import app.ours.data.api.CheckInDto
 import app.ours.location.LocationTrackingService
 import app.ours.ui.MainTab
@@ -133,13 +138,36 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val app = application as OursApp
+        if (BuildConfig.DEBUG) {
+            if (intent?.getBooleanExtra("debug_reset", false) == true) {
+                app.prefs.clearSession()
+            }
+            val debugServer = intent?.getStringExtra("debug_server_url")?.trim()?.trimEnd('/')
+            if (!debugServer.isNullOrBlank() &&
+                (debugServer.startsWith("http://10.0.2.2:") || debugServer.startsWith("http://127.0.0.1:")) &&
+                OursNativeBridge.isTrustedServerUrl(debugServer, isDebugBuild = true)
+            ) {
+                app.prefs.serverUrl = debugServer
+            }
+        }
         if (app.prefs.isPaired && app.prefs.onboardingDone && !app.prefs.sharingPaused) {
             LocationTrackingService.start(this)
         }
 
         setContent {
             val state by vm.state.collectAsStateWithLifecycle()
-            val darkTheme = when (state.themeMode) {
+            var liveThemeMode by rememberSaveable { mutableStateOf(app.prefs.themeMode) }
+            var liveLanguage by rememberSaveable { mutableStateOf(app.prefs.language) }
+            DisposableEffect(app.prefs) {
+                val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+                    liveThemeMode = app.prefs.themeMode
+                    liveLanguage = app.prefs.language
+                }
+                app.prefs.registerListener(listener)
+                onDispose { app.prefs.unregisterListener(listener) }
+            }
+            val effectiveTheme = liveThemeMode.ifBlank { state.themeMode }
+            val darkTheme = when (effectiveTheme) {
                 "light" -> false
                 "dark" -> true
                 else -> isSystemInDarkTheme()
@@ -152,123 +180,10 @@ class MainActivity : ComponentActivity() {
                     controller.isAppearanceLightNavigationBars = !darkTheme
                 }
             }
-            OursTheme(darkTheme = darkTheme, language = state.language) {
-                var showSplash by rememberSaveable { mutableStateOf(true) }
-                LaunchedEffect(Unit) {
-                    if (showSplash) {
-                        delay(760)
-                        showSplash = false
-                    }
-                }
+            OursTheme(darkTheme = darkTheme, language = liveLanguage.ifBlank { state.language }) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     OursRoot(vm = vm)
-                    AnimatedVisibility(
-                        visible = showSplash,
-                        exit = fadeOut(OursMotion.exitSpec(220)) +
-                            scaleOut(targetScale = 1.03f, animationSpec = OursMotion.exitSpec(220)),
-                    ) {
-                        OursSplashOverlay()
-                    }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OursSplashOverlay() {
-    val colors = OursTheme.colors
-    val strings = OursTheme.strings
-
-    val iconScale = remember { Animatable(0.84f) }
-    val iconOffsetY = remember { Animatable(12f) }
-    val ringConverge = remember { Animatable(0f) }
-    val wordmarkAlpha = remember { Animatable(0f) }
-    val wordmarkOffsetY = remember { Animatable(8f) }
-    val subtitleAlpha = remember { Animatable(0f) }
-
-    LaunchedEffect(Unit) {
-        iconScale.animateTo(1f, OursMotion.springBouncy())
-    }
-    LaunchedEffect(Unit) {
-        iconOffsetY.animateTo(0f, OursMotion.springFluid())
-    }
-    LaunchedEffect(Unit) {
-        ringConverge.animateTo(1f, OursMotion.springFluid())
-    }
-    LaunchedEffect(Unit) {
-        delay(80)
-        wordmarkAlpha.animateTo(1f, OursMotion.enterSpec(220))
-    }
-    LaunchedEffect(Unit) {
-        delay(80)
-        wordmarkOffsetY.animateTo(0f, OursMotion.springFluid())
-    }
-    LaunchedEffect(Unit) {
-        delay(140)
-        subtitleAlpha.animateTo(1f, OursMotion.enterSpec(220))
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.canvas),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(OursSpacing.md),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(92.dp)
-                    .graphicsLayer {
-                        scaleX = iconScale.value
-                        scaleY = iconScale.value
-                        translationY = iconOffsetY.value * density
-                    }
-                    .shadow(
-                        elevation = 12.dp,
-                        shape = RoundedCornerShape(24.dp),
-                        ambientColor = Color.Black.copy(alpha = 0.14f),
-                        spotColor = Color.Black.copy(alpha = 0.18f),
-                    )
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(colors.surface)
-                    .border(0.75.dp, colors.glassBorder, RoundedCornerShape(24.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                OursInterlockedRingsMark(
-                    modifier = Modifier.fillMaxSize().padding(10.dp),
-                    leftRingColor = colors.ink,
-                    rightRingColor = colors.action,
-                    backgroundColor = colors.surface,
-                    progress = 1f,
-                    convergeProgress = ringConverge.value,
-                )
-            }
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(OursSpacing.xxs),
-            ) {
-                Text(
-                    text = "OURS",
-                    style = OursTypography.display.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 3.sp,
-                    ),
-                    color = colors.ink,
-                    modifier = Modifier.graphicsLayer {
-                        alpha = wordmarkAlpha.value
-                        translationY = wordmarkOffsetY.value * density
-                    },
-                )
-                Text(
-                    text = strings.splashTagline,
-                    style = OursTypography.caption,
-                    color = colors.inkMuted,
-                    modifier = Modifier.graphicsLayer { alpha = subtitleAlpha.value },
-                )
             }
         }
     }

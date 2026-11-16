@@ -3,6 +3,7 @@
     <style name="Theme.Ours" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">#FAF9F5</item>
         <item name="android:windowSplashScreenBackground">#FAF9F5</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_rings_light</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_splash_transparent</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
     </style>
 </resources>

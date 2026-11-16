@@ -35,6 +35,7 @@ android {
         buildConfigField("String", "FIREBASE_SENDER_ID", "\"${cfg("ours.firebase.senderId")}\"")
         val bakedServerUrl = cfg("OURS_SERVER_URL").ifBlank { cfg("ours.defaultServerUrl") }
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$bakedServerUrl\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${cfg("ours.googleWebClientId")}\"")
     }
 
     signingConfigs {
@@ -111,6 +112,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.firebase.messaging)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.google.identity.googleid)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

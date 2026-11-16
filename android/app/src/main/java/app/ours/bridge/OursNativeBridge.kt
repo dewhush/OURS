@@ -30,13 +30,29 @@ class OursNativeBridge(
     private val isTrustedOrigin: () -> Boolean = { false },
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
+    @Volatile
+    private var safeTopCssPx: Int = 0
+    @Volatile
+    private var safeBottomCssPx: Int = 0
+
+    fun updateSafeInsets(topCssPx: Int, bottomCssPx: Int) {
+        if (topCssPx >= 0) safeTopCssPx = topCssPx
+        if (bottomCssPx >= 0) safeBottomCssPx = bottomCssPx
+    }
 
     @JavascriptInterface
     fun syncAuth(json: String) {
+        if (!isTrustedOrigin()) return
         runCatching {
             val obj = JSONObject(json)
             val serverUrl = obj.optString("serverUrl", "").trim().trimEnd('/')
-            if (serverUrl.isNotBlank() && isTrustedServerUrl(serverUrl)) {
+            val currentHost = runCatching { Uri.parse(prefs.serverUrl).host?.lowercase() }.getOrNull()
+            if (serverUrl.isNotBlank() && isTrustedServerUrl(
+                    serverUrl,
+                    allowCustomHttps = false,
+                    currentConfiguredHost = currentHost,
+                )
+            ) {
                 prefs.serverUrl = serverUrl
             }
 
@@ -102,6 +118,10 @@ class OursNativeBridge(
     @SuppressLint("HardwareIds")
     @JavascriptInterface
     fun getNativeState(): String {
+        val trusted = isTrustedOrigin()
+        if (!trusted) {
+            return "{}"
+        }
         val batteryStatus = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
@@ -132,11 +152,10 @@ class OursNativeBridge(
             }
         }
 
-        val trusted = isTrustedOrigin()
         return JSONObject().apply {
             put("serverUrl", prefs.serverUrl)
-            put("accessToken", if (trusted) (prefs.accessToken ?: "") else "")
-            put("refreshToken", if (trusted) (prefs.refreshToken ?: "") else "")
+            put("accessToken", prefs.accessToken ?: "")
+            put("refreshToken", prefs.refreshToken ?: "")
             put("userId", prefs.userId)
             put("deviceId", androidId)
             put("myName", prefs.userName ?: "")
@@ -150,6 +169,8 @@ class OursNativeBridge(
             put("appVersion", BuildConfig.VERSION_NAME)
             put("batteryPct", batteryPct)
             put("charging", charging)
+            put("safeTopPx", safeTopCssPx)
+            put("safeBottomPx", safeBottomCssPx)
             if (lat != null && lon != null) {
                 put("lat", lat)
                 put("lon", lon)
@@ -159,8 +180,15 @@ class OursNativeBridge(
 
     @JavascriptInterface
     fun setServerUrl(url: String) {
+        if (!isTrustedOrigin()) return
         val cleaned = url.trim().trimEnd('/')
-        if (cleaned.isNotBlank() && isTrustedServerUrl(cleaned)) {
+        val currentHost = runCatching { Uri.parse(prefs.serverUrl).host?.lowercase() }.getOrNull()
+        if (cleaned.isNotBlank() && isTrustedServerUrl(
+                cleaned,
+                allowCustomHttps = true,
+                currentConfiguredHost = currentHost,
+            )
+        ) {
             prefs.serverUrl = cleaned
             mainHandler.post { onReloadFromServer(prefs.serverUrl) }
         }
@@ -168,34 +196,57 @@ class OursNativeBridge(
 
     @JavascriptInterface
     fun reloadUpdatingUi() {
+        if (!isTrustedOrigin()) return
         mainHandler.post { onReloadUpdatingUi() }
     }
 
     @JavascriptInterface
     fun hapticTick() {
+        if (!isTrustedOrigin()) return
         mainHandler.post { onHapticTick() }
     }
 
     @JavascriptInterface
     fun signInWithGoogle() {
+        if (!isTrustedOrigin()) return
         mainHandler.post { onSignInWithGoogle() }
     }
 
     companion object {
-        fun isTrustedServerUrl(rawUrl: String): Boolean {
+        private fun isBlockedHost(host: String): Boolean {
+            if (host.contains("trycloudflare.com")) return true
+            if (host == "0.0.0.0" || host.startsWith("169.254.") || host.startsWith("fe80:")) return true
+            return false
+        }
+
+        fun isTrustedServerUrl(
+            rawUrl: String,
+            allowCustomHttps: Boolean = false,
+            currentConfiguredHost: String? = null,
+            isDebugBuild: Boolean = BuildConfig.DEBUG,
+        ): Boolean {
             val trimmed = rawUrl.trim()
-            if (trimmed.isBlank()) return false
-            val parsed = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return false
+            if (trimmed.isBlank() || trimmed.length > 256) return false
+            val parsed = runCatching { java.net.URI(trimmed) }.getOrNull() ?: return false
+            if (!parsed.rawUserInfo.isNullOrBlank()) return false
             val scheme = parsed.scheme?.lowercase() ?: return false
             val host = parsed.host?.lowercase() ?: return false
-            if (host.isBlank()) return false
+            if (host.isBlank() || isBlockedHost(host)) return false
+
+            val defaultHost = runCatching { java.net.URI(BuildConfig.DEFAULT_SERVER_URL).host?.lowercase() }.getOrNull()
             return when (scheme) {
-                "https" -> true
-                "http" -> host == "127.0.0.1" ||
-                    host == "localhost" ||
-                    host == "10.0.2.2" ||
-                    host.startsWith("192.168.") ||
-                    host.startsWith("100.")
+                "https" -> {
+                    host == "mnemonic.my.id" ||
+                        host.endsWith(".mnemonic.my.id") ||
+                        (defaultHost != null && host == defaultHost) ||
+                        (currentConfiguredHost != null && host == currentConfiguredHost.lowercase()) ||
+                        (allowCustomHttps && host.contains('.'))
+                }
+                "http" -> {
+                    val isLocalLoopback = host == "127.0.0.1" || host == "localhost" || host == "10.0.2.2"
+                    val isLanOrTailscale = host.startsWith("192.168.") || host.startsWith("100.")
+                    (isDebugBuild && isLocalLoopback) || isLanOrTailscale
+                }
                 else -> false
             }
         }

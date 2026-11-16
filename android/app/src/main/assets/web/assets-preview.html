@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OURS Assets &amp; Icons Specimen (Slice 2)</title>
+  <link rel="preload" href="/fonts/Inter-VF.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/GeistMono-VF.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/assets-preview.js" defer></script>
+</head>
+<body class="tp-body">
+  <header class="tp-header">
+    <div class="tp-header-inner">
+      <div>
+        <h1>OURS Fonts, Icons &amp; Assets Specimen</h1>
+        <p class="tp-subtitle">Slice 2: Self-hosted Inter &amp; Geist Mono WOFF2 + FigCraft SVGs</p>
+      </div>
+      <div class="tp-theme-controls" role="group" aria-label="Theme mode">
+        <button type="button" id="ap-theme-light" class="tp-theme-btn" aria-pressed="true">Light</button>
+        <button type="button" id="ap-theme-dark" class="tp-theme-btn" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="tp-main">
+    <section id="panel-brand" class="ap-panel-brand" aria-labelledby="sec-brand">
+      <h2 id="sec-brand" class="ap-title">Brand Mark, Localization &amp; Live Events</h2>
+      <div class="ap-sec-lbl ap-lbl-icons">INTERLOCKED RINGS (BROKEN WHITE &amp; ELECTRIC BLUE)</div>
+      <div class="ap-icon-stage">
+        <img class="ap-icon-dark" src="/assets/icons/ours-icon-dark.svg" width="120" height="120" alt="OURS Dark App Icon" />
+        <img class="ap-icon-light" src="/assets/icons/ours-icon-light.svg" width="88" height="88" alt="OURS Light App Icon" />
+        <div class="ap-icon-note">Zero green, zero orange<br />Obsidian #090B10,<br />Broken White #FAF9F5,<br />Electric Blue #0055FF</div>
+      </div>
+
+      <div class="ap-sec-lbl ap-lbl-lang">LOCALIZATION SWITCHER (EN / ID)</div>
+      <div class="ap-lang-card">
+        <div class="ap-lang-t1">Language / Bahasa</div>
+        <div class="ap-lang-t2">Instant switch across Web &amp; Android shell</div>
+        <div class="ap-lang-switcher" role="group" aria-label="Language preview">
+          <span class="ap-lang-pill ap-lang-active">EN</span>
+          <span class="ap-lang-pill">ID</span>
+        </div>
+        <div class="ap-lang-sample">EN: &quot;Quiet Pause&quot; · ID: &quot;Jeda Tenang&quot;</div>
+      </div>
+
+      <div class="ap-sec-lbl ap-lbl-di">LIVE TOAST &amp; DYNAMIC ISLAND PREVIEWS</div>
+      <div class="ap-di-stage">
+        <div class="ap-di-sub ap-di-sub-1">1. Place Arrival Event</div>
+        <div class="ap-di-pill ap-di-arrival">
+          <span class="ap-di-badge">M</span>
+          <div class="ap-di-copy">
+            <strong>Marchanda arrived at Home</strong>
+            <span>Home · Just now</span>
+          </div>
+          <span class="ap-di-dot ap-di-dot-live"></span>
+        </div>
+
+        <div class="ap-di-sub ap-di-sub-2">2. Nudge Event</div>
+        <div class="ap-di-pill ap-di-nudge">
+          <span class="ap-di-badge ap-di-badge-blue">
+            <span class="ap-di-heart-dot"></span>
+          </span>
+          <div class="ap-di-copy">
+            <strong>Nudge from Marchanda</strong>
+            <span>Thinking of you · 14:24</span>
+          </div>
+          <span class="ap-di-dot ap-di-dot-blue"></span>
+        </div>
+
+        <div class="ap-di-note">
+          Apple Liquid Glass Specification:<br />
+          • Native FigCraft glass shader + edge dispersion<br />
+          • Specular diagonal stroke (#FFFFFFFA -&gt; #0055FF33)<br />
+          • Broken White (#FAF9F5) &amp; Electric Blue (#0055FF)<br />
+          • Zero orange anywhere · WCAG AA &gt;= 4.5:1 verified
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-assets" class="ap-panel-assets" aria-labelledby="sec-assets">
+      <h2 id="sec-assets" class="ap-title">Vector Library &amp; Security Audit (#S1-#S8)</h2>
+      <p class="ap-sub">2dp crisp icons + full-stack hardening inventory</p>
+      <div id="ap-asset-grid" class="ap-asset-grid"></div>
+      <div class="ap-audit-card">
+        <h3>Security Audit #S1-#S8</h3>
+        <p>
+          • #S1 Device-bound Google Auth<br />
+          • #S2 Strict CSP &amp; Frame-Deny<br />
+          • #S3 Zero inline script handlers<br />
+          • #S4 WebView origin allowlist<br />
+          • #S5 WS 8-conn &amp; 64KB cap<br />
+          • #S6-#S8 JPEG limits &amp; 0600
+        </p>
+      </div>
+    </section>
+
+    <section id="panel-icons-tray" class="ap-panel-tray" aria-labelledby="sec-tray">
+      <h2 id="sec-tray" class="ap-title-tray">UI, Navigation &amp; Map FAB Icons (1x Design Size)</h2>
+      <div id="ap-icons-tray" class="ap-tray-grid"></div>
+    </section>
+  </main>
+</body>
+</html>

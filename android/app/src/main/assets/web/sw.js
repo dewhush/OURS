@@ -1,4 +1,4 @@
-const CACHE_NAME = "ours-web-v1";
+const CACHE_NAME = "ours-web-v2";
 const SHELL_ASSETS = [
   "/",
   "/styles.css",

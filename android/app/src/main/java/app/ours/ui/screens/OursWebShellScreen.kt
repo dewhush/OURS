@@ -4,9 +4,10 @@ import android.Manifest
 import android.accounts.AccountManager
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -25,6 +26,8 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -33,16 +36,30 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
+import app.ours.BuildConfig
 import app.ours.bridge.OursNativeBridge
 import app.ours.data.local.PrefsStore
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -52,6 +69,12 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 private const val OFFLINE_FALLBACK_URL = "file:///android_asset/web/index.html"
+private const val PRODUCTION_SERVER_URL = "https://ours.mnemonic.my.id"
+
+private fun Context.findActivity(): Activity? =
+    generateSequence(this) { (it as? ContextWrapper)?.baseContext }
+        .filterIsInstance<Activity>()
+        .firstOrNull()
 
 private fun isAllowedWebOrigin(rawUrl: String?, serverUrl: String): Boolean {
     val url = rawUrl?.trim().orEmpty()
@@ -63,34 +86,30 @@ private fun isAllowedWebOrigin(rawUrl: String?, serverUrl: String): Boolean {
     val host = uri.host?.lowercase() ?: return false
     val configuredHost = runCatching { Uri.parse(serverUrl).host?.lowercase() }.getOrNull()
     return (configuredHost != null && host == configuredHost) ||
-        host == "192.168.100.92" ||
-        host == "100.114.15.94" ||
         host == "127.0.0.1" ||
         host == "10.0.2.2" ||
         host == "mnemonic.my.id" ||
-        host.endsWith(".mnemonic.my.id") ||
-        host.endsWith(".trycloudflare.com")
+        host.endsWith(".mnemonic.my.id")
 }
 
 private fun resolveReachableServerUrl(preferred: String): String? {
+    val normalizedPreferred = preferred.trim().trimEnd('/')
     val candidates = linkedSetOf(
-        "https://ours.mnemonic.my.id",
-        preferred.trim().trimEnd('/'),
-        "https://rebate-engines-reproduced-hereby.trycloudflare.com",
-        "http://192.168.100.92:8787",
-        "http://100.114.15.94:8787",
+        normalizedPreferred,
+        PRODUCTION_SERVER_URL,
     ).filter {
         (it.startsWith("http://") || it.startsWith("https://")) &&
             !it.contains("127.0.0.1") &&
-            !it.contains(":8080")
+            !it.contains(":8080") &&
+            !it.contains("trycloudflare.com")
     }
 
     for (base in candidates) {
         val ok = runCatching {
             val conn = (URL("$base/healthz").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 1500
-                readTimeout = 1500
+                connectTimeout = 1000
+                readTimeout = 1000
             }
             val code = conn.responseCode
             conn.disconnect()
@@ -101,6 +120,27 @@ private fun resolveReachableServerUrl(preferred: String): String? {
     return null
 }
 
+private fun fetchGoogleWebClientId(serverUrl: String): String {
+    BuildConfig.GOOGLE_WEB_CLIENT_ID.trim().takeIf { it.isNotBlank() }?.let { return it }
+    val base = serverUrl.trim().trimEnd('/')
+    if (!base.startsWith("http://") && !base.startsWith("https://")) return ""
+    return runCatching {
+        val conn = (URL("$base/api/config").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 1500
+            readTimeout = 1500
+        }
+        val code = conn.responseCode
+        val body = if (code in 200..299) {
+            conn.inputStream.bufferedReader().use { it.readText() }
+        } else {
+            ""
+        }
+        conn.disconnect()
+        if (body.isBlank()) "" else JSONObject(body).optString("google_client_id", "").trim()
+    }.getOrDefault("")
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun OursWebShellScreen(
@@ -109,6 +149,14 @@ fun OursWebShellScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val coroutineScope = rememberCoroutineScope()
+    val useDarkCanvas = when (prefs.themeMode) {
+        "dark" -> true
+        "light" -> false
+        else -> isSystemInDarkTheme()
+    }
+    val canvasComposeColor = if (useDarkCanvas) Color(0xFF090B10) else Color(0xFFFAF9F5)
+    val canvasAndroidColor = if (useDarkCanvas) 0xFF090B10.toInt() else 0xFFFAF9F5.toInt()
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
@@ -148,6 +196,29 @@ fun OursWebShellScreen(
         pendingGeoCallback = null
     }
 
+    fun isTrustedActivePage(wv: WebView?): Boolean =
+        isAllowedWebOrigin(wv?.url, prefs.serverUrl)
+
+    fun dispatchGoogleAuthPayload(payload: JSONObject) {
+        val wv = webViewRef ?: return
+        if (!isTrustedActivePage(wv)) return
+        val quoted = JSONObject.quote(payload.toString())
+        wv.evaluateJavascript(
+            "window.onOursGoogleAuth && window.onOursGoogleAuth(JSON.parse($quoted))",
+            null,
+        )
+    }
+
+    fun dispatchGoogleAuthFallback(reason: String = "") {
+        val wv = webViewRef ?: return
+        if (!isTrustedActivePage(wv)) return
+        val quoted = JSONObject.quote(reason)
+        wv.evaluateJavascript(
+            "window.onOursGoogleAuthFallback && window.onOursGoogleAuthFallback($quoted)",
+            null,
+        )
+    }
+
     val googleAccountLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -168,20 +239,17 @@ fun OursWebShellScreen(
             if (prefs.userName.isNullOrBlank() && displayName.isNotBlank()) {
                 prefs.userName = displayName
             }
-            val payload = JSONObject().apply {
-                put("email", email)
-                put("name", displayName)
-                put("provider", "google-android")
-            }.toString()
-            webViewRef?.evaluateJavascript(
-                "window.onOursGoogleAuth && window.onOursGoogleAuth($payload)",
-                null,
+            dispatchGoogleAuthPayload(
+                JSONObject().apply {
+                    put("email", email)
+                    put("name", displayName)
+                    put("provider", "google-android")
+                },
             )
+        } else if (result.resultCode == Activity.RESULT_CANCELED) {
+            dispatchGoogleAuthFallback("cancelled")
         } else {
-            webViewRef?.evaluateJavascript(
-                "window.onOursGoogleAuthFallback && window.onOursGoogleAuthFallback()",
-                null,
-            )
+            dispatchGoogleAuthFallback("unavailable")
         }
     }
 
@@ -214,22 +282,88 @@ fun OursWebShellScreen(
                 view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
             },
             onSignInWithGoogle = {
-                runCatching {
-                    val intent = AccountManager.newChooseAccountIntent(
-                        null,
-                        null,
-                        arrayOf("com.google"),
-                        null,
-                        null,
-                        null,
-                        null,
-                    )
-                    googleAccountLauncher.launch(intent)
-                }.onFailure {
-                    webViewRef?.evaluateJavascript(
-                        "window.onOursGoogleAuthFallback && window.onOursGoogleAuthFallback()",
-                        null,
-                    )
+                fun launchLegacyAccountPicker() {
+                    runCatching {
+                        @Suppress("DEPRECATION")
+                        val intent = AccountManager.newChooseAccountIntent(
+                            null,
+                            null,
+                            arrayOf("com.google"),
+                            false,
+                            null,
+                            null,
+                            null,
+                            null,
+                        )
+                        googleAccountLauncher.launch(intent)
+                    }.onFailure {
+                        dispatchGoogleAuthFallback("unavailable")
+                    }
+                }
+
+                coroutineScope.launch {
+                    val clientId = withContext(Dispatchers.IO) {
+                        fetchGoogleWebClientId(prefs.serverUrl)
+                    }
+                    val activity = context.findActivity()
+                    if (clientId.isNotBlank() && activity != null) {
+                        val cm = CredentialManager.create(activity)
+                        val signInWithGoogleOpt = GetSignInWithGoogleOption.Builder(clientId).build()
+                        val credResult = runCatching {
+                            cm.getCredential(
+                                context = activity,
+                                request = GetCredentialRequest.Builder()
+                                    .addCredentialOption(signInWithGoogleOpt)
+                                    .build(),
+                            )
+                        }.recoverCatching { firstErr ->
+                            if (firstErr is NoCredentialException) {
+                                val fallbackOpt = GetGoogleIdOption.Builder()
+                                    .setFilterByAuthorizedAccounts(false)
+                                    .setServerClientId(clientId)
+                                    .setAutoSelectEnabled(false)
+                                    .build()
+                                cm.getCredential(
+                                    context = activity,
+                                    request = GetCredentialRequest.Builder()
+                                        .addCredentialOption(fallbackOpt)
+                                        .build(),
+                                )
+                            } else {
+                                throw firstErr
+                            }
+                        }
+
+                        credResult.onSuccess { response ->
+                            val cred = response.credential
+                            if (cred is CustomCredential &&
+                                cred.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                            ) {
+                                val g = GoogleIdTokenCredential.createFrom(cred.data)
+                                val email = g.email?.trim().orEmpty()
+                                val displayName = g.displayName?.trim().orEmpty().ifBlank {
+                                    email.substringBefore('@').ifBlank { "Member" }
+                                }
+                                if (email.isNotBlank()) prefs.userEmail = email
+                                if (displayName.isNotBlank()) prefs.userName = displayName
+                                dispatchGoogleAuthPayload(
+                                    JSONObject().apply {
+                                        put("email", email)
+                                        put("name", displayName)
+                                        put("id_token", g.idToken)
+                                        put("provider", "google-credential-manager")
+                                    },
+                                )
+                                return@launch
+                            }
+                        }.onFailure { err ->
+                            if (err is GetCredentialCancellationException) {
+                                dispatchGoogleAuthFallback("cancelled")
+                                return@launch
+                            }
+                        }
+                    }
+                    launchLegacyAccountPicker()
                 }
             },
             isTrustedOrigin = {
@@ -262,7 +396,11 @@ fun OursWebShellScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(canvasComposeColor),
+    ) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -271,19 +409,19 @@ fun OursWebShellScreen(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT,
                     )
-                    setBackgroundColor(AndroidColor.TRANSPARENT)
+                    setBackgroundColor(canvasAndroidColor)
 
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
                         databaseEnabled = true
                         mediaPlaybackRequiresUserGesture = false
-                        allowFileAccess = true
-                        allowContentAccess = true
+                        allowFileAccess = false
+                        allowContentAccess = false
                         allowFileAccessFromFileURLs = false
                         allowUniversalAccessFromFileURLs = false
                         cacheMode = WebSettings.LOAD_DEFAULT
-                        mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                        mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                         useWideViewPort = true
                         loadWithOverviewMode = true
                         setSupportZoom(false)
@@ -292,6 +430,26 @@ fun OursWebShellScreen(
                     }
 
                     addJavascriptInterface(bridge, "OursNative")
+
+                    fun applySafeInsets(wv: WebView, insetsCompat: WindowInsetsCompat?) {
+                        val bars = insetsCompat?.getInsets(
+                            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+                        ) ?: return
+                        val density = wv.resources.displayMetrics.density.coerceAtLeast(1f)
+                        val topCss = kotlin.math.ceil(bars.top / density.toDouble()).toInt()
+                        val bottomCss = kotlin.math.ceil(bars.bottom / density.toDouble()).toInt()
+                        bridge.updateSafeInsets(topCss, bottomCss)
+                        wv.evaluateJavascript(
+                            "document.documentElement.style.setProperty('--safe-top','${topCss}px');" +
+                                "document.documentElement.style.setProperty('--safe-bottom','${bottomCss}px');",
+                            null,
+                        )
+                    }
+
+                    ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+                        applySafeInsets(this, insets)
+                        insets
+                    }
 
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
@@ -303,16 +461,20 @@ fun OursWebShellScreen(
                             if (isAllowedWebOrigin(targetUri.toString(), prefs.serverUrl)) {
                                 return false
                             }
-                            runCatching {
-                                ctx.startActivity(
-                                    Intent(Intent.ACTION_VIEW, targetUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                )
+                            val scheme = targetUri.scheme?.lowercase()
+                            if (scheme == "https" || scheme == "http" || scheme == "mailto" || scheme == "tel") {
+                                runCatching {
+                                    ctx.startActivity(
+                                        Intent(Intent.ACTION_VIEW, targetUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
                             }
                             return true
                         }
 
                         override fun onPageFinished(view: WebView?, url: String?) {
                             canGoBack = view?.canGoBack() == true
+                            view?.let { applySafeInsets(it, ViewCompat.getRootWindowInsets(it)) }
                         }
 
                         override fun onReceivedError(
@@ -415,7 +577,6 @@ fun OursWebShellScreen(
                         }
                     }
 
-                    clearCache(false)
                     webViewRef = this
                 }
             },
@@ -424,8 +585,16 @@ fun OursWebShellScreen(
 
     LaunchedEffect(webViewRef) {
         val wv = webViewRef ?: return@LaunchedEffect
+        val configured = prefs.serverUrl.trim().trimEnd('/')
+        if ((configured.startsWith("https://") || configured.startsWith("http://")) &&
+            !configured.contains("trycloudflare.com") &&
+            (BuildConfig.DEBUG || (!configured.contains("127.0.0.1") && !configured.contains(":8080")))
+        ) {
+            wv.loadUrl(buildLiveUrl(configured))
+            return@LaunchedEffect
+        }
         val reachable = withContext(Dispatchers.IO) {
-            resolveReachableServerUrl(prefs.serverUrl)
+            resolveReachableServerUrl(configured)
         }
         if (reachable != null) {
             prefs.serverUrl = reachable
