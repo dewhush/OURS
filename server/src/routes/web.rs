@@ -15,6 +15,10 @@ const EMBED_TOKENS_HTML: &str = include_str!("../../../web/tokens-preview.html")
 const EMBED_TOKENS_JS: &str = include_str!("../../../web/tokens-preview.js");
 const EMBED_ASSETS_HTML: &str = include_str!("../../../web/assets-preview.html");
 const EMBED_ASSETS_JS: &str = include_str!("../../../web/assets-preview.js");
+const EMBED_COMPONENTS_CSS: &str = include_str!("../../../web/components.css");
+const EMBED_COMPONENTS_JS: &str = include_str!("../../../web/components.js");
+const EMBED_COMPONENTS_HTML: &str = include_str!("../../../web/components-preview.html");
+const EMBED_COMPONENTS_PREVIEW_JS: &str = include_str!("../../../web/components-preview.js");
 
 async fn serve_web_asset(
     state: &AppState,
@@ -116,6 +120,46 @@ pub async fn assets_preview_js(State(state): State<AppState>) -> Response {
         "assets-preview.js",
         "application/javascript; charset=utf-8",
         EMBED_ASSETS_JS,
+    )
+    .await
+}
+
+pub async fn components_css(State(state): State<AppState>) -> Response {
+    serve_web_asset(
+        &state,
+        "components.css",
+        "text/css; charset=utf-8",
+        EMBED_COMPONENTS_CSS,
+    )
+    .await
+}
+
+pub async fn components_js(State(state): State<AppState>) -> Response {
+    serve_web_asset(
+        &state,
+        "components.js",
+        "application/javascript; charset=utf-8",
+        EMBED_COMPONENTS_JS,
+    )
+    .await
+}
+
+pub async fn components_preview_html(State(state): State<AppState>) -> Response {
+    serve_web_asset(
+        &state,
+        "components-preview.html",
+        "text/html; charset=utf-8",
+        EMBED_COMPONENTS_HTML,
+    )
+    .await
+}
+
+pub async fn components_preview_js(State(state): State<AppState>) -> Response {
+    serve_web_asset(
+        &state,
+        "components-preview.js",
+        "application/javascript; charset=utf-8",
+        EMBED_COMPONENTS_PREVIEW_JS,
     )
     .await
 }
