@@ -11,6 +11,7 @@ use rand::RngCore;
 use serde::Deserialize;
 
 use crate::auth::AuthUser;
+use crate::db::get_partner_id;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -133,7 +134,7 @@ fn default_size() -> String {
 }
 
 pub async fn get_photo(
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     State(state): State<AppState>,
     AxumPath(photo_id): AxumPath<String>,
     Query(query): Query<PhotoQuery>,
@@ -153,17 +154,42 @@ pub async fn get_photo(
         let conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
-        let mut stmt = conn.prepare(
-            "SELECT 1 FROM checkins WHERE photo_id = ?1
+        // Scope every photo lookup to the requesting user and their paired
+        // partner so one authenticated user cannot fetch another pair's media.
+        let allowed: Vec<i64> = {
+            let mut ids = vec![user_id];
+            if let Some(partner_id) = get_partner_id(&conn, user_id)? {
+                ids.push(partner_id);
+            }
+            ids
+        };
+        let placeholders = allowed.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT 1 FROM checkins WHERE photo_id = ?1 AND author_id IN ({placeholders})
              UNION ALL
-             SELECT 1 FROM replies WHERE photo_id = ?1
+             SELECT 1 FROM replies WHERE photo_id = ?1 AND author_id IN ({placeholders})
              UNION ALL
-             SELECT 1 FROM messages WHERE photo_id = ?1
+             SELECT 1 FROM messages WHERE photo_id = ?1 AND author_id IN ({placeholders})
              UNION ALL
-             SELECT 1 FROM users WHERE avatar_photo_id = ?1
-             LIMIT 1",
-        )?;
-        Ok(stmt.exists(rusqlite::params![pid_check])?)
+             SELECT 1 FROM users WHERE avatar_photo_id = ?1 AND id IN ({placeholders})
+             LIMIT 1"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut params_vec: Vec<&dyn rusqlite::ToSql> = vec![&pid_check];
+        for id in &allowed {
+            params_vec.push(id);
+        }
+        for id in &allowed {
+            params_vec.push(id);
+        }
+        for id in &allowed {
+            params_vec.push(id);
+        }
+        for id in &allowed {
+            params_vec.push(id);
+        }
+        let exists = stmt.exists(rusqlite::params_from_iter(params_vec))?;
+        Ok(exists)
     })
     .await??;
 
