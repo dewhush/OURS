@@ -4,6 +4,36 @@
   const PRODUCTION_URL = "https://ours.mnemonic.my.id";
   const PHOTO_CACHE = new Map();
 
+  // Pocket ID (self-hosted OIDC) client for the web app. Public client,
+  // Authorization Code + PKCE (S256), no client secret.
+  const OIDC_WEB_CLIENT_ID = "8ec290d4-2a60-4844-b23e-d6569745ff5b";
+  const OIDC_REDIRECT_URI = "https://ours.mnemonic.my.id/";
+  const OIDC_SCOPE = "openid email profile";
+  const PKCE_VERIFIER_KEY = "ours_oidc_code_verifier";
+  const PKCE_STATE_KEY = "ours_oidc_state";
+
+  function base64UrlEncode(bytes) {
+    let bin = "";
+    bytes.forEach((b) => { bin += String.fromCharCode(b); });
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function randomUrlSafe(length) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    return base64UrlEncode(bytes);
+  }
+
+  async function pkceChallenge(verifier) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    return base64UrlEncode(new Uint8Array(digest));
+  }
+
+  function pickOidcWebClientId(clientIds) {
+    if (!Array.isArray(clientIds) || !clientIds.length) return OIDC_WEB_CLIENT_ID;
+    return clientIds.includes(OIDC_WEB_CLIENT_ID) ? OIDC_WEB_CLIENT_ID : clientIds[0];
+  }
+
   const STRINGS = {
     en: {
       appTagline: "Private for two",
@@ -25,7 +55,6 @@
       spaceNamePlaceholder: "Space name (e.g. Alex & Maya)",
       yourName: "Display name",
       displayNameHint: "Shown to your partner on map & chat",
-      authZeroConfig: "• Sign in with Google\n• Up next: choose your space name & display name\n• Create or join with a 6-character pair code",
       quickSetupChip: "Space & display setup · No email needed",
       backBtn: "Back",
       waitingSpaceSub: "Space \"{space}\" is ready. Share this private invite code to pair.",
@@ -39,7 +68,6 @@
       oneTimeCodeLbl: "YOUR ONE-TIME PAIR CODE",
       copyCode: "Copy pair code",
       codeCopied: "Invite code copied",
-      openLiveSpaceCta: "Open OURS Live Space",
       alreadySetupHint: "This server already has an active pair. Sign in with the registered partner email or join with an invite code.",
       tabMap: "Map",
       tabMemories: "Memories",
@@ -167,9 +195,6 @@
       connected: "Connected",
       unreachable: "Server unreachable",
       signOut: "Sign out & unpair this device",
-      privacySecurity: "Privacy & Security",
-      hardenedBadge: "Hardened",
-      privacySecurityBody: "CSP active · WebView origin-locked · WS 64KB cap",
       photoRequired: "Please select or capture a photo",
       quickReacts: ["Love ya!", "On my way", "Miss u", "Check in"],
       pairLivePill: "Pair · Live",
@@ -178,6 +203,7 @@
       justNow: "just now",
       todayLabel: "Today",
       yesterdayLabel: "Yesterday",
+      refreshPairStatus: "Check partner status",
       enterYourName: "Please enter your name",
       enterValidInviteCode: "Enter a valid invite code",
       nameLocationRequired: "Place name and location required",
@@ -213,10 +239,6 @@
       authBadgeLine: "Private invite-only space · Encrypted",
       footerConnLine: "Connected to {host} · End-to-end verified",
       pairedBadge: "Paired",
-      updateAvatar: "Update profile photo",
-      editDisplayName: "Edit display name",
-      displayNameLabel: "Display name",
-      nameSaved: "Display name updated",
       peopleTab: "People",
       trail24hTab: "24h Trail",
       sharingLiveShort: "Sharing live",
@@ -270,7 +292,6 @@
       spaceNamePlaceholder: "Nama space (mis. Rumah Kita)",
       yourName: "Nama tampilan",
       displayNameHint: "Ditampilkan ke pasangan di peta & obrolan",
-      authZeroConfig: "• Masuk dengan Google\n• Selanjutnya: pilih nama ruang & nama tampilan\n• Buat atau gabung dengan kode pasangan 6 karakter",
       quickSetupChip: "Atur space & nama · Tanpa email",
       backBtn: "Kembali",
       waitingSpaceSub: "Space \"{space}\" siap. Bagikan kode undangan privat ini untuk berpasangan.",
@@ -284,7 +305,6 @@
       oneTimeCodeLbl: "KODE PASANGAN SATU KALI",
       copyCode: "Salin kode pasangan",
       codeCopied: "Kode undangan disalin",
-      openLiveSpaceCta: "Buka Ruang OURS Live",
       alreadySetupHint: "Server ini sudah memiliki pasangan aktif. Masuk dengan email terdaftar atau gabung dengan kode undangan.",
       tabMap: "Peta",
       tabMemories: "Kenangan",
@@ -412,9 +432,6 @@
       connected: "Terhubung",
       unreachable: "Server tidak terjangkau",
       signOut: "Keluar & putuskan perangkat ini",
-      privacySecurity: "Privasi & Keamanan",
-      hardenedBadge: "Terlindungi",
-      privacySecurityBody: "CSP aktif · WebView terkunci origin · WS 64KB",
       photoRequired: "Pilih atau ambil foto terlebih dahulu",
       quickReacts: ["Love ya!", "Otw nih", "Kangen", "Check in"],
       pairLivePill: "Pair · Aktif",
@@ -423,6 +440,7 @@
       justNow: "baru saja",
       todayLabel: "Hari ini",
       yesterdayLabel: "Kemarin",
+      refreshPairStatus: "Periksa status pasangan",
       enterYourName: "Masukkan nama Anda",
       enterValidInviteCode: "Masukkan kode undangan yang valid",
       nameLocationRequired: "Nama tempat dan lokasi wajib diisi",
@@ -458,10 +476,6 @@
       authBadgeLine: "Ruang privat berdua · Terenkripsi",
       footerConnLine: "Terhubung ke {host} · Terverifikasi",
       pairedBadge: "Terhubung",
-      updateAvatar: "Ubah foto profil",
-      editDisplayName: "Edit nama tampilan",
-      displayNameLabel: "Nama tampilan",
-      nameSaved: "Nama tampilan diperbarui",
       peopleTab: "Pasangan",
       trail24hTab: "Rute 24j",
       sharingLiveShort: "Berbagi aktif",
@@ -563,7 +577,7 @@
     onboardingMode: "create",
     onbStep: 1,
     googleAuth: null,
-    serverConfig: { google_client_id: null, setup_key_required: false, version: "" },
+    serverConfig: { google_client_id: null, setup_key_required: false, version: "", oidc: null },
     sharingPaused: false,
     partnerPaused: false,
     meLocation: null,
@@ -599,8 +613,7 @@
     emergencyContact: localStorage.getItem("ours_wa") || "",
     serverStatusOk: null,
     serverStatusText: "",
-    waitingSocket: null,
-    gisLoaded: false
+    waitingSocket: null
   };
 
   let mapInstance = null;
@@ -911,10 +924,11 @@
       state.serverConfig = {
         google_client_id: cfg.google_client_id || null,
         setup_key_required: !!cfg.setup_key_required,
-        version: cfg.version || ""
+        version: cfg.version || "",
+        oidc: cfg.oidc || null
       };
-      if (state.serverConfig.google_client_id && !native) {
-        initGoogleGis();
+      if (!native) {
+        await handleOidcRedirectCallback();
       }
       if (!state.accessToken && prevSetup !== state.serverConfig.setup_key_required) {
         const nameEl = document.getElementById("onb-name");
@@ -926,41 +940,107 @@
     } catch (_) {}
   }
 
-  function initGoogleGis() {
-    const cid = state.serverConfig?.google_client_id;
-    if (!cid || native) return;
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: cid,
-        callback: (response) => {
-          if (response?.credential) {
-            submitGoogleAuthPayload({ id_token: response.credential, provider: "google-gis" });
-          }
-        }
-      });
-      renderGisButtonSlot();
-      return;
-    }
-    if (state.gisLoaded) return;
-    state.gisLoaded = true;
-    const s = document.createElement("script");
-    s.src = "https://accounts.google.com/gsi/client";
-    s.async = true;
-    s.defer = true;
-    s.onload = () => initGoogleGis();
-    document.head.appendChild(s);
+  function oidcConfig() {
+    const cfg = state.serverConfig?.oidc;
+    if (!cfg) return null;
+    // Server returns endpoints under cfg.endpoints.{authorization,token}; accept
+    // the older flat cfg.authorization_endpoint shape too for forward-compat.
+    const authEp = cfg.endpoints?.authorization || cfg.authorization_endpoint;
+    const tokEp = cfg.endpoints?.token || cfg.token_endpoint;
+    if (!authEp || !tokEp) return null;
+    return {
+      issuer: cfg.issuer || "",
+      clientId: pickOidcWebClientId(cfg.client_ids),
+      authorizationEndpoint: authEp,
+      tokenEndpoint: tokEp
+    };
   }
 
-  function renderGisButtonSlot() {
-    const slot = document.getElementById("gis-btn-slot");
-    if (!slot || !window.google?.accounts?.id || !state.serverConfig?.google_client_id) return;
-    slot.innerHTML = "";
-    window.google.accounts.id.renderButton(slot, {
-      theme: resolveIsDark() ? "filled_black" : "outline",
-      size: "large",
-      shape: "pill",
-      width: Math.min(360, slot.clientWidth || 320)
+  function oidcRedirectUri() {
+    if (window.location && !window.location.protocol.startsWith("http")) return OIDC_REDIRECT_URI;
+    const origin = window.location.origin.replace(/\/+$/, "");
+    return origin === "https://ours.mnemonic.my.id" ? OIDC_REDIRECT_URI : origin + "/";
+  }
+
+  async function loginWithPocketId() {
+    haptic();
+    const oidc = oidcConfig();
+    if (!oidc) {
+      showToast(t("googleCancelled"));
+      return;
+    }
+    const verifier = randomUrlSafe(32);
+    const challenge = await pkceChallenge(verifier);
+    const csrfState = randomUrlSafe(16);
+    try {
+      sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+      sessionStorage.setItem(PKCE_STATE_KEY, csrfState);
+    } catch (_) {}
+    const params = new URLSearchParams({
+      client_id: oidc.clientId,
+      redirect_uri: oidcRedirectUri(),
+      response_type: "code",
+      scope: OIDC_SCOPE,
+      state: csrfState,
+      code_challenge: challenge,
+      code_challenge_method: "S256"
     });
+    window.location.href = `${oidc.authorizationEndpoint}?${params.toString()}`;
+  }
+
+  async function handleOidcRedirectCallback() {
+    if (!window.location || !window.location.search) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const returnedState = params.get("state");
+    if (!code || !returnedState) return;
+
+    let expectedState = null;
+    try { expectedState = sessionStorage.getItem(PKCE_STATE_KEY); } catch (_) {}
+    if (!expectedState || expectedState !== returnedState) {
+      showToast(t("googleCancelled"));
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+
+    let verifier = null;
+    try { verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY); } catch (_) {}
+    window.history.replaceState({}, "", window.location.pathname);
+    try {
+      sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+      sessionStorage.removeItem(PKCE_STATE_KEY);
+    } catch (_) {}
+    if (!verifier) {
+      showToast(t("googleCancelled"));
+      return;
+    }
+
+    const oidc = oidcConfig();
+    if (!oidc) {
+      showToast(t("googleCancelled"));
+      return;
+    }
+
+    try {
+      const tokenResp = await fetch(oidc.tokenEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: oidcRedirectUri(),
+          client_id: oidc.clientId,
+          code_verifier: verifier
+        })
+      });
+      const tokenData = await tokenResp.json().catch(() => ({}));
+      if (!tokenResp.ok || !tokenData.id_token) {
+        throw new Error(tokenData?.error_description || tokenData?.error || `Token exchange failed (${tokenResp.status})`);
+      }
+      await submitGoogleAuthPayload({ id_token: tokenData.id_token, provider: "pocket-id" });
+    } catch (err) {
+      showToast(err.message || t("googleCancelled"));
+    }
   }
 
   function updatePartnerDwell(loc) {
@@ -1191,18 +1271,6 @@
         if (img.complete) img.classList.add("photo-loaded");
       } catch (_) {}
     }
-  }
-
-  /* Avatar: uploaded photo (served via /api/photos) → Gmail photo URL → initial */
-  function avatarHtml(user, size, initial) {
-    const s = Number(size) || 44;
-    if (user?.avatar_photo_id) {
-      return `<img data-photo-id="${escapeHtml(user.avatar_photo_id)}" data-photo-size="thumb" width="${s}" height="${s}" alt="" />`;
-    }
-    if (user?.google_picture_url) {
-      return `<img src="${escapeHtml(user.google_picture_url)}" width="${s}" height="${s}" alt="" />`;
-    }
-    return escapeHtml(initial || (user?.name || "O").slice(0, 1).toUpperCase());
   }
 
   /* FigCraft Sliced Vectors & Illustrations */
@@ -1489,20 +1557,18 @@
   }
 
   function triggerGoogleSignIn() {
-    haptic();
-    if (native?.signInWithGoogle) {
-      native.signInWithGoogle();
-      return;
+    // In the Android WebView shell, let the native bridge handle sign-in so it
+    // can use Firebase Google Sign-In (native account picker). The Kotlin side
+    // falls back to Pocket ID OIDC on its own if Firebase is unavailable.
+    if (typeof window.OursNative !== "undefined" && typeof window.OursNative.signInWithGoogle === "function") {
+      try {
+        window.OursNative.signInWithGoogle();
+        return;
+      } catch (e) {
+        // Native call failed (bridge throw) — fall through to web OIDC.
+      }
     }
-    if (window.google?.accounts?.id && state.serverConfig?.google_client_id) {
-      window.google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          proceedToSpaceSetupStep();
-        }
-      });
-      return;
-    }
-    proceedToSpaceSetupStep();
+    loginWithPocketId();
   }
 
   window.onOursGoogleAuth = async (payload) => {
@@ -1531,7 +1597,7 @@
           <span class="ambient-orb orb-bot"></span>
         </div>
         <main class="screen onboarding-wrap" style="background:transparent;">
-          <div class="onb-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <div class="onb-seg-progress">
               <span class="onb-seg-step active"></span>
               <span class="onb-seg-step active"></span>
@@ -1542,7 +1608,6 @@
             </div>
           </div>
 
-          <div class="onb-content">
           ${
             gMail
               ? `<div class="google-pill">
@@ -1571,10 +1636,9 @@
               <span>${escapeHtml(t("waitingTitle"))}</span>
             </div>
             <button class="btn btn-secondary" id="btn-copy-code">${escapeHtml(t("copyCode"))}</button>
-            <button class="btn btn-primary" id="btn-check-partner">${escapeHtml(t("openLiveSpaceCta"))}</button>
+            <button class="btn btn-primary" id="btn-check-partner">${escapeHtml(t("refreshPairStatus"))}</button>
           </div>
           ${!gMail ? `<button class="btn btn-danger" id="btn-reset-onboard">${escapeHtml(t("signOut"))}</button>` : ""}
-          </div>
         </main>
       `;
       document.getElementById("onb-lang-en").onclick = () => { state.lang = "en"; persistAndSyncNative(); render(); };
@@ -1609,41 +1673,37 @@
         <span class="ambient-orb orb-bot"></span>
       </div>
       <main class="screen onboarding-wrap" style="background:transparent;">
-        <div class="onb-header">
-          <div class="onb-topbar" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <div class="onb-seg-progress">
-              <span class="onb-seg-step active"></span>
-              <span class="onb-seg-step ${isStep2 ? "active" : ""}"></span>
-            </div>
-            <div class="segmented" style="width:76px;height:28px;border-radius:14px;padding:2px;gap:2px;">
-              <button class="seg-btn ${state.lang === "en" ? "active" : ""}" id="onb-lang-en" style="min-width:35px;min-height:24px;font-size:11px;padding:0;">EN</button>
-              <button class="seg-btn ${state.lang === "id" ? "active" : ""}" id="onb-lang-id" style="min-width:35px;min-height:24px;font-size:11px;padding:0;">ID</button>
-            </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div class="onb-seg-progress">
+            <span class="onb-seg-step active"></span>
+            <span class="onb-seg-step ${isStep2 ? "active" : ""}"></span>
           </div>
-          <div class="onb-brand" style="display:flex;align-items:center;gap:12px;">
-            <div class="onb-squircle">${oursRingsLogo(40)}</div>
-            <span class="chip chip-action" style="font-size:11px;letter-spacing:0.06em;">
-              ${escapeHtml(isStep2 ? t("stepProgressPair") : t("stepProgressLabel", { n: 1 }))}
-            </span>
+          <div class="segmented" style="width:82px;height:28px;border-radius:14px;">
+            <button class="seg-btn ${state.lang === "en" ? "active" : ""}" id="onb-lang-en" style="min-height:22px;font-size:11px;padding:0;">EN</button>
+            <button class="seg-btn ${state.lang === "id" ? "active" : ""}" id="onb-lang-id" style="min-height:22px;font-size:11px;padding:0;">ID</button>
           </div>
         </div>
 
-        <div class="onb-content">
-          <div>
-            <h1 style="margin:0 0 4px;font-size:28px;font-weight:800;letter-spacing:-0.03em;">${escapeHtml(t("stayCloseTitle"))}</h1>
-            <div class="row-sub">${escapeHtml(t("onboardingSub"))}</div>
-          </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="onb-squircle">${oursRingsLogo(40)}</div>
+          <span class="chip chip-action" style="font-size:11px;letter-spacing:0.06em;">
+            ${escapeHtml(isStep2 ? t("stepProgressPair") : t("stepProgressLabel", { n: 1 }))}
+          </span>
+        </div>
 
-          <div class="card" style="display:flex;flex-direction:column;gap:13px;border-radius:26px;padding:18px;margin-top:5px;">
+        <div>
+          <h1 style="margin:0 0 2px;font-size:28px;font-weight:800;letter-spacing:-0.03em;">${escapeHtml(t("stayCloseTitle"))}</h1>
+          <div class="row-sub">${escapeHtml(t("onboardingSub"))}</div>
+        </div>
+
+        <div class="card" style="display:flex;flex-direction:column;gap:13px;border-radius:26px;padding:18px;margin-top:1px;">
           <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:16px;background:var(--action-soft-grad);border:1px solid var(--border-glass);">
             <span class="live-dot"></span>
             <span style="font-size:12px;font-weight:700;color:var(--ink);">${escapeHtml(t("authBadgeLine"))}</span>
           </div>
           ${
             !isStep2
-              ? `<button class="btn-google" id="btn-google-auth">${googleGIcon()}<span>${escapeHtml(t("continueGoogle"))}</span></button>
-                 <div id="gis-btn-slot" style="display:flex;justify-content:center;"></div>
-                 <div style="font-size:12.5px;line-height:1.6;color:var(--ink-muted);white-space:pre-line;">${escapeHtml(t("authZeroConfig"))}</div>`
+              ? `<button class="btn-google" id="btn-google-auth">${googleGIcon()}<span>${escapeHtml(t("continueGoogle"))}</span></button>`
               : `${
                   gEmail
                     ? `<div class="google-pill">
@@ -1688,7 +1748,6 @@
             ${escapeHtml(t("footerConnLine", { host: apiBase().replace(/^https?:\/\//, "") }))}
           </div>
         </div>
-        </div>
       </main>
     `;
 
@@ -1701,7 +1760,6 @@
     if (gSw) gSw.onclick = triggerGoogleSignIn;
     const backBtn = document.getElementById("btn-onb-back");
     if (backBtn) backBtn.onclick = () => { state.onbStep = 1; render(); };
-    renderGisButtonSlot();
 
     const segC = document.getElementById("seg-create");
     const segJ = document.getElementById("seg-join");
@@ -1820,7 +1878,7 @@
 
     // FigCraft 4.6 Quiet Pause overlay state
     const pauseSheetHtml = `
-      <div class="map-peek-sheet" data-detent="${detent}">
+      <div class="map-peek-sheet">
         <button class="sheet-grabber-btn" id="btn-sheet-cycle" aria-label="Resize sheet"><span class="sheet-grabber-bar"></span></button>
         <div class="chip chip-paused" style="align-self:flex-start;">${escapeHtml(t("pairPausedPill"))}</div>
         <div style="font-size:20px;font-weight:800;letter-spacing:-0.02em;">${escapeHtml(t("quietPauseTitle"))}</div>
@@ -1838,7 +1896,7 @@
     const focusPlace = matchedPlace || state.places[0] || null;
     const focusBellOn = focusPlace ? state.placeBells[String(focusPlace.id)] !== false : true;
     const focusSheetHtml = `
-      <div class="map-peek-sheet" data-detent="${detent === "collapsed" ? "peek" : detent}">
+      <div class="map-peek-sheet">
         <button class="sheet-grabber-btn" id="btn-sheet-cycle" aria-label="Close focus"><span class="sheet-grabber-bar"></span></button>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
           <div style="font-size:22px;font-weight:800;letter-spacing:-0.02em;">${escapeHtml(pName)}</div>
@@ -1913,7 +1971,7 @@
 
     // FigCraft 4.1 Live + Peek Sheet
     const defaultPeekHtml = `
-      <div class="map-peek-sheet" data-detent="${detent}">
+      <div class="map-peek-sheet">
         <button class="sheet-grabber-btn" id="btn-sheet-cycle" aria-label="Resize sheet">
           <span class="sheet-grabber-bar"></span>
         </button>
@@ -1938,12 +1996,14 @@
                 <button type="button" class="peek-partner-main" id="peek-header-tap" aria-label="${escapeHtml(pName)}">
                   <div class="peek-partner-av-wrap">
                     <div class="peek-partner-av">
-                      ${avatarHtml(state.partner, 48, pInit)}
+                      ${state.partner?.avatar_photo_id
+                        ? `<img data-photo-id="${escapeHtml(state.partner.avatar_photo_id)}" data-photo-size="thumb" width="48" height="48" alt="" />`
+                        : escapeHtml(pInit)}
                     </div>
                     <span class="peek-batt-pill tnum" id="peek-batt-val">${escapeHtml(batTxt)}</span>
                   </div>
                   <div style="min-width:0;flex:1;">
-                    <div style="font-weight:600;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(pName)}</div>
+                    <div style="font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(pName)}</div>
                     <div id="peek-statusline" style="font-size:13px;font-weight:600;color:${st.live ? "var(--success)" : "var(--ink-muted)"};">${escapeHtml(statusLine)}</div>
                     <div class="row-sub tnum" id="peek-subline" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(subLine)}</div>
                   </div>
@@ -2022,8 +2082,7 @@
         offscreen && !state.partnerFocused && !state.sharingPaused
           ? `<button class="map-edge-pin" id="btn-edge-partner">
               <span class="map-edge-av">${escapeHtml(pInit)}</span>
-              <span class="tnum">${escapeHtml(offscreen.dist)}</span>
-              <span class="map-edge-chev" style="transform:rotate(${Math.round(offscreen.ang || 0)}deg);" aria-hidden="true">›</span>
+              <span class="tnum">${escapeHtml(offscreen.dist)} ›</span>
             </button>`
           : ""
       }
@@ -2145,7 +2204,6 @@
       </div>
       <div class="map-pin-tail ${isMe ? "me" : ""}"></div>
       ${batPct != null ? `<div class="map-pin-bat tnum"><span class="live-dot"></span><span>${batPct}%</span></div>` : ""}
-      ${speedTxt && isMe === false ? `<div class="map-pin-speed tnum"><span class="live-dot"></span><span>${escapeHtml(speedTxt)}</span></div>` : ""}
       <div class="map-pin-label tnum">${!isMe ? `<span class="live-dot"></span>` : ""}${escapeHtml(pillText)}</div>
       ${subText ? `<div class="map-pin-sub tnum">${escapeHtml(subText)}</div>` : ""}
     `;
@@ -2169,11 +2227,7 @@
     } else if (!inside && !state.partnerOffscreen) {
       const center = mapInstance.getCenter();
       const dist = formatDist(haversineM(center.lat, center.lng, state.partnerLocation.lat, state.partnerLocation.lon));
-      // Directional blue chevron: point toward the partner's bearing from map centre
-      const pt = mapInstance.project(lngLat);
-      const cp = mapInstance.project(center);
-      const ang = Math.atan2(pt.y - cp.y, pt.x - cp.x) * 180 / Math.PI;
-      state.partnerOffscreen = { dist, ang };
+      state.partnerOffscreen = { dist };
       if (!document.getElementById("btn-edge-partner") && !state.sharingPaused) {
         const host = document.getElementById("map-overlay-root") || document.querySelector(".map-canvas-wrap");
         if (host) {
@@ -2181,8 +2235,7 @@
           btn.className = "map-edge-pin";
           btn.id = "btn-edge-partner";
           const pInit = (state.partner?.name || "P").slice(0, 1).toUpperCase();
-          const chevRot = `transform:rotate(${Math.round(ang)}deg);`;
-          btn.innerHTML = `<span class="map-edge-av">${escapeHtml(pInit)}</span><span class="tnum">${escapeHtml(dist)}</span><span class="map-edge-chev" style="${chevRot}" aria-hidden="true">›</span>`;
+          btn.innerHTML = `<span class="map-edge-av">${escapeHtml(pInit)}</span><span class="tnum">${escapeHtml(dist)} ›</span>`;
           btn.onclick = () => {
             if (mapInstance && state.partnerLocation?.lat != null) {
               mapInstance.flyTo({ center: [state.partnerLocation.lon, state.partnerLocation.lat], zoom: 15 });
@@ -2190,21 +2243,6 @@
           };
           host.appendChild(btn);
         }
-      }
-    } else if (!inside && state.partnerOffscreen) {
-      // keep distance + chevron fresh as the map pans while partner stays off-screen
-      const existing = document.getElementById("btn-edge-partner");
-      if (existing) {
-        const center = mapInstance.getCenter();
-        const dist = formatDist(haversineM(center.lat, center.lng, state.partnerLocation.lat, state.partnerLocation.lon));
-        const pt = mapInstance.project(lngLat);
-        const cp = mapInstance.project(center);
-        const ang = Math.atan2(pt.y - cp.y, pt.x - cp.x) * 180 / Math.PI;
-        state.partnerOffscreen = { dist, ang };
-        const distEl = existing.querySelector(".tnum");
-        const chevEl = existing.querySelector(".map-edge-chev");
-        if (distEl) distEl.textContent = dist;
-        if (chevEl) chevEl.style.transform = `rotate(${Math.round(ang)}deg)`;
       }
     }
   }
@@ -2219,18 +2257,18 @@
     const [lon, lat] = centerLonLat;
     const isDark = themeKey === "dark";
     const isTerrain = themeKey === "terrain";
-    const bg = isDark ? "#0C1018" : isTerrain ? "#E8F0E5" : "#FAF9F5";
-    const res = isDark ? "#121723" : isTerrain ? "#E2EBDF" : "#F1F0EA";
-    const park = isDark ? "#10211D" : isTerrain ? "#CCE2C5" : "#E2EDE5";
-    const water = isDark ? "#112238" : isTerrain ? "#BFD9F0" : "#D5E6F5";
-    const waterway = isDark ? "#112238" : isTerrain ? "#A9CCE9" : "#C2DAF0";
-    const bld = isDark ? "#161C29" : isTerrain ? "#D5E0D5" : "#EAE8E0";
+    const bg = isDark ? "#0B0E14" : isTerrain ? "#E8F0E5" : "#FAF9F5";
+    const res = isDark ? "#11161F" : isTerrain ? "#E2EBDF" : "#F1F0EA";
+    const park = isDark ? "#13201B" : isTerrain ? "#CCE2C5" : "#E2EDE5";
+    const water = isDark ? "#101E2E" : isTerrain ? "#BFD9F0" : "#D5E6F5";
+    const waterway = isDark ? "#16293D" : isTerrain ? "#A9CCE9" : "#C2DAF0";
+    const bld = isDark ? "#171D28" : isTerrain ? "#D5E0D5" : "#EAE8E0";
     const bldOut = isDark ? "#222B3A" : isTerrain ? "#C4D1C4" : "#DFDDD4";
-    const roadCasing = isDark ? "#080B10" : isTerrain ? "#C4D0C4" : "#D8DEE8";
-    const roadMinor = isDark ? "#232B3D" : "#FFFFFF";
-    const roadMajor = isDark ? "#232B3D" : "#FFFFFF";
-    const textCol = isDark ? "#8E96A8" : "#3E4856";
-    const textHalo = isDark ? "#0C1018" : "#FAF9F5";
+    const roadCasing = isDark ? "#182030" : isTerrain ? "#C4D0C4" : "#D8DEE8";
+    const roadMinor = isDark ? "#222B3A" : "#FFFFFF";
+    const roadMajor = isDark ? "#2E3A4F" : "#FFFFFF";
+    const textCol = isDark ? "#CBD5E1" : "#3E4856";
+    const textHalo = isDark ? "#0B0E14" : "#FAF9F5";
 
     const streets = [];
     for (let i = -12; i <= 12; i++) {
@@ -2278,8 +2316,8 @@
         { id: "fc-bg", type: "background", paint: { "background-color": bg } },
         { id: "fc-parks-layer", type: "fill", source: "fc-parks", paint: { "fill-color": park, "fill-opacity": 0.45 } },
         { id: "fc-water-layer", type: "line", source: "fc-water", paint: { "line-color": water, "line-width": 14, "line-opacity": 0.55 } },
-        { id: "fc-roads-minor", type: "line", source: "fc-roads", filter: ["==", ["get", "major"], 0], paint: { "line-color": isDark ? "#232B3D" : "#EAE8E0", "line-width": 2, "line-opacity": 0.4 } },
-        { id: "fc-roads-major", type: "line", source: "fc-roads", filter: ["==", ["get", "major"], 1], paint: { "line-color": isDark ? "#232B3D" : "#F5F4EE", "line-width": 4.5, "line-opacity": 0.45 } },
+        { id: "fc-roads-minor", type: "line", source: "fc-roads", filter: ["==", ["get", "major"], 0], paint: { "line-color": isDark ? "#141A26" : "#EAE8E0", "line-width": 2, "line-opacity": 0.4 } },
+        { id: "fc-roads-major", type: "line", source: "fc-roads", filter: ["==", ["get", "major"], 1], paint: { "line-color": isDark ? "#1B2332" : "#F5F4EE", "line-width": 4.5, "line-opacity": 0.45 } },
         { id: "ofm-landuse-res", type: "fill", source: "openmaptiles", "source-layer": "landuse", filter: ["in", "class", "residential", "suburb", "neighbourhood"], paint: { "fill-color": res } },
         { id: "ofm-landcover-grass", type: "fill", source: "openmaptiles", "source-layer": "landcover", filter: ["in", "class", "grass", "wood", "park", "forest"], paint: { "fill-color": park } },
         { id: "ofm-landuse-park", type: "fill", source: "openmaptiles", "source-layer": "landuse", filter: ["in", "class", "park", "cemetery", "pitch", "playground", "recreation_ground"], paint: { "fill-color": park } },
@@ -2722,13 +2760,15 @@
         <div style="display:flex;align-items:center;gap:12px;min-width:0;">
           <div style="position:relative;">
             <div class="avatar-circle">
-              ${avatarHtml(state.partner, 40, pInit)}
+              ${state.partner?.avatar_photo_id
+                ? `<img data-photo-id="${escapeHtml(state.partner.avatar_photo_id)}" data-photo-size="thumb" width="40" height="40" alt="" />`
+                : escapeHtml(pInit)}
             </div>
             <span class="live-dot ${st.dotClass}" style="position:absolute;right:0;bottom:0;width:10px;height:10px;border:2px solid var(--surface);"></span>
           </div>
           <div style="min-width:0;">
-            <h1 class="top-title" style="margin:0;font-size:16px;line-height:1.18;">${escapeHtml(pName)}</h1>
-            <div class="tnum" style="margin-top:2px;font-size:12px;font-weight:600;line-height:1.25;color:${st.live ? "var(--success)" : "var(--ink-muted)"};">${escapeHtml(liveSubtitle)}</div>
+            <h1 class="top-title" style="margin:0;font-size:18px;line-height:1.15;">${escapeHtml(pName)}</h1>
+            <div class="tnum" style="font-size:12px;font-weight:600;color:${st.live ? "var(--success)" : "var(--ink-muted)"};">${escapeHtml(liveSubtitle)}</div>
           </div>
         </div>
         <button class="icon-btn" id="btn-chat-alerts" aria-label="${escapeHtml(t("activityInbox"))}">${svgIcon("bell")}</button>
@@ -2824,66 +2864,59 @@
   function renderSettingsScreen() {
     const placeZonesTxt = t("zonesCount", { n: state.places.length });
     return `
-      <header class="top-bar settings-hdr">
-        <h1 class="top-title settings-hdr-title" style="margin:0;">${escapeHtml(t("settings"))}</h1>
+      <header class="top-bar">
+        <h1 class="top-title" style="margin:0;">${escapeHtml(t("settings"))}</h1>
+        <span class="tnum" style="font-size:12px;font-weight:700;color:var(--success);display:inline-flex;align-items:center;gap:5px;"><span class="live-dot"></span>${escapeHtml(t("liveNow"))}</span>
       </header>
       <main class="screen">
         <div class="page-pad">
-          <div class="card settings-couple-card" style="display:flex;align-items:center;gap:12px;padding:13px 16px;">
-            <label style="cursor:pointer;flex-shrink:0;" title="${escapeHtml(t("updateAvatar"))}">
+          <div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 14px;">
+            <label style="cursor:pointer;flex-shrink:0;" title="Update avatar">
               <input type="file" id="avatar-file-input" accept="image/*" class="hidden" />
-              <div class="avatar-circle avatar-editable" style="width:44px;height:44px;">${avatarHtml(state.me, 44, "")}</div>
+              ${
+                state.me?.avatar_photo_id
+                  ? `<div class="avatar-circle" style="width:44px;height:44px;"><img data-photo-id="${escapeHtml(state.me.avatar_photo_id)}" data-photo-size="thumb" width="44" height="44" alt="" /></div>`
+                  : `<div class="onb-squircle" style="width:44px;height:44px;border-radius:11px;">${oursRingsLogo(34)}</div>`
+              }
             </label>
             <div style="min-width:0;flex:1;">
-              <button type="button" id="btn-edit-name" style="display:inline-flex;align-items:center;gap:6px;max-width:100%;background:none;border:0;padding:0;color:inherit;font:inherit;cursor:pointer;">
-                <span class="settings-couple-name">${escapeHtml(state.me?.name || t("yourName"))}</span>
-                <span aria-hidden="true" class="settings-name-pencil">✎</span>
-              </button>
-              <div class="row-sub settings-couple-email">${escapeHtml(state.me?.email || (state.spaceName ? `${state.me?.name || ""} & ${state.partner?.name || "..."}` : ""))}</div>
+              <div style="font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(state.spaceName || `${state.me?.name || ""} & ${state.partner?.name || "..."}`)}</div>
+              <div class="row-sub" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(state.me?.email || (state.spaceName ? `${state.me?.name || ""} & ${state.partner?.name || "..."}` : ""))}</div>
             </div>
-            ${state.partner ? `<span class="chip chip-success settings-paired-pill"><span class="live-dot"></span>${escapeHtml(t("pairedBadge"))}</span>` : ""}
+            ${state.partner ? `<span class="chip chip-success" style="font-size:11px;"><span class="live-dot"></span>${escapeHtml(t("pairedBadge"))}</span>` : ""}
           </div>
 
-          <div class="split-hero split-hero-tint">
-            <div class="split-hero-body split-hero-tint-body">
-              <div class="hero-badge">
-                <span class="hero-badge-dot" aria-hidden="true"></span>
+          <div class="split-hero">
+            <div class="split-hero-body">
+              <div class="chip chip-success" style="align-self:flex-start;font-size:11px;">
+                <span class="live-dot"></span>
                 <span>${escapeHtml(t("securityHeroBadge"))}</span>
               </div>
-              <div class="split-hero-title split-hero-tint-title">${escapeHtml(t("securityHeroTitle"))}</div>
-              <div class="row-sub split-hero-tint-sub">${escapeHtml(t("securityHeroSub"))}</div>
+              <div class="split-hero-title">${escapeHtml(t("securityHeroTitle"))}</div>
+              <div class="row-sub">${escapeHtml(t("securityHeroSub"))}</div>
             </div>
-            <button class="split-hero-foot split-hero-tint-foot" id="btn-security-audit">
+            <button class="split-hero-foot" id="btn-security-audit">
               <span>${escapeHtml(t("securityHeroCta"))}</span>
-              <span class="hero-foot-arrow" aria-hidden="true">›</span>
+              <span>›</span>
             </button>
           </div>
 
-          <div class="grouped-list settings-app-card">
+          <div class="grouped-list">
             <div class="grouped-row">
               <div style="font-weight:600;">${escapeHtml(t("themeLabel"))}</div>
-              <div class="settings-theme-seg" role="group" aria-label="${escapeHtml(t("themeLabel"))}">
-                <button class="settings-theme-btn ${state.theme === "system" ? "is-active" : ""}" data-theme-set="system">${escapeHtml(t("themeSystem"))}</button>
-                <button class="settings-theme-btn ${state.theme === "light" ? "is-active" : ""}" data-theme-set="light">${escapeHtml(t("themeLight"))}</button>
-                <button class="settings-theme-btn ${state.theme === "dark" ? "is-active" : ""}" data-theme-set="dark">${escapeHtml(t("themeDark"))}</button>
+              <div class="segmented" style="width:198px;">
+                <button class="seg-btn ${state.theme === "system" ? "active-blue" : ""}" style="min-height:26px;font-size:12px;padding:0;" data-theme-set="system">${escapeHtml(t("themeSystem"))}</button>
+                <button class="seg-btn ${state.theme === "light" ? "active-blue" : ""}" style="min-height:26px;font-size:12px;padding:0;" data-theme-set="light">${escapeHtml(t("themeLight"))}</button>
+                <button class="seg-btn ${state.theme === "dark" ? "active-blue" : ""}" style="min-height:26px;font-size:12px;padding:0;" data-theme-set="dark">${escapeHtml(t("themeDark"))}</button>
               </div>
             </div>
-            <div class="settings-row-divider" aria-hidden="true"></div>
             <div class="grouped-row">
               <div style="font-weight:600;">${escapeHtml(t("language"))}</div>
-              <div class="settings-lang-switcher" role="group" aria-label="${escapeHtml(t("language"))}">
-                <span class="settings-lang-slot"><button class="settings-lang-btn ${state.lang === "en" ? "is-active" : ""}" data-lang-set="en">EN</button></span>
-                <span class="settings-lang-slot"><button class="settings-lang-btn ${state.lang === "id" ? "is-active" : ""}" data-lang-set="id">ID</button></span>
+              <div class="segmented" style="width:82px;">
+                <button class="seg-btn ${state.lang === "en" ? "active" : ""}" style="min-height:26px;font-size:12px;padding:0;" data-lang-set="en">EN</button>
+                <button class="seg-btn ${state.lang === "id" ? "active" : ""}" style="min-height:26px;font-size:12px;padding:0;" data-lang-set="id">ID</button>
               </div>
             </div>
-          </div>
-
-          <div class="card settings-privacy-card">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-              <div style="font-weight:600;font-size:14px;color:var(--ink);">${escapeHtml(t("privacySecurity"))}</div>
-              <span class="chip chip-success settings-hardened-badge"><span class="live-dot"></span>${escapeHtml(t("hardenedBadge"))}</span>
-            </div>
-            <div class="row-sub settings-privacy-body">${escapeHtml(t("privacySecurityBody"))}</div>
           </div>
 
           <div class="grouped-list">
@@ -2937,7 +2970,7 @@
             </div>
           </div>
 
-          <button class="btn btn-danger settings-signout" id="btn-logout">${escapeHtml(t("signOut"))}</button>
+          <button class="btn btn-danger" id="btn-logout">${escapeHtml(t("signOut"))}</button>
         </div>
       </main>
     `;
@@ -3187,48 +3220,6 @@
   function openPlacesModal() {
     openModal(buildSavedPlacesContentHtml(true));
     bindPlacesHandlers(true);
-  }
-
-  /* Edit display name modal — posts to /api/me/name */
-  function openEditNameModal() {
-    const current = state.me?.name || "";
-    openModal(`
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <div style="font-size:20px;font-weight:800;letter-spacing:-0.02em;">${escapeHtml(t("editDisplayName"))}</div>
-      </div>
-      <label class="sr-only" for="edit-name-input">${escapeHtml(t("displayNameLabel"))}</label>
-      <input class="input" id="edit-name-input" maxlength="40" placeholder="${escapeHtml(t("displayNameLabel"))}" value="${escapeHtml(current)}" />
-      <div class="row-sub" style="font-size:12px;">${escapeHtml(t("displayNameHint") || "")}</div>
-      <div style="display:flex;gap:10px;">
-        <button class="btn btn-secondary" id="edit-name-cancel">${escapeHtml(t("cancel"))}</button>
-        <button class="btn btn-primary" id="edit-name-save">${escapeHtml(t("save"))}</button>
-      </div>
-    `);
-    const input = document.getElementById("edit-name-input");
-    input.focus();
-    input.select();
-    document.getElementById("edit-name-cancel").onclick = closeModal;
-    document.getElementById("edit-name-save").onclick = async () => {
-      const name = input.value.trim();
-      if (!name) return showToast(t("enterYourName"));
-      const saveBtn = document.getElementById("edit-name-save");
-      saveBtn.disabled = true;
-      try {
-        state.me = await apiFetch("/api/me/name", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name })
-        });
-        persistAndSyncNative();
-        haptic();
-        closeModal();
-        showToast(t("nameSaved"));
-        render();
-      } catch (err) {
-        saveBtn.disabled = false;
-        showToast(err.message);
-      }
-    };
   }
 
   /* FigCraft 6.4 History / 24h Route Modal */
@@ -3938,7 +3929,6 @@
           showToast(err.message);
         }
       };
-      document.getElementById("btn-edit-name")?.addEventListener("click", openEditNameModal);
       document.querySelectorAll("[data-theme-set]").forEach((b) => {
         b.onclick = () => {
           state.theme = b.getAttribute("data-theme-set");

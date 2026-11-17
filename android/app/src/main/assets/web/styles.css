@@ -254,6 +254,8 @@
   --glass-frost-capsule: 15px;
   --border: rgba(250, 249, 245, 0.11);
   --border-glass: rgba(77, 139, 255, 0.24);
+  --glass-card-rim: linear-gradient(180deg, rgba(255, 255, 255, 0.259) 0%, rgba(77, 139, 255, 0.231) 100%);
+  --glass-card-rim-w: 1.25px;
   --shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.35);
   --shadow-capsule: 0 12px 28px -2px rgba(0, 0, 0, 0.451);
   --shadow-md: 0 12px 28px -2px rgba(0, 0, 0, 0.56);
@@ -621,6 +623,13 @@ button:disabled, [aria-disabled="true"] {
 .top-bar.chat-bar {
   min-height: 64px;
   padding: 10px 14px;
+  background: linear-gradient(
+    135deg,
+    rgba(21, 27, 40, 0.722) 0%,
+    rgba(14, 19, 30, 0.651) 100%
+  );
+  border: 1.25px solid rgba(77, 139, 255, 0.32);
+  box-shadow: var(--glass-rim), 0 12px 28px -2px rgba(0, 0, 0, 0.45);
 }
 
 .top-title {
@@ -640,7 +649,7 @@ button:disabled, [aria-disabled="true"] {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  width: min(312px, calc(100vw - 28px));
+  width: min(288px, calc(100vw - 28px));
   height: 62px;
   bottom: calc(var(--safe-bottom) + 12px);
   z-index: 50;
@@ -667,7 +676,7 @@ button:disabled, [aria-disabled="true"] {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 600;
   border-radius: 24px;
   transition: color 160ms var(--spring), transform 120ms var(--spring), background 160ms var(--spring);
@@ -685,8 +694,8 @@ button:disabled, [aria-disabled="true"] {
 }
 
 .nav-item svg {
-  width: 19px;
-  height: 19px;
+  width: 15px;
+  height: 15px;
 }
 
 .nav-unread-dot {
@@ -879,6 +888,30 @@ button:disabled, [aria-disabled="true"] {
   box-shadow: var(--glass-rim), var(--shadow-md);
 }
 
+/* Gradient card rim (FigCraft §07 dark cards): white→blue 180° stroke, 1.25px.
+   Painted on a ::before ring via mask so it respects border-radius.
+   Scoped to .card / .map-peek-sheet; FABs + btn-glass already get a rim
+   via --glass-rim-capsule, so they are excluded to avoid double-painting. */
+.card,
+.map-peek-sheet {
+  position: relative;
+}
+
+.card::before,
+.map-peek-sheet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--glass-card-rim-w);
+  background: var(--glass-card-rim);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 .section-label {
   font-size: 11px;
   font-weight: 700;
@@ -929,6 +962,12 @@ button:disabled, [aria-disabled="true"] {
 .row-sub {
   font-size: 13px;
   color: var(--ink-muted);
+}
+
+/* Onboarding subtitle (node 26505 DS1T): 14.5px #C5CAD6 */
+.onb-content .row-sub {
+  font-size: 14.5px;
+  color: var(--ink-secondary);
 }
 
 /* FigCraft Split-Tint Hero Pattern (Settings #S1-#S9) */
@@ -1006,6 +1045,124 @@ button:disabled, [aria-disabled="true"] {
   background: var(--cta-grad);
   color: var(--on-action);
   box-shadow: var(--shadow-sm);
+}
+
+/* ============ Settings Screen (FigCraft 26728 "Settings (Dark)") ============ */
+/* Header capsule: glass, title left-aligned, no right-side action */
+.top-bar.settings-hdr { justify-content: flex-start; }
+.settings-hdr-title { font-size: 20px; font-weight: 600; color: var(--ink); }
+
+/* Couple card: avatar 44 + name 15/600 + email 12/400 + Paired pill right */
+.settings-couple-card { border-radius: 22px; }
+.settings-couple-name {
+  font-size: 15px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.settings-name-pencil { font-size: 11px; color: var(--action); }
+.settings-couple-email { font-size: 12px; color: var(--ink-secondary); }
+.settings-paired-pill { font-size: 11px; font-weight: 600; }
+
+/* Theme segmented (198×34, r17, bg #090B10, active pill #4D8BFF flat r14) */
+.settings-theme-seg {
+  display: flex; align-items: center; width: 198px; height: 34px;
+  padding: 3px; border-radius: 17px; gap: 3px;
+  background: var(--bg-canvas, #090B10);
+  border: 1px solid var(--line, #283044);
+  flex-shrink: 0;
+}
+.settings-theme-btn {
+  flex: 1; height: 28px; border: none; border-radius: 14px;
+  background: transparent; color: var(--ink-muted);
+  font-family: inherit; font-size: 11px; font-weight: 400;
+  cursor: pointer; padding: 0;
+}
+.settings-theme-btn.is-active {
+  background: var(--action, #4D8BFF);
+  color: var(--on-action, #060B16);
+  font-weight: 600;
+}
+
+/* Language switcher (76×28, r14, bg #1E2433; active slot 35×24 r12 #4D8BFF) */
+.settings-lang-switcher {
+  display: flex; align-items: center; width: 76px; height: 28px;
+  padding: 2px; border-radius: 14px; gap: 2px;
+  background: var(--bg-surface-muted, #1E2433);
+  border: 1px solid var(--line, #283044);
+  flex-shrink: 0;
+}
+.settings-lang-slot { flex: 1; display: flex; }
+.settings-lang-btn {
+  flex: 1; height: 24px; border: none; border-radius: 12px;
+  background: transparent; color: var(--ink-muted);
+  font-family: inherit; font-size: 11px; font-weight: 400;
+  cursor: pointer; padding: 0;
+}
+.settings-lang-btn.is-active {
+  background: var(--action, #4D8BFF);
+  color: var(--on-action, #060B16);
+  font-weight: 600;
+  box-shadow: 0 6px 18px rgba(17, 24, 20, 0.08);
+}
+
+/* App card divider (322×1 #283044) between Theme and Language rows */
+.settings-row-divider {
+  height: 1px; width: 100%; max-width: 322px; margin: 0 auto;
+  background: var(--line, #283044); border: none; flex-shrink: 0;
+}
+
+/* Privacy & Security glass card (358×92 r22, title 14/600, Hardened badge, body 12/400) */
+.settings-privacy-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px 16px; border-radius: 22px;
+}
+.settings-hardened-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 24px; padding: 0 10px; border-radius: 8px;
+  background: var(--success-soft, #0F271E);
+  color: var(--success, #3CD084);
+  font-size: 11px; font-weight: 600; text-transform: none;
+  flex-shrink: 0;
+}
+.settings-privacy-body { font-size: 12px; line-height: 16px; }
+
+/* Privacy hero: body bg #131722, badge dot, title 16.5/600, sub 11.5/15; footer #132240 */
+.split-hero-tint {
+  background: var(--bg-surface, #131722);
+  border: 1px solid var(--line, #283044);
+  border-radius: 22px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+.split-hero-tint-body { padding: 16px; gap: 8px; }
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 12px 4px 10px; border-radius: 11px;
+  background: var(--success-soft, #0F271E);
+  color: var(--success, #3CD084);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; align-self: flex-start;
+}
+.hero-badge-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--success, #3CD084); flex-shrink: 0;
+}
+.split-hero-tint-title { font-size: 16.5px; font-weight: 600; color: var(--ink); letter-spacing: 0; }
+.split-hero-tint-sub { font-size: 11.5px; line-height: 15px; color: var(--ink-muted); }
+.split-hero-tint-foot {
+  background: var(--action-soft, #132240);
+  color: var(--action, #4D8BFF);
+  padding: 13px 16px; border: none;
+  font-size: 13px; font-weight: 600;
+}
+.split-hero-tint-foot:active { filter: brightness(0.96); }
+.hero-foot-arrow { font-size: 16px; line-height: 1; }
+
+/* Sign out (full-width 358×46, r23, bg #2C1217, text 14/600 #FF6B78) */
+.settings-signout {
+  width: 100%; min-height: 46px; border-radius: 23px;
+  background: var(--danger-soft, #2C1217);
+  border: 1px solid rgba(255, 107, 120, 0.25);
+  color: var(--danger, #FF6B78);
+  font-size: 14px; font-weight: 600;
 }
 
 /* Toggle Switch (46x28 FigCraft) */
@@ -1112,11 +1269,11 @@ button:disabled, [aria-disabled="true"] {
 }
 
 .map-switcher-pill {
-  height: 38px;
-  min-width: 186px;
+  height: 36px;
+  min-width: 192px;
   max-width: 244px;
   padding: 0 14px;
-  border-radius: 19px;
+  border-radius: 18px;
   border: 1px solid var(--border-glass);
   background: var(--glass);
   backdrop-filter: blur(22px) saturate(190%);
@@ -1270,6 +1427,18 @@ button:disabled, [aria-disabled="true"] {
   font-weight: 800;
 }
 
+.map-edge-chev {
+  color: var(--action);
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+  margin-left: -2px;
+}
+
 /* FigCraft P2 Map Pins */
 .map-pin {
   display: flex;
@@ -1326,6 +1495,24 @@ button:disabled, [aria-disabled="true"] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.map-pin-speed {
+  z-index: 4;
+  width: 108px;
+  height: 25px;
+  border-radius: 12.5px;
+  background: var(--glass-strong);
+  color: var(--ink);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-sm);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 .map-place-pill {
@@ -1619,9 +1806,21 @@ button:disabled, [aria-disabled="true"] {
 
 .sheet-grabber-bar {
   width: 30px;
-  height: 5px;
+  height: 6px;
   border-radius: 3px;
   background: var(--line);
+}
+
+/* P4 · Peek Sheet — 3 snap detents at 22% / 50% / 92% of viewport height.
+   Heights are opt-in via data-detent so modal sheets (no detent) stay content-hugging. */
+.map-peek-sheet[data-detent="collapsed"] {
+  height: 22dvh;
+}
+.map-peek-sheet[data-detent="peek"] {
+  height: 50dvh;
+}
+.map-peek-sheet[data-detent="expanded"] {
+  height: 92dvh;
 }
 
 .peek-seg {
@@ -1715,8 +1914,8 @@ button:disabled, [aria-disabled="true"] {
 }
 
 .peek-heart-btn {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: none;
   background: var(--action-soft);
@@ -2197,31 +2396,48 @@ button:disabled, [aria-disabled="true"] {
 .bubble {
   padding: 10px 14px;
   border-radius: 18px;
-  font-size: 15px;
+  font-size: 13.5px;
+  line-height: 1.18;
   word-break: break-word;
   display: flex;
   flex-direction: column;
   gap: 5px;
-  border: 1px solid var(--border-glass);
+  border: 1.25px solid transparent;
   box-shadow: var(--glass-rim), var(--shadow-sm);
 }
 
 .bubble.mine {
-  background: var(--action-soft-grad);
+  background: linear-gradient(
+    135deg,
+    rgba(22, 42, 82, 0.8) 0%,
+    rgba(15, 29, 58, 0.753) 100%
+  );
+  border-color: rgba(77, 139, 255, 0.55);
   color: var(--ink);
   border-bottom-right-radius: 6px;
+  box-shadow: var(--glass-rim), 0 12px 28px -2px rgba(0, 0, 0, 0.45);
 }
 
 .bubble.theirs {
-  background: var(--glass-strong);
+  background: linear-gradient(
+    135deg,
+    rgba(22, 27, 41, 0.88) 0%,
+    rgba(16, 21, 32, 0.82) 100%
+  );
+  border-color: rgba(77, 139, 255, 0.33);
   color: var(--ink);
   border-bottom-left-radius: 6px;
+  box-shadow: var(--glass-rim), 0 10px 24px -2px rgba(0, 0, 0, 0.35);
 }
 
 .bubble-inline-time {
   align-self: flex-end;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ink-muted);
+}
+
+.bubble.mine .bubble-inline-time {
+  color: var(--ink-secondary);
 }
 
 .bubble-photo-card {
@@ -2502,21 +2718,38 @@ button:disabled, [aria-disabled="true"] {
   padding: calc(var(--safe-top) + 22px) 22px calc(var(--safe-bottom) + 28px);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   max-width: 440px;
   margin: 0 auto;
   gap: 16px;
   overflow-y: auto;
 }
 
+/* Header (progress bar + lang, then logo + step chip) pinned to the top;
+   the title/sub/card group centres in the space below it. */
+.onb-header {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.onb-content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 16px;
+}
+
 .onb-seg-progress {
   display: flex;
   gap: 8px;
-  width: 180px;
+  width: 240px;
 }
 
 .onb-seg-step {
-  flex: 1;
+  flex: 0 0 116px;
+  width: 116px;
   height: 6px;
   border-radius: 3px;
   background: var(--line);
