@@ -4,6 +4,36 @@
   const PRODUCTION_URL = "https://ours.mnemonic.my.id";
   const PHOTO_CACHE = new Map();
 
+  // Pocket ID (self-hosted OIDC) client for the web app. Public client,
+  // Authorization Code + PKCE (S256), no client secret.
+  const OIDC_WEB_CLIENT_ID = "8ec290d4-2a60-4844-b23e-d6569745ff5b";
+  const OIDC_REDIRECT_URI = "https://ours.mnemonic.my.id/";
+  const OIDC_SCOPE = "openid email profile";
+  const PKCE_VERIFIER_KEY = "ours_oidc_code_verifier";
+  const PKCE_STATE_KEY = "ours_oidc_state";
+
+  function base64UrlEncode(bytes) {
+    let bin = "";
+    bytes.forEach((b) => { bin += String.fromCharCode(b); });
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function randomUrlSafe(length) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    return base64UrlEncode(bytes);
+  }
+
+  async function pkceChallenge(verifier) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    return base64UrlEncode(new Uint8Array(digest));
+  }
+
+  function pickOidcWebClientId(clientIds) {
+    if (!Array.isArray(clientIds) || !clientIds.length) return OIDC_WEB_CLIENT_ID;
+    return clientIds.includes(OIDC_WEB_CLIENT_ID) ? OIDC_WEB_CLIENT_ID : clientIds[0];
+  }
+
   const STRINGS = {
     en: {
       appTagline: "Private for two",
@@ -25,7 +55,6 @@
       spaceNamePlaceholder: "Space name (e.g. Alex & Maya)",
       yourName: "Display name",
       displayNameHint: "Shown to your partner on map & chat",
-      continueNoEmail: "Continue without email",
       quickSetupChip: "Space & display setup · No email needed",
       backBtn: "Back",
       waitingSpaceSub: "Space \"{space}\" is ready. Share this private invite code to pair.",
@@ -263,7 +292,6 @@
       spaceNamePlaceholder: "Nama space (mis. Rumah Kita)",
       yourName: "Nama tampilan",
       displayNameHint: "Ditampilkan ke pasangan di peta & obrolan",
-      continueNoEmail: "Lanjut tanpa email",
       quickSetupChip: "Atur space & nama · Tanpa email",
       backBtn: "Kembali",
       waitingSpaceSub: "Space \"{space}\" siap. Bagikan kode undangan privat ini untuk berpasangan.",
@@ -549,7 +577,7 @@
     onboardingMode: "create",
     onbStep: 1,
     googleAuth: null,
-    serverConfig: { google_client_id: null, setup_key_required: false, version: "" },
+    serverConfig: { google_client_id: null, setup_key_required: false, version: "", oidc: null },
     sharingPaused: false,
     partnerPaused: false,
     meLocation: null,
@@ -585,8 +613,7 @@
     emergencyContact: localStorage.getItem("ours_wa") || "",
     serverStatusOk: null,
     serverStatusText: "",
-    waitingSocket: null,
-    gisLoaded: false
+    waitingSocket: null
   };
 
   let mapInstance = null;
@@ -897,10 +924,11 @@
       state.serverConfig = {
         google_client_id: cfg.google_client_id || null,
         setup_key_required: !!cfg.setup_key_required,
-        version: cfg.version || ""
+        version: cfg.version || "",
+        oidc: cfg.oidc || null
       };
-      if (state.serverConfig.google_client_id && !native) {
-        initGoogleGis();
+      if (!native) {
+        await handleOidcRedirectCallback();
       }
       if (!state.accessToken && prevSetup !== state.serverConfig.setup_key_required) {
         const nameEl = document.getElementById("onb-name");
@@ -912,41 +940,107 @@
     } catch (_) {}
   }
 
-  function initGoogleGis() {
-    const cid = state.serverConfig?.google_client_id;
-    if (!cid || native) return;
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: cid,
-        callback: (response) => {
-          if (response?.credential) {
-            submitGoogleAuthPayload({ id_token: response.credential, provider: "google-gis" });
-          }
-        }
-      });
-      renderGisButtonSlot();
-      return;
-    }
-    if (state.gisLoaded) return;
-    state.gisLoaded = true;
-    const s = document.createElement("script");
-    s.src = "https://accounts.google.com/gsi/client";
-    s.async = true;
-    s.defer = true;
-    s.onload = () => initGoogleGis();
-    document.head.appendChild(s);
+  function oidcConfig() {
+    const cfg = state.serverConfig?.oidc;
+    if (!cfg) return null;
+    // Server returns endpoints under cfg.endpoints.{authorization,token}; accept
+    // the older flat cfg.authorization_endpoint shape too for forward-compat.
+    const authEp = cfg.endpoints?.authorization || cfg.authorization_endpoint;
+    const tokEp = cfg.endpoints?.token || cfg.token_endpoint;
+    if (!authEp || !tokEp) return null;
+    return {
+      issuer: cfg.issuer || "",
+      clientId: pickOidcWebClientId(cfg.client_ids),
+      authorizationEndpoint: authEp,
+      tokenEndpoint: tokEp
+    };
   }
 
-  function renderGisButtonSlot() {
-    const slot = document.getElementById("gis-btn-slot");
-    if (!slot || !window.google?.accounts?.id || !state.serverConfig?.google_client_id) return;
-    slot.innerHTML = "";
-    window.google.accounts.id.renderButton(slot, {
-      theme: resolveIsDark() ? "filled_black" : "outline",
-      size: "large",
-      shape: "pill",
-      width: Math.min(360, slot.clientWidth || 320)
+  function oidcRedirectUri() {
+    if (window.location && !window.location.protocol.startsWith("http")) return OIDC_REDIRECT_URI;
+    const origin = window.location.origin.replace(/\/+$/, "");
+    return origin === "https://ours.mnemonic.my.id" ? OIDC_REDIRECT_URI : origin + "/";
+  }
+
+  async function loginWithPocketId() {
+    haptic();
+    const oidc = oidcConfig();
+    if (!oidc) {
+      showToast(t("googleCancelled"));
+      return;
+    }
+    const verifier = randomUrlSafe(32);
+    const challenge = await pkceChallenge(verifier);
+    const csrfState = randomUrlSafe(16);
+    try {
+      sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+      sessionStorage.setItem(PKCE_STATE_KEY, csrfState);
+    } catch (_) {}
+    const params = new URLSearchParams({
+      client_id: oidc.clientId,
+      redirect_uri: oidcRedirectUri(),
+      response_type: "code",
+      scope: OIDC_SCOPE,
+      state: csrfState,
+      code_challenge: challenge,
+      code_challenge_method: "S256"
     });
+    window.location.href = `${oidc.authorizationEndpoint}?${params.toString()}`;
+  }
+
+  async function handleOidcRedirectCallback() {
+    if (!window.location || !window.location.search) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const returnedState = params.get("state");
+    if (!code || !returnedState) return;
+
+    let expectedState = null;
+    try { expectedState = sessionStorage.getItem(PKCE_STATE_KEY); } catch (_) {}
+    if (!expectedState || expectedState !== returnedState) {
+      showToast(t("googleCancelled"));
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+
+    let verifier = null;
+    try { verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY); } catch (_) {}
+    window.history.replaceState({}, "", window.location.pathname);
+    try {
+      sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+      sessionStorage.removeItem(PKCE_STATE_KEY);
+    } catch (_) {}
+    if (!verifier) {
+      showToast(t("googleCancelled"));
+      return;
+    }
+
+    const oidc = oidcConfig();
+    if (!oidc) {
+      showToast(t("googleCancelled"));
+      return;
+    }
+
+    try {
+      const tokenResp = await fetch(oidc.tokenEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: oidcRedirectUri(),
+          client_id: oidc.clientId,
+          code_verifier: verifier
+        })
+      });
+      const tokenData = await tokenResp.json().catch(() => ({}));
+      if (!tokenResp.ok || !tokenData.id_token) {
+        throw new Error(tokenData?.error_description || tokenData?.error || `Token exchange failed (${tokenResp.status})`);
+      }
+      await submitGoogleAuthPayload({ id_token: tokenData.id_token, provider: "pocket-id" });
+    } catch (err) {
+      showToast(err.message || t("googleCancelled"));
+    }
   }
 
   function updatePartnerDwell(loc) {
@@ -1463,20 +1557,18 @@
   }
 
   function triggerGoogleSignIn() {
-    haptic();
-    if (native?.signInWithGoogle) {
-      native.signInWithGoogle();
-      return;
+    // In the Android WebView shell, let the native bridge handle sign-in so it
+    // can use Firebase Google Sign-In (native account picker). The Kotlin side
+    // falls back to Pocket ID OIDC on its own if Firebase is unavailable.
+    if (typeof window.OursNative !== "undefined" && typeof window.OursNative.signInWithGoogle === "function") {
+      try {
+        window.OursNative.signInWithGoogle();
+        return;
+      } catch (e) {
+        // Native call failed (bridge throw) — fall through to web OIDC.
+      }
     }
-    if (window.google?.accounts?.id && state.serverConfig?.google_client_id) {
-      window.google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          proceedToSpaceSetupStep();
-        }
-      });
-      return;
-    }
-    proceedToSpaceSetupStep();
+    loginWithPocketId();
   }
 
   window.onOursGoogleAuth = async (payload) => {
@@ -1600,20 +1692,18 @@
         </div>
 
         <div>
-          <h1 style="margin:0 0 4px;font-size:28px;font-weight:800;letter-spacing:-0.03em;">${escapeHtml(t("stayCloseTitle"))}</h1>
+          <h1 style="margin:0 0 2px;font-size:28px;font-weight:800;letter-spacing:-0.03em;">${escapeHtml(t("stayCloseTitle"))}</h1>
           <div class="row-sub">${escapeHtml(t("onboardingSub"))}</div>
         </div>
 
-        <div class="card" style="display:flex;flex-direction:column;gap:13px;border-radius:26px;padding:18px;">
+        <div class="card" style="display:flex;flex-direction:column;gap:13px;border-radius:26px;padding:18px;margin-top:1px;">
           <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:16px;background:var(--action-soft-grad);border:1px solid var(--border-glass);">
             <span class="live-dot"></span>
             <span style="font-size:12px;font-weight:700;color:var(--ink);">${escapeHtml(t("authBadgeLine"))}</span>
           </div>
           ${
             !isStep2
-              ? `<button class="btn-google" id="btn-google-auth">${googleGIcon()}<span>${escapeHtml(t("continueGoogle"))}</span></button>
-                 <div id="gis-btn-slot" style="display:flex;justify-content:center;"></div>
-                 <button type="button" class="btn btn-secondary" id="btn-onb-no-email" style="min-height:42px;font-size:13px;">${escapeHtml(t("continueNoEmail"))}</button>`
+              ? `<button class="btn-google" id="btn-google-auth">${googleGIcon()}<span>${escapeHtml(t("continueGoogle"))}</span></button>`
               : `${
                   gEmail
                     ? `<div class="google-pill">
@@ -1668,11 +1758,8 @@
     if (gBtn) gBtn.onclick = triggerGoogleSignIn;
     const gSw = document.getElementById("btn-google-switch");
     if (gSw) gSw.onclick = triggerGoogleSignIn;
-    const skipBtn = document.getElementById("btn-onb-no-email");
-    if (skipBtn) skipBtn.onclick = proceedToSpaceSetupStep;
     const backBtn = document.getElementById("btn-onb-back");
     if (backBtn) backBtn.onclick = () => { state.onbStep = 1; render(); };
-    renderGisButtonSlot();
 
     const segC = document.getElementById("seg-create");
     const segJ = document.getElementById("seg-join");

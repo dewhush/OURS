@@ -4,6 +4,11 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    // Applied only when google-services.json exists (created from the Firebase console).
+    // Until then the app builds without Firebase and uses the Pocket ID OIDC sign-in.
+    if (File("google-services.json").exists()) {
+        id("com.google.gms.google-services")
+    }
 }
 
 val localProps = Properties().apply {
@@ -36,6 +41,8 @@ android {
         val bakedServerUrl = cfg("OURS_SERVER_URL").ifBlank { cfg("ours.defaultServerUrl") }
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$bakedServerUrl\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${cfg("ours.googleWebClientId")}\"")
+        // Pocket ID OIDC ANDROID client (native sign-in). Falls back to /api/config oidc block.
+        buildConfigField("String", "OURS_ANDROID_CLIENT_ID", "\"${cfg("ours.androidClientId")}\"")
     }
 
     signingConfigs {
@@ -112,6 +119,10 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.firebase.messaging)
+    // Firebase Auth — used only when google-services.json is present (the plugin
+    // above is conditionally applied). On a build without it this lib is still
+    // packaged but unused; the sign-in flow picks Pocket ID OIDC instead.
+    implementation(libs.firebase.auth)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.google.identity.googleid)

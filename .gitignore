@@ -5,3 +5,5 @@ local.properties
 *.apk
 /data/
 .idea/
+# Firebase Android config (contains project IDs; app must not ship without it, but never commit)
+google-services.json

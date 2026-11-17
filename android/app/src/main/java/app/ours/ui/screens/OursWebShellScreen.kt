@@ -1,7 +1,6 @@
 package app.ours.ui.screens
 
 import android.Manifest
-import android.accounts.AccountManager
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
@@ -9,6 +8,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -47,17 +47,12 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.NoCredentialException
 import app.ours.BuildConfig
+import app.ours.auth.FirebaseGoogleAuthManager
+import app.ours.auth.FirebaseResult
+import app.ours.auth.OursOidcManager
 import app.ours.bridge.OursNativeBridge
 import app.ours.data.local.PrefsStore
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -69,7 +64,17 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 private const val OFFLINE_FALLBACK_URL = "file:///android_asset/web/index.html"
+private const val TAG = "OursWebShell"
 private const val PRODUCTION_SERVER_URL = "https://ours.mnemonic.my.id"
+
+/** Resolved OIDC configuration used by the native Pocket ID sign-in flow. */
+private data class OidcConfig(
+    val androidClientId: String,
+    val webClientId: String,
+    val issuer: String,
+    val authorizeUrl: String,
+    val tokenUrl: String,
+)
 
 private fun Context.findActivity(): Activity? =
     generateSequence(this) { (it as? ContextWrapper)?.baseContext }
@@ -120,11 +125,16 @@ private fun resolveReachableServerUrl(preferred: String): String? {
     return null
 }
 
-private fun fetchGoogleWebClientId(serverUrl: String): String {
-    BuildConfig.GOOGLE_WEB_CLIENT_ID.trim().takeIf { it.isNotBlank() }?.let { return it }
+private fun fetchOidcConfig(serverUrl: String): OidcConfig {
+    // Local BuildConfig wins so the native flow still works when the server is
+    // unreachable or has not been upgraded to expose the oidc block yet.
+    val bakedAndroidId = OursOidcManager.defaultAndroidClientId()
+    val bakedWebId = BuildConfig.GOOGLE_WEB_CLIENT_ID.trim()
     val base = serverUrl.trim().trimEnd('/')
-    if (!base.startsWith("http://") && !base.startsWith("https://")) return ""
-    return runCatching {
+    if (!base.startsWith("http://") && !base.startsWith("https://")) {
+        return OidcConfig(bakedAndroidId, bakedWebId, "", "", "")
+    }
+    val remote = runCatching {
         val conn = (URL("$base/api/config").openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 1500
@@ -137,8 +147,63 @@ private fun fetchGoogleWebClientId(serverUrl: String): String {
             ""
         }
         conn.disconnect()
-        if (body.isBlank()) "" else JSONObject(body).optString("google_client_id", "").trim()
-    }.getOrDefault("")
+        if (body.isBlank()) null else JSONObject(body)
+    }.getOrNull() ?: return OidcConfig(bakedAndroidId, bakedWebId, "", "", "")
+
+    // Preferred shape: /api/config -> oidc { client_ids: {android, web}, issuer, endpoints{...} }
+    val oidc = remote.optJSONObject("oidc")
+    if (oidc != null) {
+        val ids = oidc.optJSONObject("client_ids")
+        val endpoints = oidc.optJSONObject("endpoints")
+        val issuer = oidc.optString("issuer", "").trim()
+        val derivedAuth = issuer.trimEnd('/').takeIf { it.isNotBlank() }?.plus("/authorize").orEmpty()
+        val derivedToken = issuer.trimEnd('/').takeIf { it.isNotBlank() }?.plus("/api/oidc/token").orEmpty()
+        return OidcConfig(
+            androidClientId = ids?.optString("android", "")?.trim().orEmpty().ifBlank { bakedAndroidId },
+            webClientId = ids?.optString("web", "")?.trim().orEmpty().ifBlank { bakedWebId },
+            issuer = issuer,
+            authorizeUrl = endpoints?.optString("authorization", "")?.trim().orEmpty().ifBlank { derivedAuth },
+            tokenUrl = endpoints?.optString("token", "")?.trim().orEmpty().ifBlank { derivedToken },
+        )
+    }
+
+    // Legacy shape: only google_client_id is published.
+    val legacyWeb = remote.optString("google_client_id", "").trim()
+    return OidcConfig(bakedAndroidId, legacyWeb.ifBlank { bakedWebId }, "", "", "")
+}
+
+/**
+ * Resolves the Google OAuth **web** client ID used by Firebase Google Sign-In.
+ * This is the client registered in the Firebase console (SHA-1 tied) — NOT the
+ * Pocket ID client. Preference: server /api/config oidc.client_ids.web, then the
+ * baked-in BuildConfig.GOOGLE_WEB_CLIENT_ID.
+ */
+private fun fetchFirebaseWebClientId(serverUrl: String): String {
+    val base = serverUrl.trim().trimEnd('/')
+    if (base.startsWith("http://") || base.startsWith("https://")) {
+        val remote = runCatching {
+            val conn = (URL("$base/api/config").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 1500
+                readTimeout = 1500
+            }
+            val code = conn.responseCode
+            val body = if (code in 200..299) {
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                ""
+            }
+            conn.disconnect()
+            if (body.isBlank()) null else JSONObject(body)
+        }.getOrNull()
+        val fromServer = remote
+            ?.optJSONObject("oidc")
+            ?.optJSONObject("client_ids")
+            ?.optString("web", "")
+            ?.trim().orEmpty()
+        if (fromServer.isNotBlank()) return fromServer
+    }
+    return BuildConfig.GOOGLE_WEB_CLIENT_ID.trim()
 }
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -200,18 +265,41 @@ fun OursWebShellScreen(
         isAllowedWebOrigin(wv?.url, prefs.serverUrl)
 
     fun dispatchGoogleAuthPayload(payload: JSONObject) {
-        val wv = webViewRef ?: return
-        if (!isTrustedActivePage(wv)) return
+        val wv = webViewRef
+        if (wv == null) {
+            Log.w(TAG, "googleAuthDispatch: webViewRef is null, payload dropped")
+            return
+        }
+        val trusted = isTrustedActivePage(wv)
+        Log.i(
+            TAG,
+            "googleAuthDispatch: trusted=$trusted wvUrl=${wv.url} " +
+                "keys=${payload.keys().asSequence().toList()}",
+        )
+        if (!trusted) {
+            Log.w(TAG, "googleAuthDispatch: BLOCKED by isTrustedActivePage guard — payload dropped")
+            return
+        }
         val quoted = JSONObject.quote(payload.toString())
         wv.evaluateJavascript(
             "window.onOursGoogleAuth && window.onOursGoogleAuth(JSON.parse($quoted))",
             null,
         )
+        Log.i(TAG, "googleAuthDispatch: evaluateJavascript dispatched to web layer")
     }
 
     fun dispatchGoogleAuthFallback(reason: String = "") {
-        val wv = webViewRef ?: return
-        if (!isTrustedActivePage(wv)) return
+        val wv = webViewRef
+        if (wv == null) {
+            Log.w(TAG, "googleAuthFallback: webViewRef is null, reason=$reason dropped")
+            return
+        }
+        val trusted = isTrustedActivePage(wv)
+        Log.i(TAG, "googleAuthFallback: trusted=$trusted reason=$reason wvUrl=${wv.url}")
+        if (!trusted) {
+            Log.w(TAG, "googleAuthFallback: BLOCKED by isTrustedActivePage guard — dropped")
+            return
+        }
         val quoted = JSONObject.quote(reason)
         wv.evaluateJavascript(
             "window.onOursGoogleAuthFallback && window.onOursGoogleAuthFallback($quoted)",
@@ -219,38 +307,9 @@ fun OursWebShellScreen(
         )
     }
 
-    val googleAccountLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        val email = if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)?.trim().orEmpty()
-        } else {
-            ""
-        }
-        if (email.isNotBlank()) {
-            val displayName = prefs.userName?.takeIf { it.isNotBlank() }
-                ?: email.substringBefore('@')
-                    .replace('.', ' ')
-                    .replace('_', ' ')
-                    .split(' ')
-                    .filter { it.isNotBlank() }
-                    .joinToString(" ") { part -> part.replaceFirstChar { it.uppercaseChar() } }
-            prefs.userEmail = email
-            if (prefs.userName.isNullOrBlank() && displayName.isNotBlank()) {
-                prefs.userName = displayName
-            }
-            dispatchGoogleAuthPayload(
-                JSONObject().apply {
-                    put("email", email)
-                    put("name", displayName)
-                    put("provider", "google-android")
-                },
-            )
-        } else if (result.resultCode == Activity.RESULT_CANCELED) {
-            dispatchGoogleAuthFallback("cancelled")
-        } else {
-            dispatchGoogleAuthFallback("unavailable")
-        }
+    fun persistOidcIdentity(email: String, displayName: String) {
+        if (email.isNotBlank()) prefs.userEmail = email
+        if (displayName.isNotBlank()) prefs.userName = displayName
     }
 
     fun newCameraCaptureUri(): Uri {
@@ -282,88 +341,98 @@ fun OursWebShellScreen(
                 view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
             },
             onSignInWithGoogle = {
-                fun launchLegacyAccountPicker() {
-                    runCatching {
-                        @Suppress("DEPRECATION")
-                        val intent = AccountManager.newChooseAccountIntent(
-                            null,
-                            null,
-                            arrayOf("com.google"),
-                            false,
-                            null,
-                            null,
-                            null,
-                            null,
-                        )
-                        googleAccountLauncher.launch(intent)
-                    }.onFailure {
-                        dispatchGoogleAuthFallback("unavailable")
-                    }
-                }
-
                 coroutineScope.launch {
-                    val clientId = withContext(Dispatchers.IO) {
-                        fetchGoogleWebClientId(prefs.serverUrl)
-                    }
                     val activity = context.findActivity()
-                    if (clientId.isNotBlank() && activity != null) {
-                        val cm = CredentialManager.create(activity)
-                        val signInWithGoogleOpt = GetSignInWithGoogleOption.Builder(clientId).build()
-                        val credResult = runCatching {
-                            cm.getCredential(
-                                context = activity,
-                                request = GetCredentialRequest.Builder()
-                                    .addCredentialOption(signInWithGoogleOpt)
-                                    .build(),
-                            )
-                        }.recoverCatching { firstErr ->
-                            if (firstErr is NoCredentialException) {
-                                val fallbackOpt = GetGoogleIdOption.Builder()
-                                    .setFilterByAuthorizedAccounts(false)
-                                    .setServerClientId(clientId)
-                                    .setAutoSelectEnabled(false)
-                                    .build()
-                                cm.getCredential(
-                                    context = activity,
-                                    request = GetCredentialRequest.Builder()
-                                        .addCredentialOption(fallbackOpt)
-                                        .build(),
-                                )
-                            } else {
-                                throw firstErr
-                            }
-                        }
+                    if (activity == null) {
+                        dispatchGoogleAuthFallback("unavailable")
+                        return@launch
+                    }
 
-                        credResult.onSuccess { response ->
-                            val cred = response.credential
-                            if (cred is CustomCredential &&
-                                cred.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                            ) {
-                                val g = GoogleIdTokenCredential.createFrom(cred.data)
-                                val email = g.email?.trim().orEmpty()
-                                val displayName = g.displayName?.trim().orEmpty().ifBlank {
-                                    email.substringBefore('@').ifBlank { "Member" }
+                    // Preferred path: Firebase Auth Google Sign-In (native Google
+                    // account picker). Only available when google-services.json is
+                    // present so FirebaseApp is initialised.
+                    if (FirebaseGoogleAuthManager.isAvailable(activity)) {
+                        val webClientId = withContext(Dispatchers.IO) {
+                            fetchFirebaseWebClientId(prefs.serverUrl)
+                        }
+                        if (webClientId.isBlank()) {
+                            dispatchGoogleAuthFallback("unavailable")
+                            return@launch
+                        }
+                        when (val fb = FirebaseGoogleAuthManager.signIn(activity, webClientId)) {
+                            is FirebaseResult.Authorized -> {
+                                val displayName = fb.displayName.ifBlank {
+                                    fb.email.substringBefore('@').ifBlank { "Member" }
                                 }
-                                if (email.isNotBlank()) prefs.userEmail = email
-                                if (displayName.isNotBlank()) prefs.userName = displayName
+                                persistOidcIdentity(fb.email, displayName)
                                 dispatchGoogleAuthPayload(
                                     JSONObject().apply {
-                                        put("email", email)
+                                        put("email", fb.email)
                                         put("name", displayName)
-                                        put("id_token", g.idToken)
-                                        put("provider", "google-credential-manager")
+                                        put("id_token", fb.idToken)
+                                        put("provider", "firebase-google")
                                     },
                                 )
-                                return@launch
                             }
-                        }.onFailure { err ->
-                            if (err is GetCredentialCancellationException) {
-                                dispatchGoogleAuthFallback("cancelled")
-                                return@launch
+                            is FirebaseResult.Error -> {
+                                // "cancelled" is a normal user dismiss; surface others too.
+                                dispatchGoogleAuthFallback(fb.reason)
                             }
                         }
+                        return@launch
                     }
-                    launchLegacyAccountPicker()
+
+                    // Fallback path: self-hosted Pocket ID OIDC (no google-services.json).
+                    val config = withContext(Dispatchers.IO) {
+                        fetchOidcConfig(prefs.serverUrl)
+                    }
+                    if (config.androidClientId.isBlank()) {
+                        dispatchGoogleAuthFallback("unavailable")
+                        return@launch
+                    }
+                    try {
+                        OursOidcManager.launchAuthorization(
+                            context = activity,
+                            clientId = config.androidClientId,
+                            authorizeUrl = config.authorizeUrl.ifBlank { OursOidcManager.defaultAuthorizeUrl() },
+                            tokenUrl = config.tokenUrl.ifBlank { OursOidcManager.defaultTokenUrl() },
+                        )
+                    } catch (_: OursOidcManager.OidcException) {
+                        dispatchGoogleAuthFallback("unavailable")
+                        return@launch
+                    }
+
+                    val callback = OursOidcManager.awaitCallback()
+                    if (callback == null) {
+                        // Browser round-trip timed out or was dismissed.
+                        OursOidcManager.reset()
+                        dispatchGoogleAuthFallback("cancelled")
+                        return@launch
+                    }
+
+                    val outcome = withContext(Dispatchers.IO) {
+                        OursOidcManager.exchangeCode(callback)
+                    }
+                    when (outcome) {
+                        is OursOidcManager.Result.Authorized -> {
+                            val displayName = outcome.name.ifBlank {
+                                outcome.email.substringBefore('@').ifBlank { "Member" }
+                            }
+                            persistOidcIdentity(outcome.email, displayName)
+                            dispatchGoogleAuthPayload(
+                                JSONObject().apply {
+                                    put("email", outcome.email)
+                                    put("name", displayName)
+                                    put("id_token", outcome.idToken)
+                                    put("provider", "pocket-id")
+                                },
+                            )
+                        }
+                        is OursOidcManager.Result.Error ->
+                            dispatchGoogleAuthFallback(outcome.code)
+                        null ->
+                            dispatchGoogleAuthFallback("unavailable")
+                    }
                 }
             },
             isTrustedOrigin = {

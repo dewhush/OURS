@@ -1,6 +1,7 @@
 package app.ours
 
 import android.Manifest
+import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
@@ -117,6 +118,7 @@ import app.ours.ui.screens.ChatScreen
 import app.ours.ui.screens.MapScreen
 import app.ours.ui.screens.MemoriesScreen
 import app.ours.ui.screens.OnboardingScreen
+import app.ours.auth.OursOidcManager
 import app.ours.ui.screens.OursWebShellScreen
 import app.ours.ui.screens.SettingsScreen
 import app.ours.ui.theme.OursMotion
@@ -136,6 +138,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Cold-start path for the Pocket ID OIDC redirect (ours://callback).
+        OursOidcManager.handleIntent(intent)
 
         val app = application as OursApp
         if (BuildConfig.DEBUG) {
@@ -186,6 +191,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Warm-start path for the Pocket ID OIDC redirect (ours://callback).
+        OursOidcManager.handleIntent(intent)
     }
 }
 
