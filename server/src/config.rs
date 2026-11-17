@@ -9,6 +9,12 @@ pub struct Config {
     pub data_dir: PathBuf,
     pub setup_key: Option<String>,
     pub google_client_id: Option<String>,
+    pub oidc_issuer: Option<String>,
+    pub oidc_client_ids: Vec<String>,
+    pub oidc_android_client_id: Option<String>,
+    pub oidc_web_client_id: Option<String>,
+    pub oidc_jwks_url: Option<String>,
+    pub firebase_project_id: Option<String>,
     pub token_secret: Vec<u8>,
     pub history_days: i64,
     pub stale_minutes: i64,
@@ -63,6 +69,54 @@ impl Config {
             .filter(|s| !s.trim().is_empty())
             .map(PathBuf::from);
 
+        // OIDC (Pocket ID) identity provider. If OURS_OIDC_ISSUER is set, the
+        // server verifies incoming id_tokens against this provider's JWKS and
+        // issuer instead of Google's. Audience is accepted if it matches ANY of
+        // OURS_OIDC_CLIENT_IDS (comma-separated) so web + native clients both work.
+        let oidc_issuer = std::env::var("OURS_OIDC_ISSUER")
+            .ok()
+            .map(|s| s.trim().trim_end_matches('/').to_string())
+            .filter(|s| !s.is_empty());
+        let oidc_client_ids: Vec<String> = std::env::var("OURS_OIDC_CLIENT_IDS")
+            .ok()
+            .map(|s| {
+                s.split(',')
+                    .map(|c| c.trim().to_string())
+                    .filter(|c| !c.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Per-client audiences (also served via /api/config so clients pick their own).
+        let oidc_android_client_id = std::env::var("OURS_OIDC_ANDROID_CLIENT_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let oidc_web_client_id = std::env::var("OURS_OIDC_WEB_CLIENT_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        // Ensure the per-client IDs are part of the accepted-audience set.
+        let mut oidc_client_ids = oidc_client_ids;
+        for id in [&oidc_android_client_id, &oidc_web_client_id] {
+            if let Some(id) = id {
+                if !oidc_client_ids.contains(id) {
+                    oidc_client_ids.push(id.clone());
+                }
+            }
+        }
+        // JWKS URL defaults to <issuer>/.well-known/jwks.json when not set.
+        let oidc_jwks_url = std::env::var("OURS_OIDC_JWKS_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .or_else(|| oidc_issuer.as_ref().map(|i| format!("{i}/.well-known/jwks.json")));
+        // Firebase Auth (Google Sign-In) uses its own issuer + JWKS. If set, the
+        // server ALSO accepts Firebase id_tokens alongside the OIDC provider.
+        let firebase_project_id = std::env::var("OURS_FIREBASE_PROJECT_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
         let web_dir = std::env::var("OURS_WEB_DIR")
             .ok()
             .filter(|s| !s.trim().is_empty())
@@ -89,6 +143,12 @@ impl Config {
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
+            oidc_issuer,
+            oidc_client_ids,
+            oidc_android_client_id,
+            oidc_web_client_id,
+            oidc_jwks_url,
+            firebase_project_id,
             token_secret,
             history_days,
             stale_minutes,

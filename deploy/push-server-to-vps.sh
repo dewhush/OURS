@@ -17,20 +17,31 @@ if [ ! -x "${BIN}" ]; then
 fi
 scp -C "${BIN}" "${HOST}:/tmp/ours-server.new"
 
-echo "==> [3/4] Swapping binary and restarting ours-server (needs sudo)"
+echo "==> [3/4] Swapping binary and restarting ours-server (needs sudo for port <1024 only if bound low; ours runs as user on 8787)"
 ssh "${HOST}" 'bash -s' <<'REMOTE'
 set -euo pipefail
-sudo mv /tmp/ours-server.new /opt/ours/ours-server
-sudo chown mnemonic:mnemonic /opt/ours/ours-server
-sudo chmod 755 /opt/ours/ours-server
-sudo systemctl restart ours-server
+BIN_DIR="${OURS_BIN_DIR:-/home/mnemonic/ours/bin}"
+SVC_USER="${OURS_SVC_USER:-mnemonic}"
+mkdir -p "$BIN_DIR"
+mv /tmp/ours-server.new "$BIN_DIR/ours-server.new"
+# Move into place (best-effort sudo; the live layout is user-owned, no sudo needed)
+if mv "$BIN_DIR/ours-server.new" "$BIN_DIR/ours-server" 2>/dev/null; then
+  :
+else
+  sudo mv "$BIN_DIR/ours-server.new" "$BIN_DIR/ours-server"
+fi
+chown "$SVC_USER:$SVC_USER" "$BIN_DIR/ours-server" 2>/dev/null || sudo chown "$SVC_USER:$SVC_USER" "$BIN_DIR/ours-server"
+chmod 755 "$BIN_DIR/ours-server"
+systemctl --user restart ours-server 2>/dev/null || sudo systemctl restart ours-server
 sleep 1
-systemctl --no-pager --lines=0 status ours-server || true
+systemctl --user --no-pager --lines=0 status ours-server 2>/dev/null || systemctl --no-pager --lines=0 status ours-server || true
 REMOTE
 
 echo "==> [4/4] Verifying health"
+HEALTH_HOST="${OURS_VPS_LAN:-192.168.100.92}"
+HEALTH_PORT="${OURS_VPS_PORT:-8787}"
 for i in 1 2 3 4 5; do
-  if curl -fsS "http://${OURS_VPS_LAN:-192.168.100.92}:8080/health" 2>/dev/null; then
+  if curl -fsS "http://${HEALTH_HOST}:${HEALTH_PORT}/health" 2>/dev/null; then
     echo; echo "Health OK."
     exit 0
   fi

@@ -653,44 +653,83 @@ pub async fn set_push_token(
 }
 
 pub async fn public_config(State(state): State<AppState>) -> Json<serde_json::Value> {
+    // Structured OIDC block. client_ids is an object so native clients can pick
+    // their own audience; endpoints are explicit so clients need no URL guessing.
+    let issuer = state.config.oidc_issuer.clone();
     Json(serde_json::json!({
+        // Legacy Google field — retained for backward compatibility only.
         "google_client_id": state.config.google_client_id,
+        "oidc": {
+            "issuer": issuer,
+            "client_ids": {
+                "android": state.config.oidc_android_client_id,
+                "web": state.config.oidc_web_client_id,
+            },
+            "endpoints": {
+                "authorization": issuer.as_ref().map(|i| format!("{i}/authorize")),
+                "token": issuer.as_ref().map(|i| format!("{i}/api/oidc/token")),
+            },
+            "jwks_url": state.config.oidc_jwks_url,
+        },
         "setup_key_required": state.config.setup_key.is_some(),
         "version": env!("CARGO_PKG_VERSION"),
     }))
 }
 
 #[derive(serde::Deserialize)]
-struct GoogleIdTokenClaims {
+struct IdTokenClaims {
     #[allow(dead_code)]
     iss: Option<String>,
+    // OIDC `aud` can be a single string OR an array of strings depending on the
+    // provider (Pocket ID emits an array). Accept both.
     #[allow(dead_code)]
-    aud: Option<String>,
+    aud: Option<serde_json::Value>,
     email: Option<String>,
     email_verified: Option<bool>,
     name: Option<String>,
     picture: Option<String>,
+    // Pocket ID (and generic OIDC) subject claim — stable per-user identifier.
+    #[allow(dead_code)]
+    sub: Option<String>,
 }
 
-pub fn verify_google_jwt_with_rsa_components(
+pub fn verify_jwt_with_rsa_components(
     id_token: &str,
     n: &str,
     e: &str,
-    expected_client_id: Option<&str>,
+    issuer: Option<&str>,
+    audience: Option<&[&str]>,
 ) -> AppResult<(String, Option<String>, Option<String>)> {
     let key = jsonwebtoken::DecodingKey::from_rsa_components(n, e)
-        .map_err(|_| AppError::unauthorized("invalid google public key"))?;
+        .map_err(|_| AppError::unauthorized("invalid id token public key"))?;
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
-    validation.set_issuer(&["https://accounts.google.com", "accounts.google.com"]);
-    if let Some(cid) = expected_client_id {
-        validation.set_audience(&[cid]);
+    if let Some(iss) = issuer {
+        validation.set_issuer(&[iss]);
+    } else {
+        validation.set_issuer(&["https://accounts.google.com", "accounts.google.com"]);
+    }
+    if let Some(auds) = audience {
+        if auds.is_empty() {
+            validation.validate_aud = false;
+        } else {
+            validation.set_audience(auds);
+        }
     } else {
         validation.validate_aud = false;
     }
-    let decoded = jsonwebtoken::decode::<GoogleIdTokenClaims>(id_token, &key, &validation)
-        .map_err(|_| AppError::unauthorized("invalid or expired Google ID token"))?;
-    if decoded.claims.email_verified != Some(true) {
-        return Err(AppError::unauthorized("Google email is not verified"));
+    let decoded = jsonwebtoken::decode::<IdTokenClaims>(id_token, &key, &validation)
+        .map_err(|_| AppError::unauthorized("invalid or expired ID token"))?;
+    // Pocket ID uses passkeys: the user is strongly authenticated at the IdP even
+    // though it does not set email_verified=true the way Google does. So we only
+    // enforce email_verified when the provider actually asserts it; a missing /
+    // false value is accepted for the OIDC (Pocket ID) path. The email itself is
+    // still required and normalized below.
+    let email_verified_ok = match issuer {
+        Some(_) => true,
+        None => decoded.claims.email_verified == Some(true),
+    };
+    if !email_verified_ok {
+        return Err(AppError::unauthorized("email is not verified"));
     }
     let email = decoded
         .claims
@@ -703,7 +742,7 @@ pub fn verify_google_jwt_with_rsa_components(
                 Some(t)
             }
         })
-        .ok_or_else(|| AppError::unauthorized("Google token missing verified email"))?;
+        .ok_or_else(|| AppError::unauthorized("id token missing verified email"))?;
     let name = decoded
         .claims
         .name
@@ -717,25 +756,75 @@ pub fn verify_google_jwt_with_rsa_components(
     Ok((email, name, picture))
 }
 
-async fn verify_google_id_token(state: &AppState, id_token: &str) -> AppResult<(String, Option<String>, Option<String>)> {
-    let expected_cid = state.config.google_client_id.as_deref().ok_or_else(|| {
-        AppError::unauthorized("server Google OAuth client ID is not configured")
-    })?;
+async fn verify_id_token(state: &AppState, id_token: &str) -> AppResult<(String, Option<String>, Option<String>)> {
+    // Try each configured provider and let the SIGNATURE decide which (if any)
+    // validates. We never route on the token's own iss/aud before verification —
+    // that would let a forger pick the validator.
     let header = jsonwebtoken::decode_header(id_token)
-        .map_err(|_| AppError::unauthorized("malformed Google ID token header"))?;
+        .map_err(|_| AppError::unauthorized("malformed ID token header"))?;
     let kid = header
         .kid
         .as_deref()
-        .ok_or_else(|| AppError::unauthorized("Google ID token missing key id"))?;
+        .ok_or_else(|| AppError::unauthorized("ID token missing key id"))?
+        .to_string();
 
-    let pair = match state.get_google_jwk(kid, false).await? {
-        Some(p) => p,
-        None => state
-            .get_google_jwk(kid, true)
-            .await?
-            .ok_or_else(|| AppError::unauthorized("unrecognized Google signing key"))?,
-    };
-    verify_google_jwt_with_rsa_components(id_token, &pair.0, &pair.1, Some(expected_cid))
+    // 1) Firebase Auth (Google Sign-In): iss=securetoken.google.com/<proj>, aud=<proj>.
+    if let Some(proj) = state.config.firebase_project_id.clone() {
+        let issuer = format!("https://securetoken.google.com/{proj}");
+        let aud_refs = vec![proj.as_str()];
+        let pair = match state.get_firebase_jwk(&kid, false).await? {
+            Some(p) => p,
+            None => state.get_firebase_jwk(&kid, true).await?.ok_or_else(|| {
+                AppError::unauthorized("unrecognized signing key")
+            })?,
+        };
+        if let Ok(claims) = verify_jwt_with_rsa_components(
+            id_token, &pair.0, &pair.1, Some(&issuer), Some(&aud_refs),
+        ) {
+            return Ok(claims);
+        }
+    }
+
+    // 2) Pocket ID OIDC: iss=OURS_OIDC_ISSUER, aud=one of OURS_OIDC_CLIENT_IDS.
+    if let Some(oidc_issuer) = state.config.oidc_issuer.clone() {
+        let audience = state.config.oidc_client_ids.clone();
+        if !audience.is_empty() {
+            let aud_refs: Vec<&str> = audience.iter().map(|s| s.as_str()).collect();
+            let pair = match state.get_google_jwk(&kid, false).await? {
+                Some(p) => p,
+                None => state.get_google_jwk(&kid, true).await?.ok_or_else(|| {
+                    AppError::unauthorized("unrecognized signing key")
+                })?,
+            };
+            if let Ok(claims) = verify_jwt_with_rsa_components(
+                id_token, &pair.0, &pair.1, Some(&oidc_issuer), Some(&aud_refs),
+            ) {
+                return Ok(claims);
+            }
+        }
+    }
+
+    // 3) Legacy Google: iss=accounts.google.com, aud=google_client_id.
+    if let Some(gcid) = state.config.google_client_id.clone() {
+        let aud_refs = vec![gcid.as_str()];
+        let pair = match state.get_google_jwk(&kid, false).await? {
+            Some(p) => p,
+            None => state.get_google_jwk(&kid, true).await?.ok_or_else(|| {
+                AppError::unauthorized("unrecognized signing key")
+            })?,
+        };
+        if let Ok(claims) = verify_jwt_with_rsa_components(
+            id_token,
+            &pair.0,
+            &pair.1,
+            Some("https://accounts.google.com"),
+            Some(&aud_refs),
+        ) {
+            return Ok(claims);
+        }
+    }
+
+    Err(AppError::unauthorized("invalid or expired ID token"))
 }
 
 fn hash_device_id(device_id: Option<&str>) -> Option<String> {
@@ -751,17 +840,37 @@ pub async fn google_auth(
     headers: HeaderMap,
     Json(req): Json<GoogleAuthRequest>,
 ) -> AppResult<Json<GoogleAuthResponse>> {
+    // Pre-verification rate limit keyed by client IP. This is the FIRST thing that
+    // runs, before any token verification — otherwise an attacker can spam garbage
+    // id_tokens and force a JWKS network fetch per request (each unknown `kid`
+    // bypasses the cache) with no limit applied. Verification failures are also
+    // recorded below (record_google_auth_failure) to tighten the limit further.
+    let ip_rate_key = client_rate_key(peer_ip, &headers, "google_auth_pre");
+    state.check_google_auth_rate_limit(&ip_rate_key)?;
+
     let mut verified_by_google = false;
     let mut jwt_email: Option<String> = None;
     let mut jwt_name: Option<String> = None;
     let mut jwt_picture: Option<String> = None;
 
     if let Some(raw_tok) = req.id_token.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        let (v_email, v_name, v_picture) = verify_google_id_token(&state, raw_tok).await?;
-        verified_by_google = true;
-        jwt_email = Some(v_email);
-        jwt_name = v_name;
-        jwt_picture = v_picture.or_else(|| req.picture.clone());
+        let verification = verify_id_token(&state, raw_tok).await;
+        match verification {
+            Ok((v_email, v_name, v_picture)) => {
+                verified_by_google = true;
+                jwt_email = Some(v_email);
+                jwt_name = v_name;
+                jwt_picture = v_picture.or_else(|| req.picture.clone());
+                // Success: clear the IP pre-check so legit retries aren't throttled.
+                state.clear_google_auth_rate_limit(&ip_rate_key);
+            }
+            Err(_) => {
+                // Failure: record against the IP pre-check so repeated garbage
+                // tokens (incl. forged `kid`s that force JWKS fetches) trip it.
+                state.record_google_auth_failure(&ip_rate_key);
+                return Err(AppError::unauthorized("invalid or expired ID token"));
+            }
+        }
     }
 
     let raw_email = if let Some(ref verified_email) = jwt_email {

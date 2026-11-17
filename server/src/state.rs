@@ -62,6 +62,7 @@ pub struct AppState {
     pub fcm: FcmClient,
     pub http_client: reqwest::Client,
     google_jwks: Arc<RwLock<Option<CachedJwks>>>,
+    firebase_jwks: Arc<RwLock<Option<CachedJwks>>>,
     next_ws_id: Arc<AtomicU64>,
     join_failures: SlidingLimiter,
     create_failures: SlidingLimiter,
@@ -82,6 +83,7 @@ impl AppState {
             fcm,
             http_client,
             google_jwks: Arc::new(RwLock::new(None)),
+            firebase_jwks: Arc::new(RwLock::new(None)),
             next_ws_id: Arc::new(AtomicU64::new(1)),
             join_failures: SlidingLimiter::default(),
             create_failures: SlidingLimiter::default(),
@@ -162,6 +164,10 @@ impl AppState {
         self.google_auth_failures.clear(key);
     }
 
+    /// Fetch a signing key by `kid`. Uses the configured OIDC provider's JWKS
+    /// endpoint when `OURS_OIDC_JWKS_URL`/`OURS_OIDC_ISSUER` is set, otherwise
+    /// falls back to Google's certs endpoint. Returns (modulus_n, exponent_e)
+    /// for RSA verification.
     pub async fn get_google_jwk(&self, kid: &str, force_refresh: bool) -> AppResult<Option<(String, String)>> {
         const JWKS_TTL: Duration = Duration::from_secs(3600);
         if !force_refresh {
@@ -174,14 +180,20 @@ impl AppState {
             }
         }
 
+        let jwks_url = self
+            .config
+            .oidc_jwks_url
+            .clone()
+            .unwrap_or_else(|| "https://www.googleapis.com/oauth2/v3/certs".to_string());
+
         let resp = self
             .http_client
-            .get("https://www.googleapis.com/oauth2/v3/certs")
+            .get(&jwks_url)
             .send()
             .await
-            .map_err(|e| AppError::internal(format!("failed to fetch google certs: {e}")))?;
+            .map_err(|e| AppError::internal(format!("failed to fetch jwks from {jwks_url}: {e}")))?;
         if !resp.status().is_success() {
-            return Err(AppError::internal("google certs endpoint error"));
+            return Err(AppError::internal("jwks endpoint error"));
         }
         #[derive(serde::Deserialize)]
         struct JwkEntry {
@@ -205,6 +217,61 @@ impl AppState {
         }
         let found = keys.get(kid).cloned();
         let mut guard = self.google_jwks.write().await;
+        *guard = Some(CachedJwks {
+            keys,
+            fetched_at: Instant::now(),
+        });
+        Ok(found)
+    }
+
+    /// Fetch a Firebase Auth signing key by `kid` from Google's securetoken JWKS
+    /// endpoint. Returns (modulus_n, exponent_e) for RSA verification.
+    pub async fn get_firebase_jwk(&self, kid: &str, force_refresh: bool) -> AppResult<Option<(String, String)>> {
+        const JWKS_TTL: Duration = Duration::from_secs(3600);
+        if !force_refresh {
+            let guard = self.firebase_jwks.read().await;
+            if let Some(cached) = guard.as_ref()
+                && cached.fetched_at.elapsed() < JWKS_TTL
+                && let Some(pair) = cached.keys.get(kid)
+            {
+                return Ok(Some(pair.clone()));
+            }
+        }
+
+        const FIREBASE_JWKS_URL: &str =
+            "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+
+        let resp = self
+            .http_client
+            .get(FIREBASE_JWKS_URL)
+            .send()
+            .await
+            .map_err(|e| AppError::internal(format!("failed to fetch firebase jwks: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(AppError::internal("firebase jwks endpoint error"));
+        }
+        #[derive(serde::Deserialize)]
+        struct JwkEntry {
+            kid: Option<String>,
+            n: Option<String>,
+            e: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct JwksDoc {
+            keys: Vec<JwkEntry>,
+        }
+        let doc: JwksDoc = resp
+            .json()
+            .await
+            .map_err(|e| AppError::internal(format!("invalid firebase jwks json: {e}")))?;
+        let mut keys = HashMap::new();
+        for k in doc.keys {
+            if let (Some(id), Some(n), Some(e)) = (k.kid, k.n, k.e) {
+                keys.insert(id, (n, e));
+            }
+        }
+        let found = keys.get(kid).cloned();
+        let mut guard = self.firebase_jwks.write().await;
         *guard = Some(CachedJwks {
             keys,
             fetched_at: Instant::now(),
