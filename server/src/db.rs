@@ -188,6 +188,7 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
     }
 
     ensure_column(&conn, "users", "avatar_photo_id", "TEXT")?;
+    ensure_column(&conn, "users", "google_picture_url", "TEXT")?;
     ensure_column(&conn, "users", "device_hash", "TEXT")?;
     ensure_column(&conn, "users", "tokens_revoked_before", "INTEGER NOT NULL DEFAULT 0")?;
     ensure_column(&conn, "latest_locations", "activity", "TEXT")?;
@@ -224,7 +225,7 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, col_type: &str) -
 pub fn get_user(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
     Ok(conn
         .query_row(
-            "SELECT id, name, email, avatar_photo_id, created_at FROM users WHERE id = ?1",
+            "SELECT id, name, email, avatar_photo_id, google_picture_url, created_at FROM users WHERE id = ?1",
             params![user_id],
             |row| {
                 Ok(User {
@@ -232,7 +233,8 @@ pub fn get_user(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
                     name: row.get(1)?,
                     email: row.get(2)?,
                     avatar_photo_id: row.get(3)?,
-                    created_at: row.get(4)?,
+                    google_picture_url: row.get(4)?,
+                    created_at: row.get(5)?,
                 })
             },
         )
@@ -242,7 +244,7 @@ pub fn get_user(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
 pub fn get_partner(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
     Ok(conn
         .query_row(
-            "SELECT id, name, email, avatar_photo_id, created_at FROM users WHERE id != ?1 ORDER BY id LIMIT 1",
+            "SELECT id, name, email, avatar_photo_id, google_picture_url, created_at FROM users WHERE id != ?1 ORDER BY id LIMIT 1",
             params![user_id],
             |row| {
                 Ok(User {
@@ -250,7 +252,8 @@ pub fn get_partner(conn: &Connection, user_id: i64) -> AppResult<Option<User>> {
                     name: row.get(1)?,
                     email: row.get(2)?,
                     avatar_photo_id: row.get(3)?,
-                    created_at: row.get(4)?,
+                    google_picture_url: row.get(4)?,
+                    created_at: row.get(5)?,
                 })
             },
         )

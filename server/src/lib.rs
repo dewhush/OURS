@@ -100,6 +100,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/auth/logout", post(routes::pair::logout))
         .route("/api/me", get(routes::pair::get_me))
         .route("/api/me/avatar", post(routes::pair::upload_avatar))
+        .route("/api/me/name", post(routes::pair::update_name))
         .route("/api/push-token", post(routes::pair::set_push_token))
         .route("/api/locations", post(routes::locations::post_locations))
         .route(

@@ -16,7 +16,7 @@ use crate::error::{AppError, AppResult};
 use crate::models::{
     CreatePairRequest, CreatePairResponse, GoogleAuthRequest, GoogleAuthResponse, InviteResponse,
     JoinPairRequest, JoinPairResponse, MeResponse, PairStateResponse, PushTokenRequest,
-    RefreshRequest, Tokens, User,
+    RefreshRequest, Tokens, UpdateNameRequest, User,
 };
 use crate::photos::{MAX_PHOTO_BYTES, PhotoGuard, delete_photo_files, save_jpeg_and_thumb};
 use crate::routes::{FcmPush, WsPush};
@@ -541,6 +541,48 @@ pub async fn upload_avatar(
     Ok(Json(user))
 }
 
+pub async fn update_name(
+    AuthUser(user_id): AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<UpdateNameRequest>,
+) -> AppResult<Json<User>> {
+    let raw_name = req.name.trim();
+    if raw_name.is_empty() || raw_name.chars().count() > 40 {
+        return Err(AppError::bad_request("name must be 1-40 characters"));
+    }
+    let new_name: String = raw_name.chars().take(40).collect();
+    let db = state.db.clone();
+
+    let (user, ws_push) = tokio::task::spawn_blocking(move || -> AppResult<(User, WsPush)> {
+        let mut conn = db
+            .lock()
+            .map_err(|_| AppError::internal("database lock poisoned"))?;
+        let tx = conn.transaction()?;
+
+        tx.execute(
+            "UPDATE users SET name = ?1 WHERE id = ?2",
+            params![new_name, user_id],
+        )?;
+        let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
+        let ws_push = insert_partner_event(
+            &tx,
+            user_id,
+            "name",
+            serde_json::json!({ "user_id": user_id, "name": &new_name }),
+            now_ms(),
+        )?;
+        tx.commit()?;
+        Ok((user, ws_push))
+    })
+    .await??;
+
+    if let Some((recipient_id, ev)) = ws_push {
+        state.push_ws_event(recipient_id, &ev).await;
+    }
+
+    Ok(Json(user))
+}
+
 pub async fn get_me(
     AuthUser(user_id): AuthUser,
     State(state): State<AppState>,
@@ -627,6 +669,7 @@ struct GoogleIdTokenClaims {
     email: Option<String>,
     email_verified: Option<bool>,
     name: Option<String>,
+    picture: Option<String>,
 }
 
 pub fn verify_google_jwt_with_rsa_components(
@@ -634,7 +677,7 @@ pub fn verify_google_jwt_with_rsa_components(
     n: &str,
     e: &str,
     expected_client_id: Option<&str>,
-) -> AppResult<(String, Option<String>)> {
+) -> AppResult<(String, Option<String>, Option<String>)> {
     let key = jsonwebtoken::DecodingKey::from_rsa_components(n, e)
         .map_err(|_| AppError::unauthorized("invalid google public key"))?;
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
@@ -666,10 +709,15 @@ pub fn verify_google_jwt_with_rsa_components(
         .name
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
-    Ok((email, name))
+    let picture = decoded
+        .claims
+        .picture
+        .map(|s| s.trim().to_string())
+        .filter(|s| s.starts_with("https://"));
+    Ok((email, name, picture))
 }
 
-async fn verify_google_id_token(state: &AppState, id_token: &str) -> AppResult<(String, Option<String>)> {
+async fn verify_google_id_token(state: &AppState, id_token: &str) -> AppResult<(String, Option<String>, Option<String>)> {
     let expected_cid = state.config.google_client_id.as_deref().ok_or_else(|| {
         AppError::unauthorized("server Google OAuth client ID is not configured")
     })?;
@@ -706,12 +754,14 @@ pub async fn google_auth(
     let mut verified_by_google = false;
     let mut jwt_email: Option<String> = None;
     let mut jwt_name: Option<String> = None;
+    let mut jwt_picture: Option<String> = None;
 
     if let Some(raw_tok) = req.id_token.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        let (v_email, v_name) = verify_google_id_token(&state, raw_tok).await?;
+        let (v_email, v_name, v_picture) = verify_google_id_token(&state, raw_tok).await?;
         verified_by_google = true;
         jwt_email = Some(v_email);
         jwt_name = v_name;
+        jwt_picture = v_picture.or_else(|| req.picture.clone());
     }
 
     let raw_email = if let Some(ref verified_email) = jwt_email {
@@ -772,6 +822,7 @@ pub async fn google_auth(
         let email_q = email.clone();
         let req_dev_hash = req_device_hash.clone();
         let inv_code = invite_code.clone();
+        let picture_in = jwt_picture.clone();
         tokio::task::spawn_blocking(move || -> AppResult<Option<GoogleAuthResponse>> {
             let mut conn = db
                 .lock()
@@ -838,6 +889,14 @@ pub async fn google_auth(
                 "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
                 params![now, user_id],
             )?;
+            // Refresh the Gmail profile photo URL on verified sign-in, but never
+            // overwrite a photo the user has explicitly uploaded (avatar_photo_id wins).
+            if let Some(ref pic) = picture_in {
+                tx.execute(
+                    "UPDATE users SET google_picture_url = ?1 WHERE id = ?2 AND (google_picture_url IS NULL OR google_picture_url != ?1)",
+                    params![pic, user_id],
+                )?;
+            }
             let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
             let partner = get_partner(&tx, user_id)?;
             let active_invite = if partner.is_none() {
@@ -890,6 +949,7 @@ pub async fn google_auth(
         let rate_key = client_rate_key(peer_ip, &headers, "invite_attempt");
         state.check_join_rate_limit(&rate_key)?;
         let dev_hash = req_device_hash.clone();
+        let picture_in = jwt_picture.clone();
         let res = tokio::task::spawn_blocking(move || -> AppResult<GoogleAuthResponse> {
             let mut conn = db
                 .lock()
@@ -918,8 +978,8 @@ pub async fn google_auth(
                 params![now, code],
             )?;
             tx.execute(
-                "INSERT INTO users (name, email, device_hash, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4)",
-                params![name, Some(email), dev_hash, now],
+                "INSERT INTO users (name, email, device_hash, google_picture_url, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                params![name, Some(email), dev_hash, picture_in, now],
             )?;
             let user_id = tx.last_insert_rowid();
             let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
@@ -974,6 +1034,7 @@ pub async fn google_auth(
 
         let dev_hash = req_device_hash;
         let raw_space_name = req.space_name.clone();
+        let picture_in = jwt_picture;
         let resp = tokio::task::spawn_blocking(move || -> AppResult<GoogleAuthResponse> {
             let mut conn = db
                 .lock()
@@ -988,8 +1049,8 @@ pub async fn google_auth(
             let now = now_ms();
             let space_name = set_space_name(&tx, raw_space_name.as_deref())?;
             tx.execute(
-                "INSERT INTO users (name, email, device_hash, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4)",
-                params![name, Some(email), dev_hash, now],
+                "INSERT INTO users (name, email, device_hash, google_picture_url, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+                params![name, Some(email), dev_hash, picture_in, now],
             )?;
             let user_id = tx.last_insert_rowid();
             let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;

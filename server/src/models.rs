@@ -6,6 +6,7 @@ pub struct User {
     pub name: String,
     pub email: Option<String>,
     pub avatar_photo_id: Option<String>,
+    pub google_picture_url: Option<String>,
     pub created_at: i64,
 }
 
@@ -158,6 +159,14 @@ pub struct GoogleAuthRequest {
     pub invite_code: Option<String>,
     pub setup_key: Option<String>,
     pub auto_create: Option<bool>,
+    /// Gmail profile photo URL from the Google ID token, used to seed the avatar.
+    #[serde(default)]
+    pub picture: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateNameRequest {
+    pub name: String,
 }
 
 #[derive(Serialize)]
