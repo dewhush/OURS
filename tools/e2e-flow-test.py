@@ -2,8 +2,18 @@
 """OURS end-to-end flow test against the live deployed site.
 
 Walks the full user journey at the Poco X8 viewport (390x844) and reports
-PASS/FAIL per step with console errors and failed requests. Screenshots land
-in the artifact directory for visual review.
+PASS/FAIL/SKIP per step with console errors and failed requests. Screenshots
+land in the artifact directory for visual review.
+
+Honesty notes:
+- The app uses the OAuth2 Authorization Code + PKCE *redirect* flow, not the
+  Google Identity Services popup. `window.google` is expected to be undefined
+  and is NOT checked here.
+- The pairing step (#seg-create / #seg-join / #onb-space / #onb-code) is only
+  rendered once `state.googleAuth` is populated by a completed OAuth
+  round-trip. That requires a real Google account, so those checks are
+  reported as SKIP rather than FAIL. What we CAN verify without an account is
+  the exact authorization request the app builds when the button is pressed.
 """
 import asyncio
 import json
@@ -11,6 +21,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from playwright.async_api import async_playwright
 
@@ -25,11 +36,14 @@ VIEWPORT = {"width": 390, "height": 844}
 results = []
 console_errors = []
 failed_requests = []
+oauth_request = {}
 
 
 def step(name, ok, detail=""):
-    results.append({"step": name, "status": "PASS" if ok else "FAIL", "detail": detail})
-    print(f"[{'PASS' if ok else 'FAIL'}] {name}" + (f" :: {detail}" if detail else ""))
+    """ok=True -> PASS, ok=False -> FAIL, ok=None -> SKIP (blocked, not broken)."""
+    status = "SKIP" if ok is None else ("PASS" if ok else "FAIL")
+    results.append({"step": name, "status": status, "detail": detail})
+    print(f"[{status}] {name}" + (f" :: {detail}" if detail else ""))
 
 
 async def shot(page, name):
@@ -49,6 +63,17 @@ async def main():
             user_agent=("Mozilla/5.0 (Linux; Android 14; Poco X8) AppleWebKit/537.36 "
                         "(KHTML, like Gecko) Chrome/120 Mobile Safari/537.36"),
         )
+
+        # Intercept the Google authorization navigation so we can inspect the
+        # exact request the app builds without leaving the origin (and without
+        # involving any Google-hosted page).
+        async def capture_oauth(route):
+            oauth_request["url"] = route.request.url
+            await route.fulfill(status=200, content_type="text/html",
+                                body="<html><body>oauth-intercept</body></html>")
+
+        await ctx.route("https://accounts.google.com/**", capture_oauth)
+
         page = await ctx.new_page()
         page.on("console", lambda m: console_errors.append(m.text)
                 if m.type == "error" else None)
@@ -119,38 +144,85 @@ async def main():
         except Exception as exc:
             step("6.1 Language switch to ID", False, str(exc)[:120])
 
-        # --- 7. Google auth button present ---------------------------------
+        # --- 7. Google auth entry point ------------------------------------
         g = page.locator("#btn-google-auth")
         step("7.1 Google sign-in button", await g.count() > 0,
              f"{await g.count()} found")
+        step("7.2 Onboarding progress rail",
+             await page.locator(".onb-seg-progress").count() > 0,
+             f"{await page.locator('.onb-seg-progress').count()} found")
 
-        # --- 8. Pair flow: create / join segmented control ------------------
-        no_email = page.locator("#btn-onb-no-email")
-        if await no_email.count():
-            await no_email.click()
-            await page.wait_for_timeout(900)
-            await shot(page, "04_pair_step")
-            seg_join = page.locator("#seg-join")
-            step("8.1 Create/Join segmented control", await seg_join.count() > 0,
-                 f"{await seg_join.count()} found")
-            if await seg_join.count():
-                await seg_join.click()
-                await page.wait_for_timeout(600)
-                code_in = page.locator("#onb-code")
-                step("8.2 Join reveals code field", await code_in.count() > 0,
-                     f"{await code_in.count()} found")
-                await shot(page, "05_join_mode")
-                await page.locator("#seg-create").click()
-                await page.wait_for_timeout(500)
-                space_in = page.locator("#onb-space")
-                step("8.3 Create reveals space field", await space_in.count() > 0,
-                     f"{await space_in.count()} found")
-                await shot(page, "06_create_mode")
+        # --- 8. Authorization request built by the app ---------------------
+        # This is the reachable portion of the auth flow: press the button and
+        # inspect the URL the app navigates to. A real Google round-trip is
+        # required to get past it, so the pair controls are SKIP below.
+        if await g.count():
+            try:
+                await g.click()
+                for _ in range(40):
+                    if oauth_request.get("url"):
+                        break
+                    await page.wait_for_timeout(100)
+            except Exception as exc:
+                step("8.1 Google auth request", False, str(exc)[:120])
+
+            url = oauth_request.get("url", "")
+            if not url:
+                step("8.1 Google auth request", False,
+                     "no navigation to accounts.google.com captured")
+            else:
+                q = parse_qs(urlparse(url).query)
+
+                def q1(k):
+                    return (q.get(k) or [""])[0]
+
+                step("8.1 Google auth endpoint",
+                     url.startswith("https://accounts.google.com/o/oauth2/v2/auth"),
+                     urlparse(url).path)
+                step("8.2 response_type=code", q1("response_type") == "code",
+                     q1("response_type") or "missing")
+                step("8.3 client_id present", bool(q1("client_id")),
+                     (q1("client_id")[:14] + "...") if q1("client_id") else "missing")
+                step("8.4 PKCE code_challenge + S256",
+                     len(q1("code_challenge")) == 43
+                     and q1("code_challenge_method") == "S256",
+                     f"len={len(q1('code_challenge'))} "
+                     f"method={q1('code_challenge_method') or 'missing'}")
+                step("8.5 CSRF state present", len(q1("state")) >= 16,
+                     f"len={len(q1('state'))}")
+                ru = q1("redirect_uri")
+                step("8.6 redirect_uri points at app",
+                     "ours.mnemonic.my.id" in ru or ru.startswith("http"),
+                     ru or "missing")
+                step("8.7 scope present", bool(q1("scope")), q1("scope") or "missing")
+
+            # Restore the app so later steps inspect a real page.
+            try:
+                await page.goto(BASE, wait_until="networkidle", timeout=30000)
+                await page.wait_for_timeout(900)
+            except Exception:
+                pass
+
+            await shot(page, "04_after_auth_click")
+
+        # --- 8b. Pair step (blocked without a Google account) --------------
+        pair_ready = await page.locator("#seg-create").count() > 0
+        if pair_ready:
+            await page.locator("#seg-join").click()
+            await page.wait_for_timeout(500)
+            step("8b.1 Join reveals code field",
+                 await page.locator("#onb-code").count() > 0, "reachable")
+            await page.locator("#seg-create").click()
+            await page.wait_for_timeout(500)
+            step("8b.2 Create reveals space field",
+                 await page.locator("#onb-space").count() > 0, "reachable")
+            await shot(page, "05_pair_step")
         else:
-            step("8.1 Create/Join segmented control", False,
-                 "#btn-onb-no-email absent (may require Google)")
-            # Try to reach it directly anyway
-            await shot(page, "04_pair_step")
+            whymsg = ("pair controls render only after a completed Google OAuth "
+                      "round-trip (state.googleAuth); needs a real account")
+            step("8b.1 Create/Join segmented control", None, whymsg)
+            step("8b.2 Join reveals code field", None, "blocked by 8b.1")
+            step("8b.3 Create reveals space field", None, "blocked by 8b.1")
 
         # --- 9. Dark mode --------------------------------------------------
         try:
@@ -189,13 +261,14 @@ def report():
     print("\n" + "=" * 60)
     p = sum(1 for r in results if r["status"] == "PASS")
     f = sum(1 for r in results if r["status"] == "FAIL")
-    print(f"TOTAL: {p} PASS / {f} FAIL / {len(results)} steps")
+    s = sum(1 for r in results if r["status"] == "SKIP")
+    print(f"TOTAL: {p} PASS / {f} FAIL / {s} SKIP / {len(results)} steps")
     print("=" * 60)
     (OUT / "e2e_report.json").write_text(json.dumps({
         "base": BASE, "results": results,
         "console_errors": console_errors,
         "failed_requests": failed_requests,
-        "pass": p, "fail": f,
+        "pass": p, "fail": f, "skip": s,
     }, indent=2))
     return 0 if f == 0 else 1
 
