@@ -55,7 +55,7 @@ async fn security_headers(req: Request, next: Next) -> Response {
     headers.insert(
         "content-security-policy",
         HeaderValue::from_static(
-            "default-src 'self'; font-src 'self'; script-src 'self' https://unpkg.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://tiles.openfreemap.org https://*.basemaps.cartocdn.com https://unpkg.com https://accounts.google.com/gsi/; frame-src 'self' https://accounts.google.com/gsi/; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+            "default-src 'self'; font-src 'self'; script-src 'self' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https:; connect-src 'self' ws: wss: https://tiles.openfreemap.org https://*.basemaps.cartocdn.com https://unpkg.com https://cloudflareinsights.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
         ),
     );
     resp
