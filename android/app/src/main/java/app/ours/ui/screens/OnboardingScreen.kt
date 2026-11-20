@@ -1,10 +1,12 @@
 package app.ours.ui.screens
 
 import android.Manifest
-import android.accounts.AccountManager
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -81,6 +83,11 @@ import app.ours.ui.theme.OursTypography
 import app.ours.util.XiaomiGuideHelper
 import kotlinx.coroutines.launch
 
+private fun Context.findActivity(): Activity? =
+    generateSequence(this) { (it as? ContextWrapper)?.baseContext }
+        .filterIsInstance<Activity>()
+        .firstOrNull()
+
 @Composable
 fun OnboardingScreen(
     state: OursUiState,
@@ -101,7 +108,7 @@ fun OnboardingScreen(
     }
 
     var gmailAddress by remember { mutableStateOf(state.me?.email ?: "") }
-    var serverUrl by remember { mutableStateOf(state.serverUrl.ifBlank { "http://192.168.100.92:8080" }) }
+    var serverUrl by remember { mutableStateOf(state.serverUrl.ifBlank { "http://10.0.2.2:8080" }) }
     var serverStatus by remember { mutableStateOf<String?>(null) }
     var checkingServer by remember { mutableStateOf(false) }
     var showServerSheet by remember { mutableStateOf(false) }
@@ -110,18 +117,31 @@ fun OnboardingScreen(
     var myName by remember { mutableStateOf("") }
     var inviteCodeInput by remember { mutableStateOf("") }
 
-    val googlePickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val picked = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
-            if (!picked.isNullOrBlank()) {
-                gmailAddress = picked
-                if (myName.isBlank()) {
-                    myName = picked.substringBefore("@").replaceFirstChar { it.uppercase() }
-                }
-            }
+    /** Launches native Google Sign-In; on success advances past the connect step. */
+    fun launchGoogleSignIn(modeCreate: Boolean) {
+        val activity = context.findActivity()
+        if (activity == null) {
+            Toast.makeText(context, "Google sign-in unavailable", Toast.LENGTH_SHORT).show()
+            return
         }
+        vm.signInWithGoogle(
+            activity = activity,
+            modeCreate = modeCreate,
+            inviteCode = inviteCodeInput.takeIf { !modeCreate && it.isNotBlank() },
+            onSuccess = {
+                // A session is established (isPaired = true). For brand-new accounts the
+                // `step` remember(state.isPaired) re-keys to the permissions step; for a
+                // returning user who is already onboarded MainActivity leaves this screen.
+            },
+            onError = { msg ->
+                // Non-null failures keep the user on the connect step; the verified
+                // Gmail is prefilled below so the manual pair step still works.
+                if (msg != null) {
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+                vm.gmailAddressFallback?.let { gmailAddress = it }
+            },
+        )
     }
 
     var fineGranted by remember {
@@ -240,19 +260,9 @@ fun OnboardingScreen(
                             OursButton(
                                 text = strings.continueWithGoogle,
                                 variant = OursButtonVariant.Secondary,
-                                onClick = {
-                                    @Suppress("DEPRECATION")
-                                    val intent = AccountManager.newChooseAccountIntent(
-                                        null,
-                                        null,
-                                        arrayOf("com.google"),
-                                        null,
-                                        null,
-                                        null,
-                                        null,
-                                    )
-                                    runCatching { googlePickerLauncher.launch(intent) }
-                                },
+                                loading = state.busy,
+                                enabled = !state.busy,
+                                onClick = { launchGoogleSignIn(modeCreate = true) },
                                 modifier = Modifier.fillMaxWidth(),
                             )
 
@@ -532,7 +542,7 @@ fun OnboardingScreen(
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
                 label = { Text(strings.serverUrlTitle) },
-                placeholder = { Text("http://192.168.100.92:8080") },
+                placeholder = { Text("http://10.0.2.2:8080") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

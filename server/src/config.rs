@@ -9,6 +9,8 @@ pub struct Config {
     pub data_dir: PathBuf,
     pub setup_key: Option<String>,
     pub google_client_id: Option<String>,
+    pub google_client_secret: Option<String>,
+    pub google_redirect_uri: Option<String>,
     pub oidc_issuer: Option<String>,
     pub oidc_client_ids: Vec<String>,
     pub oidc_android_client_id: Option<String>,
@@ -98,10 +100,9 @@ impl Config {
         // Ensure the per-client IDs are part of the accepted-audience set.
         let mut oidc_client_ids = oidc_client_ids;
         for id in [&oidc_android_client_id, &oidc_web_client_id] {
-            if let Some(id) = id {
-                if !oidc_client_ids.contains(id) {
-                    oidc_client_ids.push(id.clone());
-                }
+            let Some(id) = id else { continue };
+            if !oidc_client_ids.contains(id) {
+                oidc_client_ids.push(id.clone());
             }
         }
         // JWKS URL defaults to <issuer>/.well-known/jwks.json when not set.
@@ -135,11 +136,22 @@ impl Config {
                 }
             });
 
-        Ok(Self {
+        let config = Self {
             bind,
             data_dir,
             setup_key,
             google_client_id: std::env::var("OURS_GOOGLE_CLIENT_ID")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            // Google's Web-application client requires client_secret at the token
+            // endpoint even when PKCE is used, so the server holds it and performs
+            // the code exchange. Never exposed to the frontend.
+            google_client_secret: std::env::var("OURS_GOOGLE_CLIENT_SECRET")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            google_redirect_uri: std::env::var("OURS_GOOGLE_REDIRECT_URI")
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
@@ -154,7 +166,25 @@ impl Config {
             stale_minutes,
             fcm_service_account,
             web_dir,
-        })
+        };
+
+        // First-run claim race guard: a deployment reachable beyond loopback MUST
+        // set OURS_SETUP_KEY, or anyone on the network can claim the owner slot
+        // before the real owner does (and get the second-slot invite code).
+        let bind_loopback_only = config
+            .bind
+            .split(':')
+            .next()
+            .is_some_and(|host| host == "127.0.0.1" || host == "::1" || host == "localhost");
+        if !bind_loopback_only && config.setup_key.is_none() {
+            return Err(
+                "OURS_SETUP_KEY must be set when the server binds beyond loopback \
+                 (first-run claim protection). Set a long random value and restart."
+                    .to_string(),
+            );
+        }
+
+        Ok(config)
     }
 }
 

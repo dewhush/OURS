@@ -1,10 +1,14 @@
 package app.ours.ui
 
+import android.app.Activity
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.ours.OursApp
+import app.ours.BuildConfig
+import app.ours.auth.FirebaseGoogleAuthManager
+import app.ours.auth.FirebaseResult
 import app.ours.data.api.ApiException
 import app.ours.data.api.ChatMessageDto
 import app.ours.data.api.CheckInDto
@@ -16,6 +20,7 @@ import app.ours.data.api.EventDto
 import app.ours.data.api.EventHighlightData
 import app.ours.data.api.EventReplyData
 import app.ours.data.api.EventSharingData
+import app.ours.data.api.GoogleAuthRequestDto
 import app.ours.data.api.LocationPointDto
 import app.ours.data.api.OursJson
 import app.ours.data.api.PartnerLocationDto
@@ -291,6 +296,102 @@ class OursViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    /**
+     * Native Google Sign-In. Runs the Credential Manager account picker via
+     * [FirebaseGoogleAuthManager] (Firebase exchanges the Google ID token for a
+     * Firebase ID token the server can verify), then POSTs it to /api/auth/google.
+     *
+     * @param modeCreate true = create a new pair (auto_create); false = join an
+     *                   existing one with [inviteCode].
+     * @param onSuccess called once a session is established; the caller advances
+     *                  the onboarding step.
+     * @param onError called when sign-in did not produce a session. The verified
+     *                Gmail (when any) is left in the gmail field so the manual pair
+     *                step can still complete via invite code / setup key.
+     */
+    fun signInWithGoogle(
+        activity: Activity,
+        modeCreate: Boolean,
+        inviteCode: String? = null,
+        onSuccess: () -> Unit,
+        onError: (String?) -> Unit,
+    ) {
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, errorMessage = null) }
+            val webClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID.trim()
+            if (webClientId.isBlank()) {
+                _state.update { it.copy(busy = false, errorMessage = "Google sign-in is not configured") }
+                return@launch
+            }
+            val fb = FirebaseGoogleAuthManager.signIn(activity, webClientId)
+            if (fb !is FirebaseResult.Authorized) {
+                val reason = (fb as? FirebaseResult.Error)?.reason ?: "unknown"
+                _state.update { it.copy(busy = false) }
+                onError(if (reason == "cancelled") null else reason)
+                return@launch
+            }
+
+            // Carry the verified Gmail into the manual pair step for any non-session outcome.
+            if (fb.email.isNotBlank()) gmailAddressFallback = fb.email
+
+            val displayName = fb.displayName.ifBlank {
+                fb.email.substringBefore('@').replaceFirstChar { it.uppercase() }.ifBlank { "Member" }
+            }
+            val req = GoogleAuthRequestDto(
+                idToken = fb.idToken,
+                email = fb.email,
+                name = displayName,
+                picture = fb.photoUrl.takeIf { it.isNotBlank() },
+                inviteCode = inviteCode?.trim()?.takeIf { it.isNotBlank() },
+                autoCreate = modeCreate,
+            )
+            runCatching { api.googleAuth(prefs.serverUrl, req) }
+                .onSuccess { resp ->
+                    val tokens = resp.tokens
+                    val user = resp.user
+                    if (resp.status == "authenticated" && tokens != null && user != null) {
+                        prefs.saveSelf(user)
+                        prefs.saveTokens(tokens)
+                        resp.partner?.let { p ->
+                            prefs.partnerId = p.id
+                            prefs.partnerName = p.name
+                            prefs.partnerEmail = p.email
+                        }
+                        prefs.inviteCode = resp.inviteCode
+                        _state.update {
+                            it.copy(
+                                busy = false,
+                                isPaired = true,
+                                me = user,
+                                partner = resp.partner,
+                                inviteCode = resp.inviteCode,
+                            )
+                        }
+                        FirebaseBootstrap.syncTokenIfNeeded(app)
+                        refreshAll()
+                        onSuccess()
+                    } else {
+                        // Server verified the token but could not establish a session
+                        // (e.g. needs_pair). Surface the reason; the pair step finishes it.
+                        val msg = when (resp.status) {
+                            "needs_pair" -> "Google sign-in verified. Complete pairing to continue."
+                            else -> "Sign-in incomplete (${resp.status})."
+                        }
+                        _state.update { it.copy(busy = false, errorMessage = msg) }
+                        onError(msg)
+                    }
+                }
+                .onFailure { err ->
+                    _state.update { it.copy(busy = false, errorMessage = err.message ?: "Google sign-in failed") }
+                    onError(err.message)
+                }
+        }
+    }
+
+    /** Verified Gmail from a Google sign-in, to prefill the manual pair step on fallback. */
+    var gmailAddressFallback: String? = null
+        private set
 
     fun refreshInviteCode() {
         viewModelScope.launch {

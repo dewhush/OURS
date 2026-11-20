@@ -135,6 +135,13 @@ pub async fn ws_handler(
         })
         .ok_or_else(|| AppError::unauthorized("missing token"))?;
 
+    if header_token.is_none() && proto_token.is_none() {
+        tracing::warn!(
+            "websocket authenticated via ?token= query string; use Authorization header \
+             or Sec-WebSocket-Protocol bearer.<token> to avoid token leakage in logs"
+        );
+    }
+
     let now = now_ms();
     let claims = verify_access_claims(&state.config.token_secret, token, now)?;
     let user_id = claims.user_id;

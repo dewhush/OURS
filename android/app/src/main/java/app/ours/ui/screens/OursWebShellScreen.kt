@@ -53,7 +53,11 @@ import app.ours.auth.FirebaseResult
 import app.ours.auth.OursOidcManager
 import app.ours.bridge.OursNativeBridge
 import app.ours.data.local.PrefsStore
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -113,8 +117,12 @@ private fun resolveReachableServerUrl(preferred: String): String? {
         val ok = runCatching {
             val conn = (URL("$base/healthz").openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 1000
-                readTimeout = 1000
+                // First-load reachability probe must tolerate slow networks (mobile
+                // data, cold DNS, NAT'd emulators). A 1s timeout falsely marked a
+                // reachable server as offline and dropped fresh installs to the
+                // offline shell. 8s matches a typical mobile network cold start.
+                connectTimeout = 8000
+                readTimeout = 8000
             }
             val code = conn.responseCode
             conn.disconnect()
@@ -229,6 +237,9 @@ fun OursWebShellScreen(
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var pendingGeoOrigin by remember { mutableStateOf<String?>(null) }
     var pendingGeoCallback by remember { mutableStateOf<GeolocationPermissions.Callback?>(null) }
+    // Holds the raw Google ID token from a legacy GoogleSignInClient result,
+    // waiting for a LaunchedEffect to exchange it for Firebase and dispatch.
+    var pendingLegacyGoogleIdToken by remember { mutableStateOf<String?>(null) }
 
     val fileChooserLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -261,6 +272,13 @@ fun OursWebShellScreen(
         pendingGeoCallback = null
     }
 
+    // Legacy Google Sign-In launcher: uses GoogleSignInClient.signInIntent,
+    // which renders the native account-picker via a GMS code path that does NOT
+    // go through the identitycredentials process (the one that crashes with
+    // DeadObjectException on this device's BadAuthentication state). This is a
+    // second-chance fallback tried AFTER the Credential Manager hang-detector
+    // fires, before jumping to the web PKCE path.
+
     fun isTrustedActivePage(wv: WebView?): Boolean =
         isAllowedWebOrigin(wv?.url, prefs.serverUrl)
 
@@ -286,6 +304,27 @@ fun OursWebShellScreen(
             null,
         )
         Log.i(TAG, "googleAuthDispatch: evaluateJavascript dispatched to web layer")
+    }
+
+    /**
+     * Legacy Google Sign-In via GoogleSignInClient.signInIntent.
+     *
+     * This uses a DIFFERENT GMS code path from Credential Manager's
+     * GetGoogleIdOption / identitycredentials. It renders the classic native
+     * account-picker bottom sheet and is NOT deprecated. Used as a second-chance
+     * fallback when the Credential Manager path crashes (DeadObjectException on
+     * BadAuthentication) on this device.
+     *
+     * Returns the intent to launch via an ActivityResultLauncher, or null if
+     * the requested scope can't be built (e.g. webClientId blank).
+     */
+    fun legacyGoogleSignInIntent(activity: Activity, webClientId: String): Intent? {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(webClientId)
+            .requestEmail()
+            .build()
+        val gsc = GoogleSignIn.getClient(activity, gso)
+        return gsc.signInIntent
     }
 
     fun dispatchGoogleAuthFallback(reason: String = "") {
@@ -320,6 +359,70 @@ fun OursWebShellScreen(
 
     fun buildLiveUrl(baseUrl: String): String =
         "${baseUrl.trimEnd('/')}/?shell=android&t=${System.currentTimeMillis()}"
+
+    // Legacy Google Sign-In launcher: uses GoogleSignInClient.signInIntent,
+    // which renders the native account-picker via a GMS code path that does NOT
+    // go through the identitycredentials process (the one that crashes with
+    // DeadObjectException on this device's BadAuthentication state). This is a
+    // second-chance fallback tried AFTER the Credential Manager hang-detector
+    // fires, before jumping to the web PKCE path.
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) {
+            Log.w(TAG, "googleSignInLauncher: result ${result.resultCode}, user cancelled legacy sign-in")
+            dispatchGoogleAuthFallback("cancelled")
+            return@rememberLauncherForActivityResult
+        }
+        try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            val account = task.result
+            val idToken = account.idToken
+            if (idToken.isNullOrBlank()) {
+                Log.w(TAG, "googleSignInLauncher: no idToken in GoogleSignInAccount, falling through")
+                dispatchGoogleAuthFallback("no_credential")
+                return@rememberLauncherForActivityResult
+            }
+            Log.i(TAG, "googleSignInLauncher: got Google ID token, queuing for Firebase exchange")
+            pendingLegacyGoogleIdToken = idToken
+        } catch (e: Exception) {
+            Log.w(TAG, "googleSignInLauncher: exception extracting account: ${e.message}, falling through")
+            dispatchGoogleAuthFallback("exception:${e.message?.take(80) ?: "unknown"}")
+        }
+    }
+
+    // Process a Google ID token obtained via the legacy GoogleSignInClient path.
+    // Exchanges it for a Firebase ID token (same exchange as the Credential Manager
+    // path) and dispatches the result to the WebView. Triggers whenever
+    // pendingLegacyGoogleIdToken changes from null to a non-blank value.
+    LaunchedEffect(pendingLegacyGoogleIdToken) {
+        if (pendingLegacyGoogleIdToken.isNullOrBlank()) return@LaunchedEffect
+        val token = pendingLegacyGoogleIdToken
+        pendingLegacyGoogleIdToken = null
+        coroutineScope.launch {
+            val fb = FirebaseGoogleAuthManager.firebaseSignIn(token!!)
+            when (fb) {
+                is FirebaseResult.Authorized -> {
+                    val displayName = fb.displayName.ifBlank {
+                        fb.email.substringBefore('@').ifBlank { "Member" }
+                    }
+                    persistOidcIdentity(fb.email, displayName)
+                    dispatchGoogleAuthPayload(
+                        JSONObject().apply {
+                            put("email", fb.email)
+                            put("name", displayName)
+                            put("id_token", fb.idToken)
+                            put("provider", "firebase-google")
+                        },
+                    )
+                }
+                is FirebaseResult.Error -> {
+                    Log.w(TAG, "googleSignInLauncher: Firebase exchange failed: ${fb.reason}, falling through to web PKCE")
+                    dispatchGoogleAuthFallback(fb.reason)
+                }
+            }
+        }
+    }
 
     val bridge = remember(prefs) {
         OursNativeBridge(
@@ -359,24 +462,98 @@ fun OursWebShellScreen(
                             dispatchGoogleAuthFallback("unavailable")
                             return@launch
                         }
-                        when (val fb = FirebaseGoogleAuthManager.signIn(activity, webClientId)) {
-                            is FirebaseResult.Authorized -> {
-                                val displayName = fb.displayName.ifBlank {
-                                    fb.email.substringBefore('@').ifBlank { "Member" }
+                        // Race native sign-in against a hang-detector. GMS's
+                        // identitycredentials process can crash silently
+                        // (DeadObjectException on BadAuthentication) leaving the
+                        // account picker blank and the coroutine never resuming.
+                        // Heuristic: once MainActivity regains window focus after a
+                        // short grace period, treat it as a GMS crash and try the
+                        // legacy GoogleSignInClient recovery path before web PKCE.
+                        var fb: FirebaseResult? = null
+                        val signInJob = launch {
+                            fb = FirebaseGoogleAuthManager.signIn(activity, webClientId)
+                        }
+                        val watcherJob = launch {
+                            // 3s grace for the picker to appear on slow devices.
+                            delay(3_000)
+                            // Then wait up to 18s more, checking focus every 500ms.
+                            for (tick in 1..36) {
+                                if (fb != null) return@launch
+                                if (activity.hasWindowFocus()) {
+                                    // We're back on top but native never delivered a
+                                    // credential — GMS identitycredentials crashed.
+                                    Log.w(TAG, "googleAuthHang: main activity refocused with no result, assuming GMS crash")
+                                    return@launch
                                 }
-                                persistOidcIdentity(fb.email, displayName)
+                                delay(500)
+                            }
+                        }
+                        // Wait for whichever resolves first.
+                        while (fb == null && signInJob.isActive && watcherJob.isActive) {
+                            delay(100)
+                        }
+                        if (fb == null) {
+                            signInJob.cancel()
+                            watcherJob.cancel()
+                            Log.w(TAG, "googleAuthHang: Credential Manager hung — trying legacy GoogleSignInClient before web PKCE")
+                            val legacyIntent = legacyGoogleSignInIntent(activity, webClientId)
+                            if (legacyIntent != null) {
+                                Log.i(TAG, "googleAuthHang: launching legacy GoogleSignInClient.signInIntent as second-chance fallback")
+                                googleSignInLauncher.launch(legacyIntent)
+                                return@launch
+                            }
+                            Log.w(TAG, "googleAuthHang: legacy GoogleSignInClient unavailable (no webClientId?), falling back to web PKCE")
+                            dispatchGoogleAuthFallback("native_hang")
+                            return@launch
+                        }
+                        watcherJob.cancel()
+                        when (val result = fb) {
+                            is FirebaseResult.Authorized -> {
+                                val displayName = result.displayName.ifBlank {
+                                    result.email.substringBefore('@').ifBlank { "Member" }
+                                }
+                                persistOidcIdentity(result.email, displayName)
                                 dispatchGoogleAuthPayload(
                                     JSONObject().apply {
-                                        put("email", fb.email)
+                                        put("email", result.email)
                                         put("name", displayName)
-                                        put("id_token", fb.idToken)
+                                        put("id_token", result.idToken)
                                         put("provider", "firebase-google")
                                     },
                                 )
                             }
                             is FirebaseResult.Error -> {
                                 // "cancelled" is a normal user dismiss; surface others too.
-                                dispatchGoogleAuthFallback(fb.reason)
+                                // But if the error looks like a GMS/auth failure (BadAuthentication,
+                                // DeadObjectException, UserRecoverableAuthException, etc.), try the
+                                // legacy GoogleSignInClient path BEFORE going to web PKCE — it uses
+                                // a different GMS code path that may bypass the broken identitycredentials
+                                // process.
+                                if (result.reason.startsWith("exception:") ||
+                                    result.reason == "no_credential" ||
+                                    result.reason == "bad_auth" ||
+                                    result.reason == "native_hang"
+                                ) {
+                                    val hangReason = result.reason
+                                    Log.w(
+                                        TAG,
+                                        "googleAuthError: auth failure '$hangReason' — trying legacy GoogleSignInClient before web PKCE",
+                                    )
+                                    val legacyIntent = legacyGoogleSignInIntent(activity, webClientId)
+                                    if (legacyIntent != null) {
+                                        Log.i(
+                                            TAG,
+                                            "googleAuthError: launching legacy GoogleSignInClient.signInIntent as recovery fallback",
+                                        )
+                                        googleSignInLauncher.launch(legacyIntent)
+                                        return@launch
+                                    }
+                                    Log.w(
+                                        TAG,
+                                        "googleAuthError: legacy GoogleSignInClient unavailable, falling back to web PKCE",
+                                    )
+                                }
+                                dispatchGoogleAuthFallback(result.reason)
                             }
                         }
                         return@launch
@@ -480,6 +657,14 @@ fun OursWebShellScreen(
                     )
                     setBackgroundColor(canvasAndroidColor)
 
+                    // Remote debugging for debug builds only — lets ADB/CDP drive the
+                    // WebView to test the OAuth flow deterministically. Stripped from
+                    // release builds (checks the app's own DEBUGGABLE flag, which the
+                    // release manifest sets to false).
+                    if ((ctx.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                        WebView.setWebContentsDebuggingEnabled(true)
+                    }
+
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
@@ -529,6 +714,21 @@ fun OursWebShellScreen(
                             val targetUri = request.url ?: return false
                             if (isAllowedWebOrigin(targetUri.toString(), prefs.serverUrl)) {
                                 return false
+                            }
+                            // Google OAuth sign-in must stay INSIDE the WebView: the web
+                            // layer's Authorization-Code+PKCE flow redirects the top-level
+                            // window to accounts.google.com and back to our own origin with
+                            // ?code=...&state=.... If we hand Google's host to an external
+                            // browser, the callback lands in that browser instead of this
+                            // WebView and handleGoogleCodeCallback() never sees the code.
+                            // Only Google's sign-in/accounts hosts are permitted — never an
+                            // arbitrary https URL.
+                            val oauthHost = targetUri.host?.lowercase().orEmpty()
+                            if (oauthHost == "accounts.google.com" ||
+                                oauthHost.endsWith(".accounts.google.com") ||
+                                oauthHost == "accounts.google.co.id"
+                            ) {
+                                return false // load in-WebView
                             }
                             val scheme = targetUri.scheme?.lowercase()
                             if (scheme == "https" || scheme == "http" || scheme == "mailto" || scheme == "tel") {

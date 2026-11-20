@@ -191,6 +191,8 @@ pub fn open_db(path: &Path) -> Result<Db, String> {
     ensure_column(&conn, "users", "google_picture_url", "TEXT")?;
     ensure_column(&conn, "users", "device_hash", "TEXT")?;
     ensure_column(&conn, "users", "tokens_revoked_before", "INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(&conn, "refresh_tokens", "family_id", "TEXT NOT NULL DEFAULT ''")?;
+    ensure_column(&conn, "refresh_tokens", "seq", "INTEGER NOT NULL DEFAULT 0")?;
     ensure_column(&conn, "latest_locations", "activity", "TEXT")?;
     ensure_column(&conn, "latest_locations", "altitude_m", "REAL")?;
     ensure_column(&conn, "latest_locations", "vertical_speed_mps", "REAL")?;

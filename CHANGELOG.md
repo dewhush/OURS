@@ -4,7 +4,67 @@ All notable changes to **OURS** are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-11-19
+
+### Security (audit-driven)
+
+- **CRITICAL — Account takeover via email-only login**: existing accounts with a
+  NULL `device_hash` (the normal pairing path) could be logged into with just the
+  email. The verification gate now always requires a factor: verified Google
+  token, matching device, invite code, or setup key (`server/src/routes/pair.rs`).
+- **HIGH — Unkeyed `device_id`**: device ids were hashed with bare SHA-256, making
+  a leaked device string a bearer credential. Device hashes are now HMAC-SHA256
+  keyed with the server `token_secret` (`server/src/auth.rs`).
+- **MEDIUM — `email_verified` not enforced**: Firebase and legacy Google ID tokens
+  now require `email_verified == true`; the self-hosted Pocket ID path remains an
+  explicit, documented passkey exception (`server/src/routes/pair.rs`).
+- **MEDIUM — Rate-limit bypass via proxy headers**: `X-Forwarded-For` /
+  `X-Real-IP` (client-forgeable) are no longer trusted for rate-limit identity;
+  only Cloudflare's edge-set `CF-Connecting-IP` is honored on loopback peers
+  (`server/src/routes/pair.rs`).
+- **MEDIUM — Refresh-token family revocation**: rotating a refresh token now
+  revokes the entire family, so a stolen sibling token dies the moment the
+  legitimate client rotates. The refresh rate limiter now keys on the full token
+  hash instead of a 64-bit prefix (`server/src/routes/pair.rs`, `server/src/auth.rs`).
+- **MEDIUM — First-run claim race**: the server refuses to start without
+  `OURS_SETUP_KEY` when binding beyond loopback, preventing anyone on the network
+  from claiming the owner slot first (`server/src/config.rs`).
+- **LOW — Nudge/SOS flood**: per-user rate limits (1 nudge/30s, 3 SOS/5min) and a
+  2000-char SOS message cap (`server/src/routes/events.rs`, `server/src/state.rs`).
+- **LOW — Join by email creates identity confusion**: joining a pair with an email
+  that already belongs to an account is now rejected (`server/src/routes/pair.rs`).
+- **LOW — WebSocket token in query string**: Android now authenticates WS via the
+  `Sec-WebSocket-Protocol: bearer.<token>` subprotocol; the server logs a warning
+  if the legacy `?token=` fallback is used (`android/.../OursApiClient.kt`,
+  `server/src/ws.rs`).
+- **LOW — Android token encryption failed open**: `TokenCipher.encrypt` now fails
+  closed (returns null → token not persisted) when AndroidKeyStore is unavailable,
+  matching `decrypt` (`android/.../TokenCipher.kt`).
+- **LOW — HSTS missing**: `Strict-Transport-Security` (max-age 1y, includeSubDomains)
+  added to all responses (`server/src/lib.rs`).
+- **Docs**: `delete_place` shared-resource + geofence cascade is now explicitly
+  documented as intentional (`docs/API.md`).
+
+### Privacy / repo hygiene
+
+- Scrub real personal data from docs, previews, and test fixtures: real Gmail
+  addresses and names replaced with synthetics (`alice@example.test`,
+  `bob@example.test`), LAN IP replaced with placeholders. Committed test fixtures
+  now use case-insensitivity-safe synthetics.
+
+### Features (web Google sign-in)
+
+- Web SPA now uses Google Identity Services (GSI) when `/api/config` serves a
+  `google_client_id`: lazy-loads `accounts.google.com/gsi/client`, opens the One
+  Tap/account chooser, and posts the credential to `/api/auth/google`. Falls back
+  to Pocket ID OIDC when GSI is unavailable or suppressed (`web/app.js`).
+- Server now serves `google_client_id` and the corrected Pocket ID web client ID
+  via `/api/config` (was previously serving Google's ID in the OIDC slot).
+- Button label corrected to "Continue with Google" (EN + ID).
+
 ## [Unreleased]
+
+- **Responsive Web UI (tablet + desktop)**: Added a true 768–1023px tablet tier (centered 860px content measure, floating 360px capsule nav, two-column memories/settings/places, bounded chat composer), refined the ≥1024px rail/split-panel layout and ≥1180px inspector with hover/press polish, and made map camera insets breakpoint-aware (`isTablet()`/`isDesktop()` + `mapPad()` in `web/app.js`) with an idempotent breakpoint-change listener. Added `aria-current="page"` to active nav buttons. Synced `web/` into the Android assets mirror.
 
 Tracked in GitHub Issues for remaining 1:1 FigCraft (`docs/OURS-Design.figcraft`) implementation work:
 - **Slice 3 Polish**: Prevent 2-line wrap on `"23h left"` `ExpiryPill` badge inside `Bubble_Photo24h` and finalize Slice 3 component verification.

@@ -187,7 +187,7 @@ class MainActivity : ComponentActivity() {
             }
             OursTheme(darkTheme = darkTheme, language = liveLanguage.ifBlank { state.language }) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    OursRoot(vm = vm)
+                    OursRoot(vm = vm, debugNativeUi = intent?.getBooleanExtra("debug_native_ui", false) ?: false)
                 }
             }
         }
@@ -201,7 +201,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun OursRoot(vm: OursViewModel) {
+private fun OursRoot(vm: OursViewModel, debugNativeUi: Boolean) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -218,7 +218,14 @@ private fun OursRoot(vm: OursViewModel) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val useWebShell by rememberSaveable { mutableStateOf(true) }
+    val useWebShell = if (BuildConfig.DEBUG) {
+        // Debug-only escape hatch: launch with --ez debug_native_ui true to exercise
+        // the native Compose onboarding (Credential Manager Google sign-in) instead of
+        // the WebView shell. Production builds always use the shell.
+        !debugNativeUi
+    } else {
+        true
+    }
     if (useWebShell) {
         val prefs = remember(context) { (context.applicationContext as OursApp).prefs }
         OursWebShellScreen(prefs = prefs)

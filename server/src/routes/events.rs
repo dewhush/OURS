@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use axum::{
     Json,
@@ -17,10 +18,24 @@ use crate::models::{Event, EventsResponse, SosRequest, SosResponse};
 use crate::routes::{FcmPush, WsPush};
 use crate::state::AppState;
 
+// Nudges and SOS both fire real FCM pushes and are the two channels most open to
+// harassment/battery-drain abuse between paired users, so they are deliberately
+// tighter than the audit's generic 10-per-minute baseline. A nudge every 30s is
+// more than enough for "thinking of you"; SOS is a genuine emergency channel.
+const NUDGE_MAX_PER_WINDOW: usize = 1;
+const NUDGE_WINDOW: Duration = Duration::from_secs(30);
+const SOS_MAX_PER_WINDOW: usize = 3;
+const SOS_WINDOW: Duration = Duration::from_secs(300);
+const SOS_MESSAGE_MAX_CHARS: usize = 500;
+
 pub async fn nudge(
     AuthUser(user_id): AuthUser,
     State(state): State<AppState>,
 ) -> AppResult<StatusCode> {
+    // Per-user sliding-window limit — nudges fire a real FCM push.
+    state.check_user_action(user_id, "nudge", NUDGE_MAX_PER_WINDOW, NUDGE_WINDOW)?;
+    state.record_user_action(user_id, "nudge");
+
     let db = state.db.clone();
     let (ws_push, fcm_push) = tokio::task::spawn_blocking(
         move || -> AppResult<(WsPush, FcmPush)> {
@@ -98,6 +113,10 @@ pub async fn send_sos(
     State(state): State<AppState>,
     Json(req): Json<SosRequest>,
 ) -> AppResult<Json<SosResponse>> {
+    // Per-user sliding-window limit — SOS fires a real FCM push.
+    state.check_user_action(user_id, "sos", SOS_MAX_PER_WINDOW, SOS_WINDOW)?;
+    state.record_user_action(user_id, "sos");
+
     let kind = req.kind.trim().to_ascii_lowercase();
     if kind != "manual" && kind != "crash" {
         return Err(AppError::bad_request("kind must be manual or crash"));
@@ -116,6 +135,14 @@ pub async fn send_sos(
         .message
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
+    // Reject oversized messages before moving `message` into the closure.
+    if let Some(ref m) = message
+        && m.chars().count() > SOS_MESSAGE_MAX_CHARS
+    {
+        return Err(AppError::bad_request(
+            "message exceeds 500 characters",
+        ));
+    }
 
     let db = state.db.clone();
     let (event_id, ws_push, fcm_push) = tokio::task::spawn_blocking(

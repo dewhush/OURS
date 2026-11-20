@@ -88,6 +88,37 @@ data class PairJoinResponse(
 )
 
 @Serializable
+data class GoogleAuthRequestDto(
+    @SerialName("id_token") val idToken: String? = null,
+    val email: String = "",
+    val name: String? = null,
+    @SerialName("space_name") val spaceName: String? = null,
+    @SerialName("device_id") val deviceId: String? = null,
+    @SerialName("invite_code") val inviteCode: String? = null,
+    @SerialName("setup_key") val setupKey: String? = null,
+    @SerialName("auto_create") val autoCreate: Boolean = false,
+    val picture: String? = null,
+)
+
+/**
+ * Response from POST /api/auth/google. The server omits fields that are null
+ * (skip_serializing_if), so every optional field here carries a default. When
+ * [status] is "authenticated" [tokens] is present; "needs_pair" means a new
+ * email on a partly-set-up server that still has to join via invite/setup key.
+ */
+@Serializable
+data class GoogleAuthResponseDto(
+    val status: String,
+    val user: UserDto? = null,
+    val partner: UserDto? = null,
+    @SerialName("invite_code") val inviteCode: String? = null,
+    val tokens: TokensDto? = null,
+    val email: String? = null,
+    val name: String? = null,
+    @SerialName("space_name") val spaceName: String? = null,
+)
+
+@Serializable
 data class RefreshRequest(
     @SerialName("refresh_token") val refreshToken: String,
 )

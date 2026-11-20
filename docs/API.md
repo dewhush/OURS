@@ -5,7 +5,7 @@ commit is announced to `@android` on the board.
 
 ## Conventions
 
-- Base URL: `http://192.168.100.92:8080` on the LAN, the Cloudflare Tunnel hostname elsewhere. All API paths start with `/api`.
+- Base URL: `http://192.168.1.10:8080` on the LAN, the Cloudflare Tunnel hostname elsewhere. All API paths start with `/api`.
 - Request and response bodies are JSON (`Content-Type: application/json`) unless marked multipart. Field names are `snake_case`.
 - Timestamps are unix epoch **milliseconds** (`i64`). IDs are `i64` except photo IDs, which are opaque strings.
 - Optional fields are always present in responses and set to `null` when empty (never omitted).
@@ -36,7 +36,7 @@ commit is announced to `@android` on the board.
 
 **User**
 ```json
-{"id": 1, "name": "Dewantoro", "email": "dewantoro@gmail.com", "avatar_photo_id": null, "created_at": 1731500000000}
+{"id": 1, "name": "Alice", "email": "alice@example.test", "avatar_photo_id": null, "created_at": 1731500000000}
 ```
 `email` and `avatar_photo_id` are `null` when unset.
 
@@ -165,7 +165,7 @@ Inbox events are kept for 7 days.
 First phone only. Only works while zero users exist. If `OURS_SETUP_KEY` is configured on the server,
 header `X-Setup-Key: <OURS_SETUP_KEY>` is required; when `OURS_SETUP_KEY` is unset/empty, no setup key header is needed.
 ```json
-{"name": "Dewantoro", "email": "dewantoro@gmail.com"}
+{"name": "Alice", "email": "alice@example.test"}
 ```
 `name`: 1-40 chars after trimming. `email`: optional string (`null` or omitted if unset).
 -> `201`
@@ -183,7 +183,7 @@ Issues a fresh invite code (old ones stop working) while the partner has not joi
 
 ### `POST /api/pair/join`
 ```json
-{"code": "K7M3QX", "name": "Marchanda", "email": "marchanda@gmail.com"}
+{"code": "K7M3QX", "name": "Bob", "email": "bob@example.test"}
 ```
 `email`: optional string (`null` or omitted if unset).
 -> `201 {"user": User, "tokens": Tokens}`
@@ -278,6 +278,9 @@ is created only records the state, without an event. Each transition creates a `
 - `POST /api/places` `{"name": "Home", "lat": -6.2, "lon": 106.8, "radius_m": 100}` -> `201 Place`
   (`name` 1-40 chars)
 - `DELETE /api/places/{id}` -> `204` (either user)
+  Places are shared by both users; deleting a place also cascades to both users'
+  geofence `place_states` (enter/exit alerts). This is by design — document it so
+  the shared-resource + cascade-wipe behavior is a conscious decision.
 
 ## Check-ins and replies
 
@@ -383,7 +386,7 @@ All messages are **data-only, high priority**; every value is a string:
 | `reply` | `event_id`, `title`, `body`, `checkin_id` | partner replied |
 | `chat_message` | `event_id`, `title`, `body`, `message_id` | partner sent a chat message |
 | `nudge` | `event_id`, `title`, `body` | thinking of you |
-| `place` | `event_id`, `title`, `body`, `place_id`, `transition` | "Marchanda arrived at Home" / "Marchanda left Home" |
+| `place` | `event_id`, `title`, `body`, `place_id`, `transition` | "Bob arrived at Home" / "Bob left Home" |
 | `highlight` | `event_id`, `title`, `body`, `checkin_id` | partner saved a highlight |
 
 `wake` is sent at most once per stale window, and never to a paused phone.

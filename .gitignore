@@ -7,3 +7,11 @@ local.properties
 .idea/
 # Firebase Android config (contains project IDs; app must not ship without it, but never commit)
 google-services.json
+# Project context/knowledge base (local only, contains infra details + credentials refs)
+context.md
+# Agent worktrees (throwaway checkouts, 200MB+)
+.claude/
+# Throwaway scratch pages
+docs/_*.html
+# Claude/agent scratch
+*.tmp.md

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 1280px; height: 640px; overflow: hidden;
+         font-family: "Inter", -apple-system, "SF Pro Text", Segoe UI, Roboto, sans-serif;
+         background: #FAF9F5; color: #111318; }
+  .wrap { width: 1280px; height: 640px; display: flex; }
+
+  /* ---- left: dark brand panel ---- */
+  .left { width: 400px; height: 640px; position: relative; padding: 44px 34px;
+          background: #0B0E14; color: #FAF9F5; overflow: hidden;
+          display: flex; flex-direction: column; justify-content: space-between; }
+  .left::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+          background:
+            radial-gradient(400px 280px at 10% -5%, rgba(0,85,255,.45), transparent 60%),
+            radial-gradient(320px 240px at 105% 105%, rgba(60,208,132,.18), transparent 55%); }
+  .brand { display: flex; align-items: center; gap: 12px; position: relative; }
+  .brand-ring { width: 40px; height: 40px; border-radius: 50%;
+                background: conic-gradient(from 210deg, #0055FF, #7CB2FF, #3CD084, #0055FF);
+                display: flex; align-items: center; justify-content: center; }
+  .brand-core { width: 28px; height: 28px; border-radius: 50%; background: #0B0E14;
+                display: flex; align-items: center; justify-content: center;
+                font-weight: 800; font-size: 14px; }
+  .brand-name { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+  .brand-name span { color: #7CB2FF; }
+
+  .tagline { position: relative; }
+  .tagline .kicker { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+                     color: #7CB2FF; margin-bottom: 14px; }
+  .tagline h1 { font-size: 36px; font-weight: 800; line-height: 1.12; letter-spacing: -0.03em; }
+  .tagline p { margin-top: 14px; font-size: 14px; color: #8E96A8; line-height: 1.6; max-width: 320px; }
+
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; position: relative; }
+  .pill { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+          border-radius: 999px; padding: 8px 12px; font-size: 11.5px; font-weight: 600;
+          color: #C5CAD6; display: flex; align-items: center; gap: 6px; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: #3CD084; }
+  .pill.hl { background: #0055FF; border-color: #0055FF; color: #fff; }
+
+  .foot { font-size: 11.5px; color: #5A6170; display: flex; gap: 10px; align-items: center; position: relative; }
+  .foot .dot { width: 4px; height: 4px; border-radius: 50%; background: #3CD084; }
+
+  /* ---- right: big gallery, 2 rows (3 top / 2 bottom) ---- */
+  .right { flex: 1; position: relative; padding: 32px 32px 28px;
+           background:
+             radial-gradient(700px 420px at 72% 0%, rgba(0,85,255,.09), transparent 55%),
+             radial-gradient(520px 420px at 15% 100%, rgba(255,122,89,.09), transparent 55%),
+             #FAF9F5;
+           display: flex; flex-direction: column; }
+  .rh { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
+  .rh h2 { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+  .rh span { font-size: 12px; color: #8E96A8; font-weight: 500; }
+
+  .row { flex: 1; display: flex; align-items: center; justify-content: center; gap: 18px; }
+  .row + .row { margin-top: 16px; }
+  .card { width: 218px; border-radius: 16px; overflow: hidden;
+          background: #FFFFFC; box-shadow: 0 18px 40px rgba(9,11,16,.16);
+          border: 1px solid rgba(9,11,16,.07); position: relative; }
+  .card img { width: 100%; display: block; }
+  .card .cap { font-size: 11.5px; font-weight: 600; color: #555B68;
+               text-align: center; padding: 9px 6px 10px;
+               background: #FFFFFC; border-top: 1px solid #F0EFE9; }
+  .card.u { transform: translateY(-8px); }
+  .card.d { transform: translateY(8px); }
+  .card.deco { box-shadow: 0 24px 50px rgba(9,11,16,.22); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="left">
+      <div class="brand">
+        <div class="brand-ring"><div class="brand-core">O</div></div>
+        <div class="brand-name">OUR<span>S</span></div>
+      </div>
+
+      <div class="tagline">
+        <div class="kicker">Private · Self-hosted · For two</div>
+        <h1>For the two of you.<br/>Nobody else.</h1>
+        <p>Live location, 24-hour photo check-ins, and shared memories — running on your own server, owned by you.</p>
+      </div>
+
+      <div class="pills">
+        <div class="pill"><span class="dot"></span> Live location</div>
+        <div class="pill"><span class="dot"></span> 24h check-ins</div>
+        <div class="pill hl">Private by default</div>
+        <div class="pill"><span class="dot"></span> Self-hosted</div>
+      </div>
+
+      <div class="foot"><span class="dot"></span> Kotlin · Compose · MapLibre · SQLite · WebSockets</div>
+    </div>
+
+    <div class="right">
+      <div class="rh">
+        <h2>Every screen, built for two</h2>
+        <span>Onboarding · Pairing · Map · Chat · Memories</span>
+      </div>
+      <div class="row">
+        <div class="card u">
+          <img src="Exported/Onboarding/Splash (Light).png" alt="Splash light"/>
+          <div class="cap">Splash · Light</div>
+        </div>
+        <div class="card deco">
+          <img src="Exported/Onboarding/Stage 1/Mandatory Google Auth.png" alt="Google sign-in"/>
+          <div class="cap">Google Sign-In</div>
+        </div>
+        <div class="card u">
+          <img src="Exported/Onboarding/Stage 2A/Create Pair Code.png" alt="Create pair"/>
+          <div class="cap">Create Pair</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="card deco">
+          <img src="Exported/Onboarding/Stage 2B/Join with Code.png" alt="Join with code"/>
+          <div class="cap">Join with Code</div>
+        </div>
+        <div class="card u">
+          <img src="Exported/Onboarding/Splash (Dark).png" alt="Splash dark"/>
+          <div class="cap">Splash · Dark</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

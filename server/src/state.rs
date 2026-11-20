@@ -62,12 +62,18 @@ pub struct AppState {
     pub fcm: FcmClient,
     pub http_client: reqwest::Client,
     google_jwks: Arc<RwLock<Option<CachedJwks>>>,
+    // Dedicated JWKS cache for Google's OAuth certs, separate from the Pocket ID
+    // OIDC JWKS (which google_jwks backs when oidc_jwks_url is set). Legacy-Google
+    // id_tokens (iss=accounts.google.com) must verify against Google's own keys,
+    // not the self-hosted IdP's.
+    google_oauth_jwks: Arc<RwLock<Option<CachedJwks>>>,
     firebase_jwks: Arc<RwLock<Option<CachedJwks>>>,
     next_ws_id: Arc<AtomicU64>,
     join_failures: SlidingLimiter,
     create_failures: SlidingLimiter,
     refresh_failures: SlidingLimiter,
     google_auth_failures: SlidingLimiter,
+    user_action_limiter: SlidingLimiter,
 }
 
 impl AppState {
@@ -83,13 +89,26 @@ impl AppState {
             fcm,
             http_client,
             google_jwks: Arc::new(RwLock::new(None)),
+            google_oauth_jwks: Arc::new(RwLock::new(None)),
             firebase_jwks: Arc::new(RwLock::new(None)),
             next_ws_id: Arc::new(AtomicU64::new(1)),
             join_failures: SlidingLimiter::default(),
             create_failures: SlidingLimiter::default(),
             refresh_failures: SlidingLimiter::default(),
             google_auth_failures: SlidingLimiter::default(),
+            user_action_limiter: SlidingLimiter::default(),
         }
+    }
+
+    /// Per-user sliding-window limiter for authenticated mutation endpoints
+    /// (nudge, SOS, messages, check-ins, places). Keyed on `"{user_id}:{action}"`.
+    pub fn check_user_action(&self, user_id: i64, action: &str, max: usize, window: Duration) -> AppResult<()> {
+        let key = format!("{user_id}:{action}");
+        self.user_action_limiter.check(&key, max, window, "too many requests; slow down")
+    }
+
+    pub fn record_user_action(&self, user_id: i64, action: &str) {
+        self.user_action_limiter.record(&format!("{user_id}:{action}"))
     }
 
     pub fn next_ws_conn_id(&self) -> u64 {
@@ -160,8 +179,15 @@ impl AppState {
         self.google_auth_failures.record(key);
     }
 
-    pub fn clear_google_auth_rate_limit(&self, key: &str) {
-        self.google_auth_failures.clear(key);
+    /// Raise the pre-check ceiling for a key instead of fully clearing it.
+    /// Clearing the entire window on a single success creates a legitimate-user
+    /// DoS: an attacker can exhaust the pre-check by sending garbage tokens for
+    /// the victim's IP right before the victim's real login, and the victim's
+    /// request would then land on a fresh-but-quota-exhausted window. By raising
+    /// (not clearing), a successful auth does not reset an attacker's progress
+    /// toward the ceiling.
+    pub fn raise_google_auth_rate_limit(&self, key: &str) {
+        let _ = self.google_auth_failures.check(key, 50, Duration::from_secs(600), "");
     }
 
     /// Fetch a signing key by `kid`. Uses the configured OIDC provider's JWKS
@@ -217,6 +243,60 @@ impl AppState {
         }
         let found = keys.get(kid).cloned();
         let mut guard = self.google_jwks.write().await;
+        *guard = Some(CachedJwks {
+            keys,
+            fetched_at: Instant::now(),
+        });
+        Ok(found)
+    }
+
+    /// Fetch a signing key by `kid` from Google's OAuth certs endpoint
+    /// (iss=accounts.google.com). Always pinned to Google's certs URL regardless
+    /// of the Pocket ID OIDC configuration — the legacy-Google id_token path must
+    /// verify against Google's own keys, never the self-hosted IdP's.
+    pub async fn get_google_oauth_jwk(&self, kid: &str, force_refresh: bool) -> AppResult<Option<(String, String)>> {
+        const JWKS_TTL: Duration = Duration::from_secs(3600);
+        if !force_refresh {
+            let guard = self.google_oauth_jwks.read().await;
+            if let Some(cached) = guard.as_ref()
+                && cached.fetched_at.elapsed() < JWKS_TTL
+                && let Some(pair) = cached.keys.get(kid)
+            {
+                return Ok(Some(pair.clone()));
+            }
+        }
+        const GOOGLE_OAUTH_JWKS_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
+        let resp = self
+            .http_client
+            .get(GOOGLE_OAUTH_JWKS_URL)
+            .send()
+            .await
+            .map_err(|e| AppError::internal(format!("failed to fetch google oauth jwks: {e}")))?;
+        if !resp.status().is_success() {
+            return Err(AppError::internal("google oauth jwks endpoint error"));
+        }
+        #[derive(serde::Deserialize)]
+        struct JwkEntry {
+            kid: Option<String>,
+            n: Option<String>,
+            e: Option<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct JwksDoc {
+            keys: Vec<JwkEntry>,
+        }
+        let doc: JwksDoc = resp
+            .json()
+            .await
+            .map_err(|e| AppError::internal(format!("invalid google oauth certs json: {e}")))?;
+        let mut keys = HashMap::new();
+        for k in doc.keys {
+            if let (Some(id), Some(n), Some(e)) = (k.kid, k.n, k.e) {
+                keys.insert(id, (n, e));
+            }
+        }
+        let found = keys.get(kid).cloned();
+        let mut guard = self.google_oauth_jwks.write().await;
         *guard = Some(CachedJwks {
             keys,
             fetched_at: Instant::now(),

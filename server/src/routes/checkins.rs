@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use axum::{
     Json,
@@ -20,6 +21,9 @@ use crate::routes::{FcmPush, WsPush};
 use crate::state::AppState;
 
 const CHECKIN_TTL_MS: i64 = 24 * 60 * 60 * 1000;
+const CHECKIN_MAX_PER_DAY: usize = 50;
+const REPLY_MAX_PER_MIN: usize = 30;
+const HIGHLIGHT_MAX_PER_MIN: usize = 30;
 
 async fn read_field_bytes_limited(field: axum::extract::multipart::Field<'_>, max_bytes: usize) -> AppResult<Vec<u8>> {
     let bytes = field
@@ -121,6 +125,9 @@ pub async fn create_checkin(
         (None, None) => (None, None),
         _ => return Err(AppError::bad_request("lat and lon must both be provided")),
     };
+
+    state.check_user_action(user_id, "checkin", CHECKIN_MAX_PER_DAY, Duration::from_secs(86400))?;
+    state.record_user_action(user_id, "checkin");
 
     let data_dir = state.config.data_dir.clone();
     let db = state.db.clone();
@@ -354,6 +361,10 @@ async fn toggle_highlight(
     checkin_id: i64,
     highlight: bool,
 ) -> AppResult<Json<CheckIn>> {
+    if highlight {
+        state.check_user_action(user_id, "highlight", HIGHLIGHT_MAX_PER_MIN, Duration::from_secs(60))?;
+        state.record_user_action(user_id, "highlight");
+    }
     let db = state.db.clone();
     let (checkin, ws_push, fcm_push) = tokio::task::spawn_blocking(
         move || -> AppResult<(CheckIn, WsPush, FcmPush)> {
@@ -477,6 +488,9 @@ pub async fn create_reply(
     if text.is_none() && photo_bytes.is_none() {
         return Err(AppError::bad_request("text or photo is required"));
     }
+
+    state.check_user_action(user_id, "reply", REPLY_MAX_PER_MIN, Duration::from_secs(60))?;
+    state.record_user_action(user_id, "reply");
 
     let data_dir = state.config.data_dir.clone();
     let db = state.db.clone();

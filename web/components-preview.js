@@ -111,7 +111,7 @@
     const variants = [
       { label: "code-field", c: "ours-input-wrap--code", val: "K 7 M · 4 P 9", ph: "000 · 000" },
       { label: "glass-input", c: "ours-input-wrap--glass", val: "", ph: "Add a caption..." },
-      { label: "standard-field", c: "ours-input-wrap--standard", val: "Dewantoro", ph: "Your name" },
+      { label: "standard-field", c: "ours-input-wrap--standard", val: "Alice", ph: "Your name" },
       { label: "search-pill", c: "ours-input-wrap--search", val: "", ph: "Search chat..." }
     ];
     variants.forEach((v) => {
@@ -225,7 +225,7 @@
     const c = el("div", cls("ours-card ours-card--couple", st));
     c.appendChild(el("div", "ours-avatar ours-avatar--header", "M"));
     const copy = el("div", "ours-card-copy");
-    copy.appendChild(el("div", "ours-card-title", "Dewantoro & Marchanda"));
+    copy.appendChild(el("div", "ours-card-title", "Alice & Bob"));
     copy.appendChild(el("div", "ours-card-sub", "Paired · 214 days"));
     c.appendChild(copy);
     c.appendChild(el("span", "ours-chip ours-chip--live", "Live"));
@@ -263,7 +263,7 @@
     av.appendChild(el("span", "ours-avatar-online"));
     bar.appendChild(av);
     const copy = el("div", "ours-top-bar-copy");
-    copy.appendChild(el("div", "ours-top-bar-title", "Marchanda"));
+    copy.appendChild(el("div", "ours-top-bar-title", "Bob"));
     copy.appendChild(el("div", "ours-top-bar-sub", "Live · Kemang Raya"));
     bar.appendChild(copy);
     const act = el("button", "ours-btn ours-btn--circle", "+");
@@ -280,7 +280,7 @@
     fabS.appendChild(img("/assets/icons/fab-settings.svg", 42, 42, "Settings"));
     const sw = el("div", "ours-center-switcher");
     sw.appendChild(el("span", "is-active", "Us"));
-    sw.appendChild(el("span", "", "Marchanda"));
+    sw.appendChild(el("span", "", "Bob"));
     const fabA = el("button", "ours-btn ours-btn--fab");
     fabA.type = "button";
     fabA.appendChild(img("/assets/icons/fab-alerts.svg", 42, 42, "Alerts"));
@@ -307,13 +307,13 @@
       const row = el("div", "ours-list-row ours-list-row--peek-d");
       row.appendChild(el("div", "ours-avatar ours-avatar--header", "M"));
       const copy = el("div", "ours-row-copy");
-      copy.appendChild(el("div", "ours-row-title", "Marchanda"));
+      copy.appendChild(el("div", "ours-row-title", "Bob"));
       copy.appendChild(el("div", "ours-row-sub", "Kemang Raya · 2m ago"));
       row.appendChild(copy);
       s.appendChild(row);
       return s;
     }
-    s.appendChild(el("h3", "ours-sheet-title", kind === "focus" ? "Marchanda is live" : kind === "bubble" ? "Privacy bubble" : "Check in"));
+    s.appendChild(el("h3", "ours-sheet-title", kind === "focus" ? "Bob is live" : kind === "bubble" ? "Privacy bubble" : "Check in"));
     const inner = el("div", "ours-sheet-inner");
     if (kind === "checkin") inner.appendChild(el("div", "ours-sheet-photo"));
     else inner.appendChild(el("div", "ours-row-sub", kind === "focus" ? "24 km/h · 84% · At Kemang" : "Hide location within 200 m"));
@@ -330,13 +330,13 @@
     t.setAttribute("role", "status");
     if (kind === "arrival") {
       t.appendChild(el("div", "ours-avatar ours-avatar--island", "M"));
-      t.appendChild(el("div", "ours-toast-title", "Marchanda arrived at Home"));
+      t.appendChild(el("div", "ours-toast-title", "Bob arrived at Home"));
       t.appendChild(el("div", "ours-toast-sub", "Home · Just now"));
     } else if (kind === "nudge") {
       const orb = el("div", "ours-avatar ours-avatar--nudge");
       orb.appendChild(el("span", "ours-avatar-core"));
       t.appendChild(orb);
-      t.appendChild(el("div", "ours-toast-title", "Nudge from Marchanda"));
+      t.appendChild(el("div", "ours-toast-title", "Nudge from Bob"));
       t.appendChild(el("div", "ours-toast-sub", "Thinking of you · 14:24"));
     } else if (kind === "info") {
       t.appendChild(el("div", "ours-avatar ours-avatar--header", "i"));
@@ -360,7 +360,7 @@
       av.appendChild(el("span", "ours-avatar-online"));
       r.appendChild(av);
       const copy = el("div", "ours-row-copy");
-      copy.appendChild(el("div", "ours-row-title", kind === "peek-m" ? "Marchanda" : "Dewantoro"));
+      copy.appendChild(el("div", "ours-row-title", kind === "peek-m" ? "Bob" : "Alice"));
       copy.appendChild(el("div", "ours-row-sub", "Kemang Raya · 2m ago"));
       if (kind === "peek-m") copy.appendChild(el("span", "ours-badge ours-badge--speed", "24 km/h"));
       r.appendChild(copy);
@@ -375,7 +375,7 @@
       r.appendChild(sw);
     } else if (kind === "waiting") {
       r.appendChild(el("span", "ours-pulse-dot"));
-      r.appendChild(el("div", "ours-row-sub", "Waiting for Marchanda to join"));
+      r.appendChild(el("div", "ours-row-sub", "Waiting for Bob to join"));
     } else {
       const copy = el("div", "ours-row-copy");
       copy.appendChild(el("div", "ours-row-title", "Language"));
@@ -401,7 +401,7 @@
       const c = el("div", cls("ours-card ours-card--glass", st));
       c.style.width = "358px";
       c.appendChild(el("div", "ours-card-title", "Quiet pause"));
-      c.appendChild(el("div", "ours-card-sub", "Marchanda sees you are on a break"));
+      c.appendChild(el("div", "ours-card-sub", "Bob sees you are on a break"));
       return c;
     }, true);
     addStackRow(grid, "bubble-partner", (st) => bubble("partner", "Just left the studio!", "14:12", st), true);

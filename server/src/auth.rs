@@ -95,6 +95,19 @@ pub fn hash_refresh_token(token: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// Keyed (HMAC-SHA256) hash of a client-supplied device id, so a leaked or
+/// offline-guessable device string is not a bearer credential by itself. The
+/// server secret (`token_secret`) is the key, same as token signatures.
+pub fn hash_device_id(device_id: &str, secret: &[u8]) -> Option<String> {
+    let trimmed = device_id.trim();
+    if trimmed.len() < 8 {
+        return None;
+    }
+    let mut mac = HmacSha256::new_from_slice(secret).ok()?;
+    mac.update(trimmed.as_bytes());
+    Some(hex::encode(mac.finalize().into_bytes()))
+}
+
 pub fn issue_tokens(conn: &Connection, secret: &[u8], user_id: i64, now: i64) -> AppResult<Tokens> {
     let revoked_before: i64 = conn
         .query_row(
@@ -114,15 +127,22 @@ pub fn issue_tokens(conn: &Connection, secret: &[u8], user_id: i64, now: i64) ->
     let refresh_hash = hash_refresh_token(&refresh_token);
     let refresh_expires_at = now + REFRESH_TOKEN_TTL_MS;
 
+    // Each issuance starts a new refresh-token family. Rotation purges the whole
+    // family (see refresh_auth), so siblings — including a stolen copy — die the
+    // moment any member of the family is used to rotate.
+    let mut raw_family = [0u8; 8];
+    rand::rng().fill_bytes(&mut raw_family);
+    let family_id = hex::encode(raw_family);
+
     conn.execute(
         "DELETE FROM refresh_tokens WHERE expires_at <= ?1",
         params![now],
     )?;
 
     conn.execute(
-        "INSERT INTO refresh_tokens (token_hash, user_id, expires_at, created_at)
-         VALUES (?1, ?2, ?3, ?4)",
-        params![refresh_hash, user_id, refresh_expires_at, now],
+        "INSERT INTO refresh_tokens (token_hash, user_id, expires_at, created_at, family_id, seq)
+         VALUES (?1, ?2, ?3, ?4, ?5, 1)",
+        params![refresh_hash, user_id, refresh_expires_at, now, family_id],
     )?;
 
     conn.execute(

@@ -109,6 +109,8 @@ pub struct CreatePairRequest {
     pub email: Option<String>,
     #[serde(default)]
     pub space_name: Option<String>,
+    #[serde(default)]
+    pub device_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -132,6 +134,8 @@ pub struct JoinPairRequest {
     pub code: String,
     pub name: String,
     pub email: Option<String>,
+    #[serde(default)]
+    pub device_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -162,6 +166,16 @@ pub struct GoogleAuthRequest {
     /// Gmail profile photo URL from the Google ID token, used to seed the avatar.
     #[serde(default)]
     pub picture: Option<String>,
+}
+
+/// Payload for the Authorization Code + PKCE callback: the SPA redirects the
+/// top-level window to Google and comes back with `?code=...&state=...`, then
+/// POSTs the code plus the PKCE verifier it stored in sessionStorage. The server
+/// holds the client_secret and performs the token exchange.
+#[derive(Deserialize)]
+pub struct GoogleCallbackRequest {
+    pub code: String,
+    pub code_verifier: String,
 }
 
 #[derive(Deserialize)]

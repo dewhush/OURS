@@ -1,6 +1,6 @@
 # Deploying OURS Server
 
-Target host: `192.168.100.92` on the LAN, SSH user `mnemonic` (key auth).
+Target host: `192.168.1.10` on the LAN, SSH user `deploy` (key auth).
 
 ## 1. Build the release binary
 
@@ -16,14 +16,14 @@ The stripped binary is at `server/target/release/ours-server`.
 ## 2. Copy binary and service files to the server
 
 ```bash
-ssh mnemonic@192.168.100.92 "sudo mkdir -p /opt/ours /etc/ours /var/lib/ours /var/backups/ours && sudo chown -R mnemonic:mnemonic /opt/ours /var/lib/ours /var/backups/ours"
-scp server/target/release/ours-server mnemonic@192.168.100.92:/opt/ours/ours-server
-scp deploy/backup.sh mnemonic@192.168.100.92:/opt/ours/backup.sh
-scp deploy/ours.env.example mnemonic@192.168.100.92:/tmp/ours.env
-scp deploy/ours-server.service mnemonic@192.168.100.92:/tmp/ours-server.service
+ssh deploy@192.168.1.10 "sudo mkdir -p /opt/ours /etc/ours /var/lib/ours /var/backups/ours && sudo chown -R deploy:deploy /opt/ours /var/lib/ours /var/backups/ours"
+scp server/target/release/ours-server deploy@192.168.1.10:/opt/ours/ours-server
+scp deploy/backup.sh deploy@192.168.1.10:/opt/ours/backup.sh
+scp deploy/ours.env.example deploy@192.168.1.10:/tmp/ours.env
+scp deploy/ours-server.service deploy@192.168.1.10:/tmp/ours-server.service
 ```
 
-On the server (`ssh mnemonic@192.168.100.92`):
+On the server (`ssh deploy@192.168.1.10`):
 
 ```bash
 chmod +x /opt/ours/ours-server /opt/ours/backup.sh
@@ -38,7 +38,7 @@ sudo systemctl enable --now ours-server
 Verify locally on the LAN:
 
 ```bash
-curl http://192.168.100.92:8080/health
+curl http://192.168.1.10:8080/health
 ```
 
 ## 3. Cloudflare Tunnel (public HTTPS + WebSocket)
@@ -47,7 +47,7 @@ Install `cloudflared` on the server, authenticate, create a tunnel, and configur
 
 ## 4. Backups
 
-Ensure `sqlite3` is installed (`sudo apt install -y sqlite3`), then add a daily cron job for `mnemonic`:
+Ensure `sqlite3` is installed (`sudo apt install -y sqlite3`), then add a daily cron job for `deploy`:
 
 ```cron
 15 3 * * * /opt/ours/backup.sh >> /var/log/ours-backup.log 2>&1

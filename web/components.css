@@ -952,3 +952,31 @@
 .cs-hl-stem { background: var(--bg-surface); border-right: var(--border-hairline) solid var(--line); border-bottom: var(--border-hairline) solid var(--line); transform: rotate(45deg); }
 .cs-nav-wrap { border-radius: var(--radius-card); background: var(--map-canvas-bg); border: var(--border-hairline) solid var(--line); box-sizing: border-box; overflow: hidden; }
 .cs-nav-orb { border-radius: var(--radius-pill); background: var(--action); opacity: 0.3; filter: blur(18px); }
+
+/* --------------------------------------------------------------------------
+   Responsive behavior for reusable atoms. The runtime shell uses styles.css;
+   these rules keep the component specimen layouts readable on tablet and
+   desktop, and extend reduced-motion parity across all atoms.
+   -------------------------------------------------------------------------- */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .ours-card,
+  .ours-input-wrap {
+    max-width: 100%;
+  }
+
+  .ours-btn--lg {
+    width: min(302px, 100%);
+  }
+
+  .cp-grid--wide .cp-row,
+  .cp-grid--wide .cp-state-head {
+    grid-template-columns: 140px repeat(4, minmax(280px, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ours-input-wrap,
+  .ours-card--glass {
+    transition: none;
+  }
+}

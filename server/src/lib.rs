@@ -30,6 +30,20 @@ async fn security_headers(req: Request, next: Next) -> Response {
         HeaderValue::from_static("nosniff"),
     );
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    // HSTS: force HTTPS on every subsequent visit for a year (browser-level
+    // downgrade protection; currently served through Cloudflare's HTTPS edge).
+    headers.insert(
+        "strict-transport-security",
+        HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+    );
+    // Required for Google Identity Services OAuth popup flow: without this,
+    // Chrome blocks window.closed polling from the popup, causing instant
+    // "sign in cancelled". same-origin-allow-popups explicitly permits
+    // popup↔opener postMessage for OAuth callbacks.
+    headers.insert(
+        "cross-origin-opener-policy",
+        HeaderValue::from_static("same-origin-allow-popups"),
+    );
     headers.insert(
         "referrer-policy",
         HeaderValue::from_static("strict-origin-when-cross-origin"),
@@ -97,6 +111,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/pair/state", get(routes::pair::get_pair_state))
         .route("/api/auth/refresh", post(routes::pair::refresh_auth))
         .route("/api/auth/google", post(routes::pair::google_auth))
+        .route("/api/auth/google/callback", post(routes::pair::google_callback))
         .route("/api/auth/logout", post(routes::pair::logout))
         .route("/api/me", get(routes::pair::get_me))
         .route("/api/me/avatar", post(routes::pair::upload_avatar))

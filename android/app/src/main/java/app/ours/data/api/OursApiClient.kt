@@ -154,6 +154,27 @@ class OursApiClient(
         return executeUnauthed(req) { body -> OursJson.decodeFromString(body) }
     }
 
+    /**
+     * Google Sign-In session creation. Posts a verified Firebase/Google [idToken]
+     * (plus optional name / invite / setup key / auto-create) to the server, which
+     * verifies the token, then logs the user into an existing account or creates a
+     * new one. Returns a [GoogleAuthResponseDto] whose [GoogleAuthResponseDto.status]
+     * is "authenticated" (with tokens) or "needs_pair" (join required). Unauthenticated
+     * responses are surfaced as an [ApiException] by [executeUnauthed].
+     */
+    suspend fun googleAuth(
+        serverUrl: String,
+        req: GoogleAuthRequestDto,
+    ): GoogleAuthResponseDto {
+        val base = serverUrl.trim().trimEnd('/')
+        val payload = OursJson.encodeToString(req)
+        val r = Request.Builder()
+            .url("$base/api/auth/google")
+            .post(payload.toRequestBody(jsonMediaType))
+            .build()
+        return executeUnauthed(r) { body -> OursJson.decodeFromString(body) }
+    }
+
     suspend fun me(): MeResponse {
         val req = Request.Builder().url("${base()}/api/me").get().build()
         return executeAuthed(req) { body -> OursJson.decodeFromString(body) }
@@ -411,10 +432,12 @@ class OursApiClient(
     fun openWebSocket(listener: WebSocketListener): WebSocket? {
         val token = prefs.accessToken ?: return null
         val httpUrl = "${base()}/api/ws".toHttpUrlOrNull() ?: return null
-        val wsUrl = httpUrl.newBuilder()
-            .addQueryParameter("token", token)
+        // Authenticate via the Sec-WebSocket-Protocol subprotocol so the access
+        // token never appears in a URL query string (proxy/log leakage risk).
+        val req = Request.Builder()
+            .url(httpUrl)
+            .header("Sec-WebSocket-Protocol", "ours.v1, bearer.$token")
             .build()
-        val req = Request.Builder().url(wsUrl).build()
         return okHttp.newWebSocket(req, listener)
     }
 

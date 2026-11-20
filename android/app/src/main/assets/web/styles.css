@@ -867,6 +867,46 @@ button:disabled, [aria-disabled="true"] {
   resize: vertical;
 }
 
+/* --------------------------------------------------------------------------
+   Interaction polish — subtle hover/press feedback using existing tokens.
+   Only floating chrome keeps blur; content cards get a light rim response.
+   -------------------------------------------------------------------------- */
+.btn-secondary:hover,
+.btn-glass:hover {
+  background: var(--surface-muted);
+}
+
+.btn-soft:hover,
+.btn-danger:hover {
+  filter: brightness(0.97);
+}
+
+.btn-primary:hover {
+  box-shadow: var(--glass-rim), var(--shadow-cta), var(--focus-ring);
+}
+
+.icon-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+}
+
+.grouped-row.row-btn:hover {
+  background: var(--surface-muted);
+}
+
+.memory-card,
+.place-bell-row {
+  transition: box-shadow 200ms var(--spring), border-color 200ms var(--spring);
+}
+
+@media (hover: hover) {
+  .memory-card:hover,
+  .place-bell-row:hover {
+    border-color: var(--border-glass);
+    box-shadow: var(--glass-rim), var(--shadow-card);
+  }
+}
+
 /* Cards & Inset Grouped Lists */
 .page-pad {
   padding: 10px 16px 24px;
@@ -2902,6 +2942,187 @@ button:disabled, [aria-disabled="true"] {
   display: none;
 }
 
+/* ==========================================================================
+   Tablet tier (768–1023px)
+   A true intermediate layout: centered readable content, a bounded floating
+   dock, natural two-column groupings, and uncluttered map chrome. Uses the
+   same tokens and existing class names as the mobile/desktop tiers.
+   ========================================================================== */
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Content: centered column with comfortable gutters instead of stretched
+     full-width cards. Top bar and bottom nav share the same measure. */
+  .page-pad {
+    max-width: 860px;
+    padding: 16px 28px 28px;
+    gap: 16px;
+  }
+
+  .top-bar {
+    left: 28px;
+    right: 28px;
+    max-width: 860px;
+    margin: 0 auto;
+    min-height: 56px;
+  }
+
+  /* Floating, centered capsule nav — bounded, not a full-width bar. */
+  .bottom-nav {
+    width: 360px;
+    max-width: calc(100vw - 48px);
+    height: 66px;
+    padding: 7px;
+    bottom: calc(var(--safe-bottom) + 18px);
+    border-radius: 33px;
+    gap: 6px;
+    box-shadow: var(--glass-rim), var(--shadow-capsule);
+  }
+
+  .nav-item {
+    height: 50px;
+    border-radius: 25px;
+    font-size: 10.5px;
+  }
+
+  .nav-item svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .nav-unread-dot {
+    right: 20px;
+  }
+
+  /* Screen padding respects the taller floating dock. */
+  .screen,
+  .screen.chat-with-header {
+    padding-bottom: calc(var(--safe-bottom) + 150px);
+  }
+
+  /* Two-column memories timeline: cards pair up while search, filters, the
+     month label and empty state keep the full measure. */
+  .screen:has(.memory-card) .page-pad {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 16px;
+  }
+
+  .screen:has(.memory-card) .page-pad > * {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .screen:has(.memory-card) .page-pad > .memory-card {
+    grid-column: auto;
+  }
+
+  .memory-photo {
+    height: 200px;
+  }
+
+  /* Settings: pair the couple card with the security hero, and the grouped
+     lists into two balanced columns, without full-height stretching. */
+  .screen:has(.settings-couple-card, .grouped-list) .page-pad {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 14px;
+  }
+
+  .screen:has(.settings-couple-card, .grouped-list) .page-pad > * {
+    align-self: start;
+    min-width: 0;
+  }
+
+  .screen:has(.settings-couple-card, .grouped-list) .page-pad > #btn-logout {
+    grid-column: 1 / -1;
+    justify-self: center;
+    min-width: 220px;
+  }
+
+  /* Saved places: geofence rows flow into two columns only when there is
+     room for a readable minimum, otherwise they stay single-column. */
+  .screen:has(.place-bell-row) .page-pad {
+    max-width: 860px;
+  }
+
+  .screen:has(.place-bell-row) .page-pad > div:has(> .place-bell-row) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 10px;
+  }
+
+  /* Chat: keep the conversation centered and comfortable; composer bounded. */
+  .chat-list {
+    max-width: 720px;
+  }
+
+  .chat-composer {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(720px, calc(100vw - 48px));
+    bottom: calc(var(--safe-bottom) + 88px);
+    padding: 8px 10px;
+    border-radius: 30px;
+    box-shadow: var(--glass-rim), var(--shadow-capsule);
+  }
+
+  .bubble-row {
+    max-width: 76%;
+  }
+
+  /* Map chrome: pin the top bar/rail to the readable measure, keep the
+     right rail from crowding the switcher, and lift the bottom stack clear
+     of the dock. */
+  .screen.map-screen .map-topbar {
+    left: 28px;
+    right: 28px;
+  }
+
+  .screen.map-screen .map-right-rail {
+    right: 28px;
+    top: calc(var(--safe-top) + 70px);
+    gap: 10px;
+  }
+
+  .map-switcher-pill {
+    min-width: 230px;
+  }
+
+  .map-bottom-stack {
+    left: 28px;
+    right: 88px;
+    bottom: calc(var(--safe-bottom) + 150px);
+  }
+
+  .map-floating-pills-row {
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .frosted-paused-banner {
+    left: 28px;
+    right: 88px;
+  }
+
+  /* Sheets read as a bounded panel, not an edge-to-edge mobile sheet. */
+  .map-bottom-stack .map-peek-sheet {
+    align-self: center;
+    width: min(560px, 100%);
+  }
+
+  /* Preserve generous touch targets on secondary controls. */
+  .filter-pill,
+  .pill-action {
+    min-height: 36px;
+  }
+
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
 @media (min-width: 1024px) {
   .app-shell.with-nav {
     display: block;
@@ -2958,12 +3179,12 @@ button:disabled, [aria-disabled="true"] {
   .desktop-rail-nav {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
 
   .rail-item {
-    height: 42px;
-    padding: 0 12px;
+    height: 44px;
+    padding: 0 14px;
     border-radius: 16px;
     border: none;
     background: transparent;
@@ -2972,9 +3193,17 @@ button:disabled, [aria-disabled="true"] {
     font-weight: 600;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     text-align: left;
-    transition: background 150ms var(--spring), color 150ms var(--spring);
+    transition: background 160ms var(--spring), color 160ms var(--spring), transform 140ms var(--spring);
+  }
+
+  .rail-item:hover:not(.active) {
+    background: var(--surface-muted);
+  }
+
+  .rail-item:active {
+    transform: scale(var(--motion-press-scale));
   }
 
   .rail-item.active {
@@ -3090,6 +3319,16 @@ button:disabled, [aria-disabled="true"] {
     color: var(--ink-secondary);
     font-size: 13px;
     font-weight: 600;
+    transition: background 160ms var(--spring), color 160ms var(--spring), transform 140ms var(--spring);
+  }
+
+  .desktop-util-btn:hover:not(.active):not(.danger) {
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .desktop-util-btn:active {
+    transform: scale(var(--motion-press-scale));
   }
 
   .desktop-util-btn.active {
@@ -3147,6 +3386,15 @@ button:disabled, [aria-disabled="true"] {
     font-size: 14px;
     font-weight: 600;
     white-space: nowrap;
+    transition: background 160ms var(--spring), color 160ms var(--spring), transform 140ms var(--spring), box-shadow 180ms var(--spring);
+  }
+
+  .desktop-dock-btn:hover:not(.primary) {
+    background: var(--surface);
+  }
+
+  .desktop-dock-btn:active {
+    transform: scale(var(--motion-press-scale));
   }
 
   .desktop-dock-btn.primary {
@@ -3160,10 +3408,10 @@ button:disabled, [aria-disabled="true"] {
     .desktop-inspector {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 16px;
       width: 348px;
       flex-shrink: 0;
-      padding: 18px;
+      padding: 20px;
       border-radius: 26px;
       background: var(--glass-strong);
       backdrop-filter: blur(26px) saturate(190%);
@@ -3171,6 +3419,8 @@ button:disabled, [aria-disabled="true"] {
       border: 1px solid var(--border-glass);
       box-shadow: var(--glass-rim), var(--shadow-md);
       overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-strong) transparent;
     }
   }
 
@@ -3207,6 +3457,53 @@ button:disabled, [aria-disabled="true"] {
 
   .bubble-photo-card .memory-photo {
     height: 170px;
+  }
+
+  /* Readable measures inside the desktop main column: keep content centered
+     rather than stretched edge-to-edge as the window grows. */
+  .desktop-main-col .page-pad {
+    max-width: 820px;
+    margin: 0 auto;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .desktop-main-col .chat-list {
+    max-width: 760px;
+  }
+
+  .desktop-main-col .top-bar {
+    max-width: calc(100% - 32px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Memories timeline uses the extra width for a two-column card grid while
+     search, filters and section headers keep the full measure. */
+  .desktop-main-col .screen:has(.memory-card) .page-pad {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 16px;
+  }
+
+  .desktop-main-col .screen:has(.memory-card) .page-pad > * {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .desktop-main-col .screen:has(.memory-card) .page-pad > .memory-card {
+    grid-column: auto;
+  }
+
+  .desktop-main-col .memory-photo {
+    height: 190px;
+  }
+
+  /* Rail scrollbar stays unobtrusive against the glass surface. */
+  .desktop-rail {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
   }
 }
 

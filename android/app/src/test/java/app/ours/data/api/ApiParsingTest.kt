@@ -138,11 +138,11 @@ class ApiParsingTest {
 
     @Test
     fun `parses user with optional gmail email`() {
-        val withEmail = """{"id": 1, "name": "Dewa", "email": "dewantoro@gmail.com", "created_at": 1731500000000}"""
+        val withEmail = """{"id": 1, "name": "Alice", "email": "alice@example.test", "created_at": 1731500000000}"""
         val u1 = OursJson.decodeFromString<UserDto>(withEmail)
-        assertEquals("dewantoro@gmail.com", u1.email)
+        assertEquals("alice@example.test", u1.email)
 
-        val withoutEmail = """{"id": 2, "name": "Marchanda", "email": null, "created_at": 1731500000000}"""
+        val withoutEmail = """{"id": 2, "name": "Bob", "email": null, "created_at": 1731500000000}"""
         val u2 = OursJson.decodeFromString<UserDto>(withoutEmail)
         assertNull(u2.email)
     }

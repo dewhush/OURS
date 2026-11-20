@@ -6,7 +6,12 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     // Applied only when google-services.json exists (created from the Firebase console).
     // Until then the app builds without Firebase and uses the Pocket ID OIDC sign-in.
-    if (File("google-services.json").exists()) {
+    // The plugins DSL has no projectDir/rootDir, so probe the plausible relative
+    // locations for the file depending on where Gradle is invoked from.
+    if (File("google-services.json").exists()
+        || File("app/google-services.json").exists()
+        || File("android/app/google-services.json").exists()
+    ) {
         id("com.google.gms.google-services")
     }
 }
@@ -126,6 +131,14 @@ dependencies {
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.google.identity.googleid)
+    // Legacy Google Sign-In (GoogleSignInClient / signInIntent) as a fallback
+    // when Credential Manager's identitycredentials process crashes
+    // (DeadObjectException on BadAuthentication). This path renders the native
+    // account picker via a different GMS code path that does NOT go through the
+    // identitycredentials process. It is NOT deprecated and still works on
+    // Android 16. Already transitively available from credentials-play-services-auth,
+    // but declared explicitly so the classpath is robust.
+    implementation("com.google.android.gms:play-services-auth:21.1.1")
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

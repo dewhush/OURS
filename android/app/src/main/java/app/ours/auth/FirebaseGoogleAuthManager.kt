@@ -65,6 +65,12 @@ object FirebaseGoogleAuthManager {
         withContext(Dispatchers.Main) {
             val cm = CredentialManager.create(activity)
             val googleIdOption = GetGoogleIdOption.Builder()
+                // `false` lists every account on the device in the picker. Using
+                // `true` instead makes GMS pre-mint tokens for ALL accounts just
+                // to decide which are "authorized" — and if the device's accounts
+                // are in a BadAuthentication hold, that shows an empty picker.
+                // `false` at least surfaces the account list; token mint happens
+                // on selection.
                 .setFilterByAuthorizedAccounts(false)
                 .setServerClientId(webClientId)
                 .setAutoSelectEnabled(false)
@@ -83,8 +89,17 @@ object FirebaseGoogleAuthManager {
             }
         }
 
-    /** Exchanges a Google ID token for a Firebase ID token + user profile. */
-    private suspend fun firebaseSignIn(googleIdToken: String): FirebaseResult =
+    /**
+     * Exchanges a raw Google ID token (from any Google sign-in source: Credential
+     * Manager, legacy GoogleSignInClient, or a web PKCE code exchange that yielded
+     * an id_token) for a Firebase ID token + user profile.
+     *
+     * This is public so callers that obtain a Google ID token through a different
+     * code path than [getGoogleIdToken] (e.g. legacy GoogleSignInClient.signInIntent)
+     * can still exchange it for a Firebase token without re-triggering the native
+     * account picker.
+     */
+    suspend fun firebaseSignIn(googleIdToken: String): FirebaseResult =
         suspendCancellableCoroutine { cont ->
             val auth = FirebaseAuth.getInstance()
             val credential = GoogleAuthProvider.getCredential(googleIdToken, null)

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use axum::{
     Json,
@@ -17,6 +18,8 @@ use crate::models::{ChatMessage, MessagesResponse};
 use crate::photos::{MAX_PHOTO_BYTES, PhotoGuard, save_jpeg_and_thumb};
 use crate::routes::{FcmPush, WsPush};
 use crate::state::AppState;
+
+const MESSAGE_MAX_PER_MIN: usize = 60;
 
 #[derive(Deserialize)]
 struct CreateMessageJson {
@@ -129,6 +132,9 @@ pub async fn post_message(
         return Err(AppError::bad_request("text or photo is required"));
     }
 
+    state.check_user_action(user_id, "message", MESSAGE_MAX_PER_MIN, Duration::from_secs(60))?;
+    state.record_user_action(user_id, "message");
+
     let data_dir = state.config.data_dir.clone();
     let db = state.db.clone();
 
@@ -149,19 +155,37 @@ pub async fn post_message(
             let tx = conn.transaction()?;
 
             if let Some(mid) = reply_to_message_id {
-                let exists: Option<i64> = tx
-                    .query_row("SELECT id FROM messages WHERE id = ?1", params![mid], |r| r.get(0))
+                // The quoted message must belong to this pair (me or my partner).
+                let row: Option<i64> = tx
+                    .query_row(
+                        "SELECT author_id FROM messages WHERE id = ?1",
+                        params![mid],
+                        |r| r.get(0),
+                    )
                     .optional()?;
-                if exists.is_none() {
+                let Some(author) = row else {
+                    return Err(AppError::not_found("reply_to_message_id not found"));
+                };
+                let partner = get_partner_id(&tx, user_id)?;
+                if author != user_id && partner != Some(author) {
                     return Err(AppError::not_found("reply_to_message_id not found"));
                 }
             }
 
             if let Some(cid) = reply_to_checkin_id {
-                let exists: Option<i64> = tx
-                    .query_row("SELECT id FROM checkins WHERE id = ?1", params![cid], |r| r.get(0))
+                // The quoted check-in must belong to this pair (me or my partner).
+                let row: Option<i64> = tx
+                    .query_row(
+                        "SELECT author_id FROM checkins WHERE id = ?1",
+                        params![cid],
+                        |r| r.get(0),
+                    )
                     .optional()?;
-                if exists.is_none() {
+                let Some(author) = row else {
+                    return Err(AppError::not_found("reply_to_checkin_id not found"));
+                };
+                let partner = get_partner_id(&tx, user_id)?;
+                if author != user_id && partner != Some(author) {
                     return Err(AppError::not_found("reply_to_checkin_id not found"));
                 }
             }

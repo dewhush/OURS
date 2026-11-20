@@ -49,7 +49,7 @@ Check methods: **B** build/test command, **C** curl/websocket against a locally 
 
 | ID | Check | Method | Status |
 | --- | --- | --- | --- |
-| T1-T12 | No Room/KSP/Play Services location; adaptive sampling; `LocationManager`; `SQLiteOpenHelper`; WS + 401 refresh-once; DTOs match `docs/API.md` field-for-field; server env config (optional `OURS_SETUP_KEY`, required if configured); `deploy/` files for `192.168.100.92` (`mnemonic`); server idle RSS `6.21 MB`; `/health` unauthed | R + C | PASS |
+| T1-T12 | No Room/KSP/Play Services location; adaptive sampling; `LocationManager`; `SQLiteOpenHelper`; WS + 401 refresh-once; DTOs match `docs/API.md` field-for-field; server env config (optional `OURS_SETUP_KEY`, required if configured); `deploy/` files for `192.168.1.10` (`deploy`); server idle RSS `6.21 MB`; `/health` unauthed | R + C | PASS |
 
 ## 5. Privacy and security (PRD §11)
 

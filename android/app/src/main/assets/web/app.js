@@ -11,6 +11,14 @@
   const OIDC_SCOPE = "openid email profile";
   const PKCE_VERIFIER_KEY = "ours_oidc_code_verifier";
   const PKCE_STATE_KEY = "ours_oidc_state";
+  // Google Authorization Code + PKCE (S256) redirect flow. Google blocks the
+  // implicit id_token flow for this client, so we redirect the top-level window
+  // to Google and come back with ?code=...&state=..., then POST the code plus the
+  // stored verifier to the server, which holds the client_secret and finishes the
+  // exchange. Verifier + state live in sessionStorage across the redirect.
+  const GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
+  const GOOGLE_VERIFIER_KEY = "ours_google_code_verifier";
+  const GOOGLE_STATE_KEY = "ours_google_state";
 
   function base64UrlEncode(bytes) {
     let bin = "";
@@ -788,6 +796,77 @@
     } catch (_) {}
   }
 
+  // Shared layout breakpoints, kept in sync with the CSS tiers:
+  // mobile <768, tablet 768-1023, desktop >=1024, wide >=1180.
+  function mediaMatches(query, fallback) {
+    if (window.matchMedia) return window.matchMedia(query).matches;
+    return typeof fallback === "function" ? fallback() : false;
+  }
+
+  function isTablet() {
+    return mediaMatches("(min-width: 768px) and (max-width: 1023px)", () => window.innerWidth >= 768 && window.innerWidth < 1024);
+  }
+
+  function isDesktop() {
+    return mediaMatches("(min-width: 1024px)", () => window.innerWidth >= 1024);
+  }
+
+  // MapLibre camera insets per layout tier. Tablet keeps a deeper bottom inset for
+  // the centered floating dock but narrower side insets than desktop split panels.
+  // Mobile values are preserved exactly from the previous hardcoded checks.
+  function mapPad(kind, vh) {
+    vh = vh || window.innerHeight || 820;
+    if (isDesktop()) {
+      if (kind === "edge") return { top: 80, left: 320, right: 80, bottom: 140 };
+      return { top: 155, left: 330, right: 90, bottom: 245 };
+    }
+    if (isTablet()) {
+      if (kind === "focus") return { top: 100, left: 60, right: 60, bottom: Math.min(Math.round(vh * 0.42), 360) };
+      if (kind === "edge") return { top: 80, left: 56, right: 56, bottom: 220 };
+      if (kind === "init") return { top: 105, left: 60, right: 80, bottom: Math.min(Math.round(vh * 0.42), 340) };
+      return { top: 105, left: 64, right: 88, bottom: Math.min(Math.round(vh * 0.42), 360) };
+    }
+    if (kind === "focus") return { top: 96, left: 40, right: 40, bottom: Math.min(Math.round(vh * 0.54), 460) };
+    if (kind === "edge") return { top: 80, left: 32, right: 32, bottom: 260 };
+    if (kind === "init") return { top: 105, left: 40, right: 64, bottom: Math.min(Math.round(vh * 0.52), 430) };
+    return { top: 105, left: 48, right: 68, bottom: Math.min(Math.round(vh * 0.54), 455) };
+  }
+
+  let currentLayoutTier = null;
+
+  function layoutTier() {
+    if (isDesktop()) return "desktop";
+    if (isTablet()) return "tablet";
+    return "mobile";
+  }
+
+  function refreshMapPaddingForBreakpoint() {
+    const tier = layoutTier();
+    if (tier === currentLayoutTier) return;
+    const previous = currentLayoutTier;
+    currentLayoutTier = tier;
+    if (previous === null || !mapInstance || state.tab !== "map") return;
+    try {
+      mapInstance.resize();
+      const vh = window.innerHeight || 820;
+      const pad = state.partnerFocused ? mapPad("focus", vh) : mapPad("general", vh);
+      mapInstance.jumpTo({ padding: pad });
+    } catch (_) {}
+  }
+
+  function watchLayoutBreakpoints() {
+    currentLayoutTier = layoutTier();
+    const queries = [
+      window.matchMedia?.("(min-width: 768px) and (max-width: 1023px)"),
+      window.matchMedia?.("(min-width: 1024px)")
+    ];
+    queries.forEach((mq) => {
+      if (!mq) return;
+      if (typeof mq.addEventListener === "function") mq.addEventListener("change", refreshMapPaddingForBreakpoint);
+      else if (typeof mq.addListener === "function") mq.addListener(refreshMapPaddingForBreakpoint);
+    });
+  }
+
   function resolveIsDark() {
     if (state.theme === "dark") return true;
     if (state.theme === "light") return false;
@@ -960,6 +1039,78 @@
     if (window.location && !window.location.protocol.startsWith("http")) return OIDC_REDIRECT_URI;
     const origin = window.location.origin.replace(/\/+$/, "");
     return origin === "https://ours.mnemonic.my.id" ? OIDC_REDIRECT_URI : origin + "/";
+  }
+
+  function clearGoogleCodeFromUrl() {
+    try {
+      window.history.replaceState({}, "", window.location.pathname);
+    } catch (_) {}
+  }
+
+  function forgetGoogleCodeSession() {
+    try {
+      sessionStorage.removeItem(GOOGLE_VERIFIER_KEY);
+      sessionStorage.removeItem(GOOGLE_STATE_KEY);
+    } catch (_) {}
+  }
+
+  // Boot-time handler for the Google Authorization Code + PKCE redirect. When
+  // Google bounces back to our origin with ?code=...&state=..., validate the
+  // state against the value we stored before the redirect, read the stored PKCE
+  // verifier, and POST both to the server (which holds the client_secret and
+  // finishes the token exchange). On success store tokens + user exactly like
+  // the legacy /api/auth/google path does, wipe code/state from the URL, and let
+  // the app continue. Returns true when it consumed the callback.
+  async function handleGoogleCodeCallback() {
+    if (!window.location || !window.location.search) return false;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const returnedState = params.get("state");
+    if (!code || !returnedState) return false;
+
+    // This is our callback: consume it regardless of outcome so a stale URL
+    // can't re-trigger the exchange on a later reload.
+    clearGoogleCodeFromUrl();
+    let expectedState = null;
+    let verifier = null;
+    try { expectedState = sessionStorage.getItem(GOOGLE_STATE_KEY); } catch (_) {}
+    try { verifier = sessionStorage.getItem(GOOGLE_VERIFIER_KEY); } catch (_) {}
+    forgetGoogleCodeSession();
+
+    // State mismatch / missing verifier = CSRF or a stale bookmark; bail.
+    if (!expectedState || expectedState !== returnedState || !verifier) {
+      showToast(t("googleCancelled"));
+      return true;
+    }
+
+    try {
+      const resp = await fetch(`${apiBase()}/api/auth/google/callback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, code_verifier: verifier })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data.status !== "authenticated" || !data.tokens) {
+        throw new Error(data?.message || `Google sign-in failed (${resp.status})`);
+      }
+      state.googleAuth = {
+        email: data.email || data.user?.email || "",
+        name: data.user?.name || "",
+        id_token: null,
+        provider: "google"
+      };
+      await completePairAuthSuccess({
+        tokens: data.tokens,
+        user: data.user,
+        partner: data.partner || null,
+        inviteCode: data.invite_code || "",
+        spaceName: data.space_name || ""
+      });
+      return true;
+    } catch (err) {
+      showToast(err.message || t("googleCancelled"));
+      return true;
+    }
   }
 
   async function loginWithPocketId() {
@@ -1556,6 +1707,40 @@
     if (targetInput) targetInput.focus();
   }
 
+  // Build the Google redirect_uri the same way the server derives it from the
+  // Origin header (window origin + a trailing slash) so the token exchange's
+  // redirect_uri matches the one used at the authorization step exactly.
+  function googleRedirectUri() {
+    const origin = (window.location?.origin || "").replace(/\/+$/, "");
+    return origin + "/";
+  }
+
+  // Start Google sign-in via Authorization Code + PKCE: generate a verifier +
+  // state, persist BOTH in sessionStorage (they must survive the top-level
+  // redirect), then send the window to Google's authorization endpoint with
+  // response_type=code. Google comes back to our origin with ?code=...&state=...;
+  // the boot-time handler below picks that up.
+  async function googleOAuthRedirect() {
+    const verifier = randomUrlSafe(32);
+    const challenge = await pkceChallenge(verifier);
+    const csrfState = randomUrlSafe(16);
+    try {
+      sessionStorage.setItem(GOOGLE_VERIFIER_KEY, verifier);
+      sessionStorage.setItem(GOOGLE_STATE_KEY, csrfState);
+    } catch (_) {}
+    const params = new URLSearchParams({
+      client_id: state.serverConfig.google_client_id,
+      redirect_uri: googleRedirectUri(),
+      response_type: "code",
+      scope: "openid email profile",
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+      state: csrfState,
+      prompt: "select_account"
+    });
+    window.location.href = `${GOOGLE_AUTH_ENDPOINT}?${params.toString()}`;
+  }
+
   function triggerGoogleSignIn() {
     // In the Android WebView shell, let the native bridge handle sign-in so it
     // can use Firebase Google Sign-In (native account picker). The Kotlin side
@@ -1565,8 +1750,16 @@
         window.OursNative.signInWithGoogle();
         return;
       } catch (e) {
-        // Native call failed (bridge throw) — fall through to web OIDC.
+        // Native call failed (bridge throw) — fall through to web Google/OIDC.
       }
+    }
+    // Plain browser: redirect the whole window to Google with PKCE. The implicit
+    // id_token flow is blocked for this client, so code + PKCE is the only path.
+    const gClientId = state.serverConfig?.google_client_id || "";
+    if (gClientId) {
+      haptic();
+      googleOAuthRedirect();
+      return;
     }
     loginWithPocketId();
   }
@@ -1578,6 +1771,16 @@
   window.onOursGoogleAuthFallback = (reason) => {
     if (reason === "cancelled") {
       showToast(t("googleCancelled"));
+      return;
+    }
+    // Native Google sign-in is unavailable on this device (e.g. no real Google
+    // Play Services, or the OAuth client/SHA-1 isn't registered for the app).
+    // Fall back to the in-WebView Authorization-Code + PKCE redirect, which
+    // works in any modern browser engine and needs no native Google account.
+    // Only bail to setup when the server hasn't configured a Google client at all.
+    const gClientId = state.serverConfig?.google_client_id || "";
+    if (gClientId) {
+      googleOAuthRedirect();
       return;
     }
     proceedToSpaceSetupStep();
@@ -2382,9 +2585,9 @@
     mapInstance.on("dragstart", markUserMove);
     mapInstance.on("zoomstart", markUserMove);
     mapInstance.on("load", () => {
-      if (!savedMapCamera && window.innerWidth < 1024) {
+      if (!savedMapCamera && !isDesktop()) {
         const vh = window.innerHeight || 844;
-        mapInstance.jumpTo({ center, zoom, padding: { top: 105, left: 40, right: 64, bottom: Math.min(Math.round(vh * 0.52), 430) } });
+        mapInstance.jumpTo({ center, zoom, padding: mapPad("init", vh) });
       }
       updateMapMarkers();
       updateRouteLayer();
@@ -3612,15 +3815,11 @@
     const vh = window.innerHeight || 820;
     const dur = immediate === true ? 0 : 650;
     if (state.partnerFocused && p?.lat != null && !p.paused && !state.partnerPaused) {
-      const focusPad = window.innerWidth < 1024
-        ? { top: 96, left: 40, right: 40, bottom: Math.min(Math.round(vh * 0.54), 460) }
-        : { top: 155, left: 330, right: 90, bottom: 245 };
+      const focusPad = mapPad("focus", vh);
       mapInstance.flyTo({ center: [p.lon, p.lat], zoom: 14.5, padding: focusPad, duration: dur });
       return;
     }
-    const pad = window.innerWidth < 1024
-      ? { top: 105, left: 48, right: 68, bottom: Math.min(Math.round(vh * 0.54), 455) }
-      : { top: 155, left: 330, right: 90, bottom: 245 };
+    const pad = mapPad("general", vh);
     if (p?.lat != null && !p.paused && !state.partnerPaused && m?.lat != null && haversineM(m.lat, m.lon, p.lat, p.lon) <= 100000) {
       const bounds = new maplibregl.LngLatBounds([m.lon, m.lat], [m.lon, m.lat]).extend([p.lon, p.lat]);
       mapInstance.fitBounds(bounds, { padding: pad, maxZoom: 14.5, duration: dur });
@@ -3658,7 +3857,7 @@
     if (edgeBtn) {
       edgeBtn.onclick = () => {
         if (mapInstance && state.partnerLocation?.lat != null) {
-          const pad = window.innerWidth < 1024 ? { top: 80, left: 32, right: 32, bottom: 260 } : { top: 80, left: 320, right: 80, bottom: 140 };
+          const pad = mapPad("edge");
           mapInstance.flyTo({ center: [state.partnerLocation.lon, state.partnerLocation.lat], zoom: 15, padding: pad });
         }
       };
@@ -4105,11 +4304,11 @@
           </div>
 
           <nav class="desktop-rail-nav">
-            <button class="rail-item ${state.tab === "map" ? "active" : ""}" data-tab="map">${svgIcon("map")}<span>${escapeHtml(t("tabMap"))}</span></button>
-            <button class="rail-item ${state.tab === "chat" ? "active" : ""}" data-tab="chat">${svgIcon("chat")}<span>${escapeHtml(t("tabChat"))}</span>${state.messages.length ? `<span class="rail-item-badge tnum">${state.messages.length}</span>` : ""}</button>
-            <button class="rail-item ${state.tab === "memories" ? "active" : ""}" data-tab="memories">${svgIcon("memories")}<span>${escapeHtml(t("tabMemories"))}</span><span class="rail-item-badge tnum">${state.memories.length}</span></button>
-            <button class="rail-item ${state.tab === "places" ? "active" : ""}" data-tab="places">${svgIcon("pin")}<span>${escapeHtml(t("tabPlaces"))}</span><span class="rail-item-badge tnum">${state.places.length}</span></button>
-            <button class="rail-item ${state.tab === "settings" ? "active" : ""}" data-tab="settings">${svgIcon("settings")}<span>${escapeHtml(t("settings"))}</span></button>
+            <button class="rail-item ${state.tab === "map" ? "active" : ""}" data-tab="map"${state.tab === "map" ? ' aria-current="page"' : ""}>${svgIcon("map")}<span>${escapeHtml(t("tabMap"))}</span></button>
+            <button class="rail-item ${state.tab === "chat" ? "active" : ""}" data-tab="chat"${state.tab === "chat" ? ' aria-current="page"' : ""}>${svgIcon("chat")}<span>${escapeHtml(t("tabChat"))}</span>${state.messages.length ? `<span class="rail-item-badge tnum">${state.messages.length}</span>` : ""}</button>
+            <button class="rail-item ${state.tab === "memories" ? "active" : ""}" data-tab="memories"${state.tab === "memories" ? ' aria-current="page"' : ""}>${svgIcon("memories")}<span>${escapeHtml(t("tabMemories"))}</span><span class="rail-item-badge tnum">${state.memories.length}</span></button>
+            <button class="rail-item ${state.tab === "places" ? "active" : ""}" data-tab="places"${state.tab === "places" ? ' aria-current="page"' : ""}>${svgIcon("pin")}<span>${escapeHtml(t("tabPlaces"))}</span><span class="rail-item-badge tnum">${state.places.length}</span></button>
+            <button class="rail-item ${state.tab === "settings" ? "active" : ""}" data-tab="settings"${state.tab === "settings" ? ' aria-current="page"' : ""}>${svgIcon("settings")}<span>${escapeHtml(t("settings"))}</span></button>
           </nav>
 
           ${
@@ -4252,10 +4451,10 @@
         </div>
       </div>
       <nav class="bottom-nav" aria-label="Main navigation">
-        <button class="nav-item ${state.tab === "map" ? "active" : ""}" data-tab="map">${svgIcon("map")}<span>${escapeHtml(t("tabMap"))}</span></button>
-        <button class="nav-item ${state.tab === "chat" ? "active" : ""}" data-tab="chat">${svgIcon("chat")}${state.unreadAlerts > 0 ? `<span class="nav-unread-dot"></span>` : ""}<span>${escapeHtml(t("tabChat"))}</span></button>
-        <button class="nav-item ${state.tab === "memories" ? "active" : ""}" data-tab="memories">${svgIcon("memories")}<span>${escapeHtml(t("tabMemories"))}</span></button>
-        <button class="nav-item ${state.tab === "settings" ? "active" : ""}" data-tab="settings">${svgIcon("settings")}<span>${escapeHtml(t("tabSettings"))}</span></button>
+        <button class="nav-item ${state.tab === "map" ? "active" : ""}" data-tab="map"${state.tab === "map" ? ' aria-current="page"' : ""}>${svgIcon("map")}<span>${escapeHtml(t("tabMap"))}</span></button>
+        <button class="nav-item ${state.tab === "chat" ? "active" : ""}" data-tab="chat"${state.tab === "chat" ? ' aria-current="page"' : ""}>${svgIcon("chat")}${state.unreadAlerts > 0 ? `<span class="nav-unread-dot"></span>` : ""}<span>${escapeHtml(t("tabChat"))}</span></button>
+        <button class="nav-item ${state.tab === "memories" ? "active" : ""}" data-tab="memories"${state.tab === "memories" ? ' aria-current="page"' : ""}>${svgIcon("memories")}<span>${escapeHtml(t("tabMemories"))}</span></button>
+        <button class="nav-item ${state.tab === "settings" ? "active" : ""}" data-tab="settings"${state.tab === "settings" ? ' aria-current="page"' : ""}>${svgIcon("settings")}<span>${escapeHtml(t("tabSettings"))}</span></button>
       </nav>
     `;
     bindHandlers();
@@ -4263,7 +4462,7 @@
 
   function boot() {
     inheritNativeState();
-    applyTheme();
+    watchLayoutBreakpoints();
 
     const splashSub = document.getElementById("splash-sub");
     if (splashSub) splashSub.textContent = t("appTagline");
@@ -4285,13 +4484,32 @@
       setTimeout(() => splash?.remove(), reducedMotion ? 80 : 340);
     }, reducedMotion ? 120 : 620);
 
-    loadServerConfig();
     render();
-    if (state.accessToken) {
-      syncAllData();
-      connectWebSocket();
-      startBrowserLocationWatch();
-    }
+    // Handle the Google PKCE redirect callback FIRST, before any other routing.
+    // It resolves the code -> tokens exchange and, on success, drops us straight
+    // into the paired app; when it consumed the callback there's nothing else to
+    // route on this load.
+    // In the native WebView, the web PKCE flow may redirect back to our origin
+    // with ?code=...&state=... when the native auth path failed. We must process
+    // that callback here — not just in the plain-browser path.
+    handleGoogleCodeCallback().then((consumed) => {
+      loadServerConfig();
+      if (!consumed && state.accessToken) {
+        syncAllData();
+        connectWebSocket();
+        startBrowserLocationWatch();
+      }
+    });
+    // Also poll for a late-arriving callback (same-origin navigation in a WebView
+    // may not trigger a full boot() re-run). Check for 10s after boot.
+    let pollRemaining = 20;
+    const googleCodePoll = setInterval(async () => {
+      if (await handleGoogleCodeCallback()) {
+        clearInterval(googleCodePoll);
+      }
+      if (--pollRemaining <= 0) clearInterval(googleCodePoll);
+    }, 500);
+    return;
   }
 
   boot();

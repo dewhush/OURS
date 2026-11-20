@@ -7,16 +7,16 @@ use axum::{
 };
 use rusqlite::{OptionalExtension, params};
 
-use crate::auth::{AuthUser, OptionalPeerIp, generate_invite_code, hash_refresh_token, issue_tokens};
+use crate::auth::{AuthUser, OptionalPeerIp, generate_invite_code, hash_device_id, hash_refresh_token, issue_tokens};
 use crate::db::{
     get_partner, get_partner_id, get_partner_location_for, get_space_name, get_user,
     get_user_fcm_token, get_user_name, insert_partner_event, now_ms, set_space_name,
 };
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    CreatePairRequest, CreatePairResponse, GoogleAuthRequest, GoogleAuthResponse, InviteResponse,
-    JoinPairRequest, JoinPairResponse, MeResponse, PairStateResponse, PushTokenRequest,
-    RefreshRequest, Tokens, UpdateNameRequest, User,
+    CreatePairRequest, CreatePairResponse, GoogleAuthRequest, GoogleAuthResponse,
+    GoogleCallbackRequest, InviteResponse, JoinPairRequest, JoinPairResponse, MeResponse,
+    PairStateResponse, PushTokenRequest, RefreshRequest, Tokens, UpdateNameRequest, User,
 };
 use crate::photos::{MAX_PHOTO_BYTES, PhotoGuard, delete_photo_files, save_jpeg_and_thumb};
 use crate::routes::{FcmPush, WsPush};
@@ -56,22 +56,17 @@ pub fn client_rate_key(
 ) -> String {
     // Honor proxy headers only when the TCP peer itself is loopback (local Nginx/Caddy/tunnel),
     // or in direct in-process unit tests without ConnectInfo wiring.
+    // Only the Cloudflare edge header (CF-Connecting-IP) is trusted: it is set by
+    // Cloudflare's edge (which also blocks client-forged copies), so it is
+    // authoritative. X-Real-IP / X-Forwarded-For pass through the edge untouched
+    // and are client-forgeable — never use them for rate-limit identity.
     let trust_forwarded = peer_ip.is_none_or(|ip| ip.is_loopback());
     if trust_forwarded {
         let forwarded = headers
             .get("CF-Connecting-IP")
-            .or_else(|| headers.get("X-Real-IP"))
             .and_then(|v| v.to_str().ok())
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .or_else(|| {
-                headers
-                    .get("X-Forwarded-For")
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(|s| s.split(',').next())
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-            })
             .and_then(|s| s.parse::<IpAddr>().ok());
 
         if let Some(ip) = forwarded {
@@ -112,6 +107,7 @@ pub async fn create_pair(
     }
     let email = normalize_email(req.email)?;
     let raw_space_name = req.space_name;
+    let creator_device_hash = req.device_id.as_deref().and_then(|d| hash_device_id(d, &state.config.token_secret));
 
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
@@ -129,8 +125,8 @@ pub async fn create_pair(
         let now = now_ms();
         let space_name = set_space_name(&tx, raw_space_name.as_deref())?;
         tx.execute(
-            "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
-            params![name, email, now],
+            "INSERT INTO users (name, email, device_hash, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4)",
+            params![name, email, creator_device_hash, now],
         )?;
         let user_id = tx.last_insert_rowid();
         let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
@@ -216,6 +212,7 @@ pub async fn join_pair(
         return Err(AppError::bad_request("name must be 1-40 characters"));
     }
     let email = normalize_email(req.email)?;
+    let joiner_device_hash = req.device_id.as_deref().and_then(|d| hash_device_id(d, &state.config.token_secret));
 
     let db = state.db.clone();
     let secret = state.config.token_secret.clone();
@@ -242,13 +239,27 @@ pub async fn join_pair(
             return Err(AppError::invite_not_found());
         }
 
+        // Reject the join if the email already belongs to an account. Otherwise a
+        // second user row could carry the same email (identity confusion later in
+        // the Google login path, which resolves by newest row).
+        let existing_email: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM users WHERE lower(email) = lower(?1) LIMIT 1",
+                params![email],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if existing_email.is_some() {
+            return Err(AppError::bad_request("email is already associated with an account"));
+        }
+
         tx.execute(
             "UPDATE invites SET used_at = ?1 WHERE code = ?2",
             params![now, code],
         )?;
         tx.execute(
-            "INSERT INTO users (name, email, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?3)",
-            params![name, email, now],
+            "INSERT INTO users (name, email, device_hash, created_at, last_seen_at) VALUES (?1, ?2, ?3, ?4, ?4)",
+            params![name, email, joiner_device_hash, now],
         )?;
         let user_id = tx.last_insert_rowid();
         let user = get_user(&tx, user_id)?.ok_or_else(|| AppError::internal("user missing"))?;
@@ -282,7 +293,9 @@ pub async fn refresh_auth(
 ) -> AppResult<Json<Tokens>> {
     let raw = req.refresh_token.trim().to_string();
     let token_hash = hash_refresh_token(&raw);
-    let rate_key = client_rate_key(peer_ip, &headers, &token_hash[..16]);
+    // Key the limiter on the FULL token hash — a 64-bit prefix can collide
+    // across distinct tokens and lets an attacker spread attempts across buckets.
+    let rate_key = client_rate_key(peer_ip, &headers, &token_hash);
     state.check_refresh_rate_limit(&rate_key)?;
 
     if raw.is_empty() {
@@ -299,15 +312,15 @@ pub async fn refresh_auth(
         let tx = conn.transaction()?;
 
         let now = now_ms();
-        let row: Option<(i64, i64)> = tx
+        let row: Option<(i64, i64, String)> = tx
             .query_row(
-                "SELECT user_id, expires_at FROM refresh_tokens WHERE token_hash = ?1",
+                "SELECT user_id, expires_at, family_id FROM refresh_tokens WHERE token_hash = ?1",
                 params![token_hash],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?;
 
-        let Some((user_id, expires_at)) = row else {
+        let Some((user_id, expires_at, family_id)) = row else {
             return Err(AppError::invalid_refresh_token("unknown or already used refresh token"));
         };
         if expires_at <= now {
@@ -319,10 +332,15 @@ pub async fn refresh_auth(
             return Err(AppError::invalid_refresh_token("refresh token expired"));
         }
 
+        // Revoke the ENTIRE refresh-token family, not just the presented token.
+        // A stolen sibling — even one issued beside a legitimate client's token —
+        // dies the moment any member of the family is used to rotate.
         tx.execute(
-            "DELETE FROM refresh_tokens WHERE token_hash = ?1",
-            params![token_hash],
+            "DELETE FROM refresh_tokens WHERE user_id = ?1 AND family_id = ?2",
+            params![user_id, family_id],
         )?;
+        // issue_tokens starts a fresh family, so the new token shares nothing with
+        // the revoked one.
         let tokens = issue_tokens(&tx, &secret, user_id, now)?;
         tx.execute(
             "UPDATE users SET last_seen_at = ?1 WHERE id = ?2",
@@ -635,6 +653,11 @@ pub async fn set_push_token(
     if token.is_empty() {
         return Err(AppError::bad_request("token must not be empty"));
     }
+    // FCM registration tokens are ~163 chars in practice; 4096 gives generous headroom
+    // while blocking DB-abuse via arbitrarily long blobs.
+    if token.len() > 4096 {
+        return Err(AppError::bad_request("token exceeds 4096 characters"));
+    }
 
     let db = state.db.clone();
     tokio::task::spawn_blocking(move || -> AppResult<()> {
@@ -699,6 +722,7 @@ pub fn verify_jwt_with_rsa_components(
     e: &str,
     issuer: Option<&str>,
     audience: Option<&[&str]>,
+    email_verified_required: bool,
 ) -> AppResult<(String, Option<String>, Option<String>)> {
     let key = jsonwebtoken::DecodingKey::from_rsa_components(n, e)
         .map_err(|_| AppError::unauthorized("invalid id token public key"))?;
@@ -718,15 +742,23 @@ pub fn verify_jwt_with_rsa_components(
         validation.validate_aud = false;
     }
     let decoded = jsonwebtoken::decode::<IdTokenClaims>(id_token, &key, &validation)
-        .map_err(|_| AppError::unauthorized("invalid or expired ID token"))?;
-    // Pocket ID uses passkeys: the user is strongly authenticated at the IdP even
-    // though it does not set email_verified=true the way Google does. So we only
-    // enforce email_verified when the provider actually asserts it; a missing /
-    // false value is accepted for the OIDC (Pocket ID) path. The email itself is
-    // still required and normalized below.
-    let email_verified_ok = match issuer {
-        Some(_) => true,
-        None => decoded.claims.email_verified == Some(true),
+        .map_err(|e| {
+            tracing::warn!(
+                "ID token verification failed: {e} (iss={:?} aud={:?} kid_present={})",
+                issuer,
+                audience.map(|a| a.to_vec()),
+                id_token.split('.').count()
+            );
+            AppError::unauthorized("invalid or expired ID token")
+        })?;
+    // email_verified enforcement: providers that assert the claim (Firebase,
+    // legacy Google) require it; the self-hosted OIDC (Pocket ID) path is a
+    // documented exception — passkey auth at the IdP substitutes for email
+    // verification, and accept_id_token explicitly passes `false` for it.
+    let email_verified_ok = if email_verified_required {
+        decoded.claims.email_verified == Some(true)
+    } else {
+        true
     };
     if !email_verified_ok {
         return Err(AppError::unauthorized("email is not verified"));
@@ -772,32 +804,58 @@ async fn verify_id_token(state: &AppState, id_token: &str) -> AppResult<(String,
     if let Some(proj) = state.config.firebase_project_id.clone() {
         let issuer = format!("https://securetoken.google.com/{proj}");
         let aud_refs = vec![proj.as_str()];
+        // A missing kid here is NOT fatal — the token may belong to another
+        // provider (e.g. a Google OAuth id_token whose kid is in Google's JWKS).
+        // Fall through to the next provider instead of returning early.
         let pair = match state.get_firebase_jwk(&kid, false).await? {
             Some(p) => p,
-            None => state.get_firebase_jwk(&kid, true).await?.ok_or_else(|| {
-                AppError::unauthorized("unrecognized signing key")
-            })?,
+            None => match state.get_firebase_jwk(&kid, true).await? {
+                Some(p) => p,
+                // kid genuinely unknown to Firebase — try the other providers.
+                None => {
+                    tracing::warn!("id_token kid not in Firebase JWKS, trying next provider: kid={kid}");
+                    return verify_id_token_non_firebase(state, id_token, &kid).await;
+                }
+            },
         };
         if let Ok(claims) = verify_jwt_with_rsa_components(
-            id_token, &pair.0, &pair.1, Some(&issuer), Some(&aud_refs),
+            id_token, &pair.0, &pair.1, Some(&issuer), Some(&aud_refs), true,
         ) {
             return Ok(claims);
         }
     }
 
+    // Firebase not configured, or its check didn't validate the token — try the
+    // remaining providers so neither short-circuits the others.
+    verify_id_token_non_firebase(state, id_token, &kid).await
+}
+
+/// Try Pocket ID + legacy Google for an id_token whose kid was NOT found in
+/// Firebase's JWKS (or when Firebase isn't configured). Keeps the provider
+/// attempts independent so a missing kid in one never hides another.
+async fn verify_id_token_non_firebase(
+    state: &AppState,
+    id_token: &str,
+    kid: &str,
+) -> AppResult<(String, Option<String>, Option<String>)> {
     // 2) Pocket ID OIDC: iss=OURS_OIDC_ISSUER, aud=one of OURS_OIDC_CLIENT_IDS.
     if let Some(oidc_issuer) = state.config.oidc_issuer.clone() {
         let audience = state.config.oidc_client_ids.clone();
         if !audience.is_empty() {
             let aud_refs: Vec<&str> = audience.iter().map(|s| s.as_str()).collect();
-            let pair = match state.get_google_jwk(&kid, false).await? {
+            let pair = match state.get_google_jwk(kid, false).await? {
                 Some(p) => p,
-                None => state.get_google_jwk(&kid, true).await?.ok_or_else(|| {
-                    AppError::unauthorized("unrecognized signing key")
-                })?,
+                None => match state.get_google_jwk(kid, true).await? {
+                    Some(p) => p,
+                    None => {
+                        tracing::warn!("id_token kid not in OIDC JWKS: kid={kid}");
+                        // fall through to legacy Google
+                        return verify_id_token_legacy_google(state, id_token, kid).await;
+                    }
+                },
             };
             if let Ok(claims) = verify_jwt_with_rsa_components(
-                id_token, &pair.0, &pair.1, Some(&oidc_issuer), Some(&aud_refs),
+                id_token, &pair.0, &pair.1, Some(&oidc_issuer), Some(&aud_refs), false,
             ) {
                 return Ok(claims);
             }
@@ -805,13 +863,27 @@ async fn verify_id_token(state: &AppState, id_token: &str) -> AppResult<(String,
     }
 
     // 3) Legacy Google: iss=accounts.google.com, aud=google_client_id.
+    verify_id_token_legacy_google(state, id_token, kid).await
+}
+
+async fn verify_id_token_legacy_google(
+    state: &AppState,
+    id_token: &str,
+    kid: &str,
+) -> AppResult<(String, Option<String>, Option<String>)> {
     if let Some(gcid) = state.config.google_client_id.clone() {
         let aud_refs = vec![gcid.as_str()];
-        let pair = match state.get_google_jwk(&kid, false).await? {
+        // Use Google's OWN OAuth certs (iss=accounts.google.com) — NOT get_google_jwk,
+        // which resolves to the Pocket ID OIDC JWKS when that provider is configured.
+        let pair = match state.get_google_oauth_jwk(kid, false).await? {
             Some(p) => p,
-            None => state.get_google_jwk(&kid, true).await?.ok_or_else(|| {
-                AppError::unauthorized("unrecognized signing key")
-            })?,
+            None => match state.get_google_oauth_jwk(kid, true).await? {
+                Some(p) => p,
+                None => {
+                    tracing::warn!("id_token kid not in Google OAuth JWKS: kid={kid}");
+                    return Err(AppError::unauthorized("unrecognized signing key"));
+                }
+            },
         };
         if let Ok(claims) = verify_jwt_with_rsa_components(
             id_token,
@@ -819,19 +891,36 @@ async fn verify_id_token(state: &AppState, id_token: &str) -> AppResult<(String,
             &pair.1,
             Some("https://accounts.google.com"),
             Some(&aud_refs),
+            true,
         ) {
             return Ok(claims);
         }
+        tracing::warn!("id_token matched Google JWKS but failed iss/aud check: kid={kid} aud={gcid}");
     }
 
     Err(AppError::unauthorized("invalid or expired ID token"))
 }
 
-fn hash_device_id(device_id: Option<&str>) -> Option<String> {
-    device_id
-        .map(str::trim)
-        .filter(|d| d.len() >= 8)
-        .map(hash_refresh_token)
+/// Request-derived fields shared by every Google sign-in entrypoint. Both the
+/// legacy id_token handler and the PKCE callback handler resolve these from
+/// their own request and then feed them through the same join-or-create core.
+struct GoogleAuthIntent {
+    email: String,
+    name: Option<String>,
+    space_name: Option<String>,
+    device_id: Option<String>,
+    invite_code: Option<String>,
+    setup_key: Option<String>,
+    auto_create: bool,
+}
+
+/// Identity claims a Google token was verified to carry. `verified` is true only
+/// when a signature check succeeded (never from client-supplied fields alone).
+struct VerifiedGoogleIdentity {
+    verified: bool,
+    email: Option<String>,
+    name: Option<String>,
+    picture: Option<String>,
 }
 
 pub async fn google_auth(
@@ -848,21 +937,23 @@ pub async fn google_auth(
     let ip_rate_key = client_rate_key(peer_ip, &headers, "google_auth_pre");
     state.check_google_auth_rate_limit(&ip_rate_key)?;
 
-    let mut verified_by_google = false;
-    let mut jwt_email: Option<String> = None;
-    let mut jwt_name: Option<String> = None;
-    let mut jwt_picture: Option<String> = None;
+    let mut identity = VerifiedGoogleIdentity {
+        verified: false,
+        email: None,
+        name: None,
+        picture: None,
+    };
 
     if let Some(raw_tok) = req.id_token.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         let verification = verify_id_token(&state, raw_tok).await;
         match verification {
             Ok((v_email, v_name, v_picture)) => {
-                verified_by_google = true;
-                jwt_email = Some(v_email);
-                jwt_name = v_name;
-                jwt_picture = v_picture.or_else(|| req.picture.clone());
+                identity.verified = true;
+                identity.email = Some(v_email);
+                identity.name = v_name;
+                identity.picture = v_picture.or_else(|| req.picture.clone());
                 // Success: clear the IP pre-check so legit retries aren't throttled.
-                state.clear_google_auth_rate_limit(&ip_rate_key);
+                state.raise_google_auth_rate_limit(&ip_rate_key);
             }
             Err(_) => {
                 // Failure: record against the IP pre-check so repeated garbage
@@ -872,6 +963,35 @@ pub async fn google_auth(
             }
         }
     }
+
+    let intent = GoogleAuthIntent {
+        email: req.email,
+        name: req.name,
+        space_name: req.space_name,
+        device_id: req.device_id,
+        invite_code: req.invite_code,
+        setup_key: req.setup_key,
+        auto_create: req.auto_create == Some(true),
+    };
+    finish_google_auth(state, peer_ip, headers, identity, intent).await.map(Json)
+}
+
+/// Shared join-or-create core for Google sign-in. Resolves the effective email
+/// (verified token email wins over any client-supplied one), applies the same
+/// per-IP and per-email rate limits, then logs into an existing account or
+/// creates a new one (via invite code, or auto-create for first-run). Returns
+/// the identical JSON shape for every entrypoint.
+async fn finish_google_auth(
+    state: AppState,
+    peer_ip: Option<IpAddr>,
+    headers: HeaderMap,
+    identity: VerifiedGoogleIdentity,
+    req: GoogleAuthIntent,
+) -> AppResult<GoogleAuthResponse> {
+    let verified_by_google = identity.verified;
+    let jwt_email = identity.email;
+    let jwt_name = identity.name;
+    let jwt_picture = identity.picture;
 
     let raw_email = if let Some(ref verified_email) = jwt_email {
         if !req.email.trim().is_empty() && req.email.trim().to_ascii_lowercase() != *verified_email {
@@ -889,7 +1009,10 @@ pub async fn google_auth(
     state.check_join_rate_limit(&email_rate_key)?;
     state.check_google_auth_rate_limit(&email_rate_key)?;
     state.check_google_auth_rate_limit(&scoped_email_key)?;
-    let req_device_hash = hash_device_id(req.device_id.as_deref());
+    // (The IP pre-check key is handled entirely by the caller: both entrypoints
+    // clear it once a signature-verified identity is in hand and record it on
+    // verification failure, before reaching this core.)
+    let req_device_hash = req.device_id.as_deref().and_then(|d| hash_device_id(d, &state.config.token_secret));
 
     let raw_name = req
         .name
@@ -970,12 +1093,7 @@ pub async fn google_auth(
                 false
             };
 
-            if stored_device_hash.is_some()
-                && !verified_by_google
-                && !device_ok
-                && !invite_ok
-                && !setup_key_ok
-            {
+            if !verified_by_google && !device_ok && !invite_ok && !setup_key_ok {
                 return Err(AppError::unauthorized(
                     "device verification, verified Google sign-in, setup key, or valid invite code required for existing account",
                 ));
@@ -1038,9 +1156,9 @@ pub async fn google_auth(
     match existing {
         Ok(Some(resp)) => {
             state.clear_join_rate_limit(&email_rate_key);
-            state.clear_google_auth_rate_limit(&email_rate_key);
-            state.clear_google_auth_rate_limit(&scoped_email_key);
-            return Ok(Json(resp));
+            state.raise_google_auth_rate_limit(&email_rate_key);
+            state.raise_google_auth_rate_limit(&scoped_email_key);
+            return Ok(resp);
         }
         Ok(None) => {}
         Err(err) => {
@@ -1112,7 +1230,7 @@ pub async fn google_auth(
         return match res {
             Ok(resp) => {
                 state.clear_join_rate_limit(&rate_key);
-                Ok(Json(resp))
+                Ok(resp)
             }
             Err(err) => {
                 if err.code == "invite_not_found" {
@@ -1124,7 +1242,7 @@ pub async fn google_auth(
     }
 
     // Case C: New user without invite_code
-    if req.auto_create == Some(true) {
+    if req.auto_create {
         let mut create_rate_key: Option<String> = None;
         if let Some(ref expected_key) = state.config.setup_key {
             let provided_key = req
@@ -1187,10 +1305,10 @@ pub async fn google_auth(
         if let Some(ref rk) = create_rate_key {
             state.clear_create_rate_limit(rk);
         }
-        return Ok(Json(resp));
+        return Ok(resp);
     }
 
-    Ok(Json(GoogleAuthResponse {
+    Ok(GoogleAuthResponse {
         status: "needs_pair".to_string(),
         user: None,
         partner: None,
@@ -1199,6 +1317,136 @@ pub async fn google_auth(
         email: Some(email),
         name: Some(name),
         space_name: None,
-    }))
+    })
+}
+
+/// Authorization Code + PKCE callback. The SPA redirected the top-level window
+/// to Google and landed back on our origin with `?code=...&state=...`, validated
+/// `state` client-side, and now POSTs the code plus the PKCE verifier it kept in
+/// sessionStorage. We hold the client_secret (required by Google for a Web
+/// application client even with PKCE) and perform the token exchange here so the
+/// secret never reaches the browser, then hand the resulting id_token to the
+/// SAME join-or-create core the legacy id_token handler uses.
+pub async fn google_callback(
+    OptionalPeerIp(peer_ip): OptionalPeerIp,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<GoogleCallbackRequest>,
+) -> AppResult<Json<GoogleAuthResponse>> {
+    // Rate limit BEFORE any outbound call so a flood of bogus codes can't drive
+    // unlimited token-endpoint requests. Uses the same limiter as the legacy path.
+    let ip_rate_key = client_rate_key(peer_ip, &headers, "google_auth_pre");
+    state.check_google_auth_rate_limit(&ip_rate_key)?;
+
+    let code = req.code.trim().to_string();
+    let code_verifier = req.code_verifier.trim().to_string();
+    if code.is_empty() || code_verifier.is_empty() {
+        state.record_google_auth_failure(&ip_rate_key);
+        return Err(AppError::bad_request("code and code_verifier are required"));
+    }
+
+    let Some(google_client_id) = state.config.google_client_id.clone() else {
+        state.record_google_auth_failure(&ip_rate_key);
+        return Err(AppError::bad_request("Google sign-in is not configured"));
+    };
+    let Some(google_client_secret) = state.config.google_client_secret.clone() else {
+        state.record_google_auth_failure(&ip_rate_key);
+        return Err(AppError::bad_request(
+            "Google sign-in is not fully configured (missing client secret)",
+        ));
+    };
+
+    // The redirect_uri must be a server-side configuration, NOT derived from the
+    // Origin header. The browser's Origin is trustworthy for CSRF but must not
+    // determine the OAuth redirect URI — that's a server-side decision, pinned
+    // to the authorized redirect URI registered in Google Cloud Console.
+    let redirect_uri = state
+        .config
+        .google_redirect_uri
+        .clone()
+        .unwrap_or_else(|| "https://ours.mnemonic.my.id/".to_string());
+
+    // Exchange the authorization code (+ PKCE verifier + client_secret) for tokens.
+    // Reuse the shared HTTP client (used for JWKS / FCM fetches).
+    let token_resp = state
+        .http_client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("code", code.as_str()),
+            ("code_verifier", code_verifier.as_str()),
+            ("client_id", google_client_id.as_str()),
+            ("client_secret", google_client_secret.as_str()),
+            ("redirect_uri", redirect_uri.as_str()),
+            ("grant_type", "authorization_code"),
+        ])
+        .send()
+        .await;
+    let token_resp = match token_resp {
+        Ok(r) => r,
+        Err(_) => {
+            state.record_google_auth_failure(&ip_rate_key);
+            return Err(AppError::unauthorized("Google token exchange failed"));
+        }
+    };
+
+    #[derive(serde::Deserialize)]
+    struct GoogleTokenResponse {
+        id_token: Option<String>,
+        #[allow(dead_code)]
+        access_token: Option<String>,
+        error: Option<String>,
+        error_description: Option<String>,
+    }
+
+    let status = token_resp.status();
+    let body: GoogleTokenResponse = token_resp.json().await.unwrap_or(GoogleTokenResponse {
+        id_token: None,
+        access_token: None,
+        error: None,
+        error_description: None,
+    });
+
+    if !status.is_success() || body.id_token.is_none() {
+        state.record_google_auth_failure(&ip_rate_key);
+        let detail = body
+            .error_description
+            .or(body.error)
+            .unwrap_or_else(|| format!("token endpoint returned {status}"));
+        tracing::warn!("Google PKCE token exchange failed: {detail}");
+        return Err(AppError::unauthorized("invalid or expired authorization code"));
+    }
+
+    let id_token = body.id_token.unwrap();
+    // Reuse the same signature-verified identity resolution as the legacy path.
+    let verification = verify_id_token(&state, &id_token).await;
+    let (v_email, v_name, v_picture) = match verification {
+        Ok(claims) => {
+            state.raise_google_auth_rate_limit(&ip_rate_key);
+            claims
+        }
+        Err(_) => {
+            state.record_google_auth_failure(&ip_rate_key);
+            return Err(AppError::unauthorized("invalid or expired ID token"));
+        }
+    };
+
+    let identity = VerifiedGoogleIdentity {
+        verified: true,
+        email: Some(v_email),
+        name: v_name,
+        picture: v_picture,
+    };
+    let intent = GoogleAuthIntent {
+        email: String::new(),
+        name: None,
+        space_name: None,
+        device_id: None,
+        invite_code: None,
+        setup_key: None,
+        auto_create: false,
+    };
+    finish_google_auth(state, peer_ip, headers, identity, intent)
+        .await
+        .map(Json)
 }
 

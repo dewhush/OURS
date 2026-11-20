@@ -12,7 +12,8 @@ import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Encrypts sensitive session tokens using an Android Keystore AES-256-GCM key.
- * Fails closed when AndroidKeyStore is available rather than falling back to plaintext.
+ * Fails closed when AndroidKeyStore is unavailable: encrypt() returns null
+ * (token not persisted) instead of falling back to plaintext.
  */
 object TokenCipher {
     private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
@@ -26,7 +27,9 @@ object TokenCipher {
 
     fun encrypt(plain: String?): String? {
         if (plain.isNullOrEmpty()) return plain
-        if (!hasAndroidKeyStore()) return plain
+        // Fail CLOSED: without AndroidKeyStore we cannot protect the token, so
+        // refuse to store it at all rather than silently writing plaintext.
+        if (!hasAndroidKeyStore()) return null
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
         val iv = cipher.iv

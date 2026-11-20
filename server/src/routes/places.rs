@@ -1,15 +1,19 @@
+use std::time::Duration;
+
 use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
 };
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
 use crate::auth::AuthUser;
 use crate::db::{get_partner_id, now_ms};
 use crate::error::{AppError, AppResult};
 use crate::models::{CreatePlaceRequest, Event, Place, PlacesResponse};
 use crate::state::AppState;
+
+const PLACE_MAX_PER_DAY: usize = 50;
 
 pub async fn list_places(
     AuthUser(_user_id): AuthUser,
@@ -65,6 +69,9 @@ pub async fn create_place(
         return Err(AppError::bad_request("radius_m must be in [20, 5000]"));
     }
 
+    state.check_user_action(user_id, "place", PLACE_MAX_PER_DAY, Duration::from_secs(86400))?;
+    state.record_user_action(user_id, "place");
+
     let db = state.db.clone();
     let (place, partner_id) = tokio::task::spawn_blocking(move || -> AppResult<(Place, Option<i64>)> {
         let conn = db
@@ -117,6 +124,25 @@ pub async fn delete_place(
         let conn = db
             .lock()
             .map_err(|_| AppError::internal("database lock poisoned"))?;
+
+        // Only the creator or their paired partner may delete a place.
+        let created_by: Option<i64> = conn
+            .query_row(
+                "SELECT created_by FROM places WHERE id = ?1",
+                params![place_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(owner_id) = created_by else {
+            return Ok((0, None));
+        };
+        let partner_of_owner = get_partner_id(&conn, owner_id)?;
+        let is_creator = owner_id == user_id;
+        let is_partner = partner_of_owner == Some(user_id);
+        if !is_creator && !is_partner {
+            return Err(AppError::forbidden("only the pair that owns this place can delete it"));
+        }
+
         let n = conn.execute("DELETE FROM places WHERE id = ?1", params![place_id])?;
         let partner_id = if n > 0 {
             get_partner_id(&conn, user_id)?

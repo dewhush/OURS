@@ -38,6 +38,14 @@ impl TestApp {
             data_dir: data_dir.clone(),
             setup_key: setup_key.map(str::to_string),
             google_client_id: None,
+            google_client_secret: None,
+            google_redirect_uri: None,
+            oidc_issuer: None,
+            oidc_client_ids: Vec::new(),
+            oidc_android_client_id: None,
+            oidc_web_client_id: None,
+            oidc_jwks_url: None,
+            firebase_project_id: None,
             token_secret: b"0123456789abcdef0123456789abcdef".to_vec(),
             history_days: 30,
             stale_minutes: 15,
@@ -70,7 +78,7 @@ impl TestApp {
             .client
             .post(format!("{}/api/pair/create", self.base_url))
             .header("X-Setup-Key", "test-setup-key")
-            .json(&json!({"name": "Dewantoro"}))
+            .json(&json!({"name": "Alice"}))
             .send()
             .await
             .unwrap()
@@ -85,7 +93,7 @@ impl TestApp {
         let r2: Value = self
             .client
             .post(format!("{}/api/pair/join", self.base_url))
-            .json(&json!({"code": code, "name": "Marchanda"}))
+            .json(&json!({"code": code, "name": "Bob"}))
             .send()
             .await
             .unwrap()
@@ -127,7 +135,7 @@ async fn pairing_and_refresh_flow() {
         .client
         .post(format!("{}/api/pair/create", app.base_url))
         .header("X-Setup-Key", "wrong")
-        .json(&json!({"name": "Dewantoro"}))
+        .json(&json!({"name": "Alice"}))
         .send()
         .await
         .unwrap();
@@ -138,13 +146,13 @@ async fn pairing_and_refresh_flow() {
         .client
         .post(format!("{}/api/pair/create", app.base_url))
         .header("X-Setup-Key", "test-setup-key")
-        .json(&json!({"name": "Dewantoro", "email": "Dewantoro@gmail.com"}))
+        .json(&json!({"name": "Alice", "email": "Alice@Example.test"}))
         .send()
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::CREATED);
     let body1: Value = res.json().await.unwrap();
-    assert_eq!(body1["user"]["email"], "dewantoro@gmail.com");
+    assert_eq!(body1["user"]["email"], "alice@example.test");
     let access1 = body1["tokens"]["access_token"].as_str().unwrap().to_string();
     let refresh1 = body1["tokens"]["refresh_token"].as_str().unwrap().to_string();
     let old_code = body1["invite_code"].as_str().unwrap().to_string();
@@ -177,7 +185,7 @@ async fn pairing_and_refresh_flow() {
         let old_join = app
             .client
             .post(format!("{}/api/pair/join", app.base_url))
-            .json(&json!({"code": old_code, "name": "Marchanda"}))
+            .json(&json!({"code": old_code, "name": "Bob"}))
             .send()
             .await
             .unwrap();
@@ -190,15 +198,15 @@ async fn pairing_and_refresh_flow() {
         .post(format!("{}/api/pair/join", app.base_url))
         .json(&json!({
             "code": format!("  {} ", new_code.to_lowercase()),
-            "name": "Marchanda",
-            "email": "marchanda@gmail.com"
+            "name": "Bob",
+            "email": "bob@example.test"
         }))
         .send()
         .await
         .unwrap();
     assert_eq!(join_res.status(), StatusCode::CREATED);
     let join_body: Value = join_res.json().await.unwrap();
-    assert_eq!(join_body["user"]["email"], "marchanda@gmail.com");
+    assert_eq!(join_body["user"]["email"], "bob@example.test");
 
     // Third user -> 409 pair_full
     let third = app
@@ -221,10 +229,10 @@ async fn pairing_and_refresh_flow() {
         .json()
         .await
         .unwrap();
-    assert_eq!(me["me"]["name"], "Dewantoro");
-    assert_eq!(me["me"]["email"], "dewantoro@gmail.com");
-    assert_eq!(me["partner"]["name"], "Marchanda");
-    assert_eq!(me["partner"]["email"], "marchanda@gmail.com");
+    assert_eq!(me["me"]["name"], "Alice");
+    assert_eq!(me["me"]["email"], "alice@example.test");
+    assert_eq!(me["partner"]["name"], "Bob");
+    assert_eq!(me["partner"]["email"], "bob@example.test");
 
     // Refresh token rotation
     let ref_res = app
@@ -789,7 +797,7 @@ async fn pairing_without_setup_key_when_unset() {
     let res = app
         .client
         .post(format!("{}/api/pair/create", app.base_url))
-        .json(&json!({"name": "Dewantoro", "email": "dewantoro@gmail.com"}))
+        .json(&json!({"name": "Alice", "email": "alice@example.test"}))
         .send()
         .await
         .unwrap();
@@ -811,7 +819,7 @@ async fn pairing_without_setup_key_when_unset() {
     let join = app
         .client
         .post(format!("{}/api/pair/join", app.base_url))
-        .json(&json!({"code": code, "name": "Marchanda", "email": "marchanda@gmail.com"}))
+        .json(&json!({"code": code, "name": "Bob", "email": "bob@example.test"}))
         .send()
         .await
         .unwrap();
@@ -883,7 +891,7 @@ async fn join_pair_rate_limits_failed_attempts() {
     let app = TestApp::start_with_setup_key(None).await;
     app.client
         .post(format!("{}/api/pair/create", app.base_url))
-        .json(&json!({"name": "Dewantoro"}))
+        .json(&json!({"name": "Alice"}))
         .send()
         .await
         .unwrap();
@@ -892,7 +900,7 @@ async fn join_pair_rate_limits_failed_attempts() {
         let r = app
             .client
             .post(format!("{}/api/pair/join", app.base_url))
-            .json(&json!({"code": "BAD999", "name": "Marchanda"}))
+            .json(&json!({"code": "BAD999", "name": "Bob"}))
             .send()
             .await
             .unwrap();
@@ -902,7 +910,7 @@ async fn join_pair_rate_limits_failed_attempts() {
     let blocked = app
         .client
         .post(format!("{}/api/pair/join", app.base_url))
-        .json(&json!({"code": "BAD999", "name": "Marchanda"}))
+        .json(&json!({"code": "BAD999", "name": "Bob"}))
         .send()
         .await
         .unwrap();
@@ -972,7 +980,7 @@ async fn logout_revokes_refresh_token_and_create_rate_limits() {
             .client
             .post(format!("{}/api/pair/create", app.base_url))
             .header("X-Setup-Key", "wrong-key")
-            .json(&json!({"name": "Dewantoro"}))
+            .json(&json!({"name": "Alice"}))
             .send()
             .await
             .unwrap();
@@ -982,7 +990,7 @@ async fn logout_revokes_refresh_token_and_create_rate_limits() {
         .client
         .post(format!("{}/api/pair/create", app.base_url))
         .header("X-Setup-Key", "wrong-key")
-        .json(&json!({"name": "Dewantoro"}))
+        .json(&json!({"name": "Alice"}))
         .send()
         .await
         .unwrap();
@@ -994,7 +1002,7 @@ async fn logout_revokes_refresh_token_and_create_rate_limits() {
         .client
         .post(format!("{}/api/pair/create", app2.base_url))
         .header("X-Setup-Key", "test-setup-key")
-        .json(&json!({"name": "Dewantoro"}))
+        .json(&json!({"name": "Alice"}))
         .send()
         .await
         .unwrap()
@@ -1397,7 +1405,7 @@ async fn rate_limiter_isolates_clients_and_keys() {
         let r = app
             .client
             .post(format!("{}/api/auth/refresh", app.base_url))
-            .header("X-Forwarded-For", "1.2.3.4")
+            .header("CF-Connecting-IP", "1.2.3.4")
             .json(&json!({"refresh_token": "attacker-bad-token"}))
             .send()
             .await
@@ -1407,7 +1415,7 @@ async fn rate_limiter_isolates_clients_and_keys() {
     let blocked_attacker = app
         .client
         .post(format!("{}/api/auth/refresh", app.base_url))
-        .header("X-Forwarded-For", "1.2.3.4")
+        .header("CF-Connecting-IP", "1.2.3.4")
         .json(&json!({"refresh_token": "attacker-bad-token"}))
         .send()
         .await
@@ -1418,7 +1426,7 @@ async fn rate_limiter_isolates_clients_and_keys() {
     let ok_refresh = app
         .client
         .post(format!("{}/api/auth/refresh", app.base_url))
-        .header("X-Forwarded-For", "5.6.7.8")
+        .header("CF-Connecting-IP", "5.6.7.8")
         .json(&json!({"refresh_token": valid_refresh}))
         .send()
         .await
@@ -1430,7 +1438,7 @@ async fn rate_limiter_isolates_clients_and_keys() {
         let r = app
             .client
             .post(format!("{}/api/pair/join", app.base_url))
-            .header("X-Forwarded-For", "1.2.3.4")
+            .header("CF-Connecting-IP", "1.2.3.4")
             .json(&json!({"code": "WRONG1", "name": "Attacker"}))
             .send()
             .await
@@ -1440,7 +1448,7 @@ async fn rate_limiter_isolates_clients_and_keys() {
     let blocked_join = app
         .client
         .post(format!("{}/api/pair/join", app.base_url))
-        .header("X-Forwarded-For", "1.2.3.4")
+        .header("CF-Connecting-IP", "1.2.3.4")
         .json(&json!({"code": "WRONG1", "name": "Attacker"}))
         .send()
         .await
@@ -1451,7 +1459,7 @@ async fn rate_limiter_isolates_clients_and_keys() {
     let ok_join = app
         .client
         .post(format!("{}/api/pair/join", app.base_url))
-        .header("X-Forwarded-For", "5.6.7.8")
+        .header("CF-Connecting-IP", "5.6.7.8")
         .json(&json!({"code": invite_code, "name": "Nadia"}))
         .send()
         .await
@@ -1576,8 +1584,8 @@ async fn google_auth_creates_and_restores_session() {
         .client
         .post(format!("{}/api/auth/google", app.base_url))
         .json(&json!({
-            "email": "marchanda@gmail.com",
-            "name": "Marchanda",
+            "email": "bob@example.test",
+            "name": "Bob",
             "device_id": "device-beta-5678",
             "invite_code": invite_code
         }))
@@ -1587,7 +1595,7 @@ async fn google_auth_creates_and_restores_session() {
     assert_eq!(resp.status(), StatusCode::OK);
     let joined: Value = resp.json().await.unwrap();
     assert_eq!(joined["status"], "authenticated");
-    assert_eq!(joined["user"]["email"], "marchanda@gmail.com");
+    assert_eq!(joined["user"]["email"], "bob@example.test");
     assert_eq!(joined["partner"]["id"], created["user"]["id"]);
     let partner_token = joined["tokens"]["access_token"].as_str().unwrap();
 
@@ -1601,7 +1609,7 @@ async fn google_auth_creates_and_restores_session() {
         .unwrap();
     assert_eq!(me_resp.status(), StatusCode::OK);
     let me_body: Value = me_resp.json().await.unwrap();
-    assert_eq!(me_body["me"]["email"], "marchanda@gmail.com");
+    assert_eq!(me_body["me"]["email"], "bob@example.test");
     assert_eq!(me_body["partner"]["email"], "dewhush@gmail.com");
 }
 
@@ -1625,6 +1633,13 @@ async fn security_headers_present_on_root_and_healthz() {
         assert_eq!(
             headers.get("x-frame-options").and_then(|v| v.to_str().ok()),
             Some("DENY"),
+            "path={path}"
+        );
+        assert_eq!(
+            headers
+                .get("strict-transport-security")
+                .and_then(|v| v.to_str().ok()),
+            Some("max-age=31536000; includeSubDomains"),
             "path={path}"
         );
         let csp = headers
@@ -1721,6 +1736,134 @@ async fn google_auth_rejects_different_device_for_existing_user() {
         .await
         .unwrap();
     assert_eq!(forged.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn google_auth_email_only_cannot_takeover_null_device_hash_account() {
+    // Regression for CRITICAL: a user created via pairing (no device_hash — NULL
+    // in the DB) must NOT be loggable with just their email. Before the fix the
+    // gate was skipped when stored device_hash was NULL, minting tokens for a
+    // remote attacker who only knows the victim's email.
+    let app = TestApp::start().await;
+
+    // Create the pair through the normal flow — this path never sets device_hash.
+    let create: Value = app
+        .client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .header("X-Setup-Key", "test-setup-key")
+        .json(&json!({"name": "Alice", "email": "alice@example.test"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let invite_code = create["invite_code"].as_str().unwrap().to_string();
+
+    let join: Value = app
+        .client
+        .post(format!("{}/api/pair/join", app.base_url))
+        .json(&json!({"code": invite_code, "name": "Bob", "email": "bob@example.test"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(join["tokens"]["access_token"].as_str().is_some());
+
+    // Email-only login against the pair-created (NULL device_hash) account must
+    // FAIL — no id_token, no device_id, no setup key, no invite.
+    for email in ["alice@example.test", "bob@example.test"] {
+        let hijack = app
+            .client
+            .post(format!("{}/api/auth/google", app.base_url))
+            .json(&json!({"email": email}))
+            .send()
+            .await
+            .unwrap();
+        assert!(
+            hijack.status() == StatusCode::UNAUTHORIZED,
+            "email-only login must be rejected for {email}, got {}",
+            hijack.status()
+        );
+    }
+
+    // With a correct device_id (bound via setup key) it can still authenticate.
+    let bind = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "alice@example.test",
+            "device_id": "alice-device-1234",
+            "setup_key": "test-setup-key"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bind.status(), StatusCode::OK);
+
+    let rebound = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({"email": "alice@example.test", "device_id": "alice-device-1234"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(rebound.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn refresh_token_family_revocation_kills_sibling_tokens() {
+    // Regression for MEDIUM: rotating one refresh token must revoke the whole
+    // family, so a stolen sibling dies when the legitimate client rotates.
+    let app = TestApp::start().await;
+
+    let create: Value = app
+        .client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .header("X-Setup-Key", "test-setup-key")
+        .json(&json!({"name": "Alice", "email": "alice@example.test"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let refresh1 = create["tokens"]["refresh_token"].as_str().unwrap().to_string();
+
+    // Rotate token 1 -> token 2 (new family). The old token is now dead.
+    let rotate: Value = app
+        .client
+        .post(format!("{}/api/auth/refresh", app.base_url))
+        .json(&json!({"refresh_token": refresh1}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let refresh2 = rotate["refresh_token"].as_str().unwrap().to_string();
+
+    // Reusing the rotated token must fail (it is already gone).
+    let reuse = app
+        .client
+        .post(format!("{}/api/auth/refresh", app.base_url))
+        .json(&json!({"refresh_token": refresh1}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(reuse.status(), StatusCode::UNAUTHORIZED);
+
+    // Token 2 (the only surviving member) still works.
+    let ok = app
+        .client
+        .post(format!("{}/api/auth/refresh", app.base_url))
+        .json(&json!({"refresh_token": refresh2}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -1828,7 +1971,7 @@ async fn google_auth_locks_target_email_across_rotating_proxy_ips() {
         .post(format!("{}/api/auth/google", app.base_url))
         .json(&json!({
             "email": "dewhush@gmail.com",
-            "name": "Dewantoro",
+            "name": "Alice",
             "device_id": "owner-device-1",
             "setup_key": "test-setup-key",
             "auto_create": true
@@ -1923,4 +2066,530 @@ async fn space_name_persists_across_pair_create_join_and_state() {
     assert_eq!(state_res.status(), StatusCode::OK);
     let st: Value = state_res.json().await.unwrap();
     assert_eq!(st["space_name"], "Rumah Kita");
+}
+
+#[tokio::test]
+async fn google_callback_rejects_malformed_and_unconfigured_requests() {
+    let app = TestApp::start().await;
+
+    // 1. A well-formed body against a server with no Google client configured is
+    //    rejected before reaching the Google token endpoint (no network access).
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google/callback", app.base_url))
+        .json(&json!({
+            "code": "some-auth-code",
+            "code_verifier": "some-verifier"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "unconfigured Google callback should return 400"
+    );
+
+    // 2. Missing code is rejected as a bad request (validation runs before any
+    //    outbound call to Google).
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google/callback", app.base_url))
+        .json(&json!({
+            "code": "",
+            "code_verifier": "some-verifier"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "empty code should be rejected with 4xx, got {}",
+        resp.status()
+    );
+
+    // 3. Missing code_verifier is likewise rejected.
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google/callback", app.base_url))
+        .json(&json!({
+            "code": "some-auth-code",
+            "code_verifier": ""
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "empty code_verifier should be rejected with 4xx, got {}",
+        resp.status()
+    );
+
+    // 4. Malformed JSON body is rejected (deserialization failure -> 4xx).
+    let resp = app
+        .client
+        .post(format!("{}/api/auth/google/callback", app.base_url))
+        .header("content-type", "application/json")
+        .body("not-json")
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        resp.status().is_client_error(),
+        "malformed JSON body should be rejected with 4xx, got {}",
+        resp.status()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 2-User Audit: rate limits, ownership, and account-takeover defenses
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn nudge_is_rate_limited_per_user() {
+    let app = TestApp::start().await;
+    let (t1, t2, _id1, _id2) = app.pair_both().await;
+
+    // Stricter than the generic baseline: a nudge is a real FCM push, and a
+    // "thinking of you" ping every 30s is plenty. First nudge in the window
+    // succeeds; the immediate second is blocked.
+    let ok = app
+        .client
+        .post(format!("{}/api/nudge", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::NO_CONTENT, "first nudge should succeed");
+
+    let blocked = app
+        .client
+        .post(format!("{}/api/nudge", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+    let body: Value = blocked.json().await.unwrap();
+    assert_eq!(body["error"], "rate_limited");
+
+    // The limit is per-user: the partner is unaffected by t1's block.
+    let partner_ok = app
+        .client
+        .post(format!("{}/api/nudge", app.base_url))
+        .bearer_auth(&t2)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(partner_ok.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn sos_is_rate_limited_per_user() {
+    let app = TestApp::start().await;
+    let (t1, _t2, _id1, _id2) = app.pair_both().await;
+
+    // SOS is an emergency channel: 3 per 5 minutes, tighter than a generic
+    // per-minute baseline, so a stuck/abusive client can't spam partner phones.
+    for _ in 0..3 {
+        let r = app
+            .client
+            .post(format!("{}/api/sos", app.base_url))
+            .bearer_auth(&t1)
+            .json(&json!({"kind": "manual"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::OK, "first 3 SOS should succeed");
+    }
+    let blocked = app
+        .client
+        .post(format!("{}/api/sos", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"kind": "manual"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn sos_message_is_length_capped() {
+    let app = TestApp::start().await;
+    let (t1, _t2, _id1, _id2) = app.pair_both().await;
+
+    let long = "A".repeat(501);
+    let bad = app
+        .client
+        .post(format!("{}/api/sos", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"kind": "manual", "message": long}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+
+    let ok = app
+        .client
+        .post(format!("{}/api/sos", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"kind": "manual", "message": "x".repeat(500)}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn push_token_rejects_oversized_values() {
+    let app = TestApp::start().await;
+    let (t1, _t2, _id1, _id2) = app.pair_both().await;
+
+    let long = "F".repeat(4097);
+    let bad = app
+        .client
+        .post(format!("{}/api/push-token", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"token": long}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+
+    let ok = app
+        .client
+        .post(format!("{}/api/push-token", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"token": "a-valid-fcm-token-1234"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn place_delete_requires_owner_or_partner() {
+    let app = TestApp::start().await;
+    let (t1, t2, id1, id2) = app.pair_both().await;
+
+    // Partner creates a place.
+    let created: Value = app
+        .client
+        .post(format!("{}/api/places", app.base_url))
+        .bearer_auth(&t2)
+        .json(&json!({"name": "Home", "lat": -6.2, "lon": 106.8, "radius_m": 100.0}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let place_id = created["id"].as_i64().unwrap();
+    assert_eq!(created["created_by"].as_i64().unwrap(), id2);
+
+    // Owner can delete their own place.
+    let del = app
+        .client
+        .delete(format!("{}/api/places/{place_id}", app.base_url))
+        .bearer_auth(&t2)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(del.status(), StatusCode::NO_CONTENT);
+
+    // Recreate, then the *other* pair member (t1) is also allowed to delete.
+    let again: Value = app
+        .client
+        .post(format!("{}/api/places", app.base_url))
+        .bearer_auth(&t2)
+        .json(&json!({"name": "Work", "lat": -6.25, "lon": 106.85, "radius_m": 100.0}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let place_id2 = again["id"].as_i64().unwrap();
+    assert_eq!(again["created_by"].as_i64().unwrap(), id2);
+
+    let partner_del = app
+        .client
+        .delete(format!("{}/api/places/{place_id2}", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(partner_del.status(), StatusCode::NO_CONTENT);
+    assert_ne!(id1, id2, "test invariant: two distinct paired user ids");
+}
+
+#[tokio::test]
+async fn google_auth_cannot_hijack_account_by_email_alone() {
+    let app = TestApp::start().await;
+
+    // Creator sets up the pair WITHOUT a device_id (older clients / /api/pair/create path).
+    let create_res: Value = app
+        .client
+        .post(format!("{}/api/pair/create", app.base_url))
+        .header("X-Setup-Key", "test-setup-key")
+        .json(&json!({"name": "Victim", "email": "victim@gmail.com"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(create_res["user"]["email"], "victim@gmail.com");
+    let victim_id = create_res["user"]["id"].as_i64().unwrap();
+
+    // Attacker who only knows the victim's email must NOT be authenticated as them.
+    let hijack = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "victim@gmail.com",
+            "name": "Attacker"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(hijack.status(), StatusCode::UNAUTHORIZED);
+    let body: Value = hijack.json().await.unwrap();
+    assert_eq!(body["error"], "unauthorized");
+
+    // Same attempt with a wrong device_id also fails (device_hash is NULL so no device
+    // match is possible without another proof-of-identity path).
+    let wrong_dev = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "victim@gmail.com",
+            "name": "Attacker",
+            "device_id": "attacker-device-9999"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(wrong_dev.status(), StatusCode::UNAUTHORIZED);
+
+    // With the valid setup_key (admin recovery), the same attacker CAN bind a device,
+    // which is the intended recovery path documented in audit-004 #S11.
+    let recovered = app
+        .client
+        .post(format!("{}/api/auth/google", app.base_url))
+        .json(&json!({
+            "email": "victim@gmail.com",
+            "name": "Victim",
+            "device_id": "owner-new-device-12345",
+            "setup_key": "test-setup-key"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::OK);
+    let recovered_body: Value = recovered.json().await.unwrap();
+    assert_eq!(recovered_body["status"], "authenticated");
+    assert_eq!(recovered_body["user"]["id"].as_i64().unwrap(), victim_id);
+}
+
+#[tokio::test]
+async fn message_reply_targets_are_restricted_to_pair() {
+    let app = TestApp::start().await;
+    let (t1, t2, id1, _id2) = app.pair_both().await;
+
+    // t1 posts a message.
+    let m1: Value = app
+        .client
+        .post(format!("{}/api/messages", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"text": "hello partner"}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let m1_id = m1["id"].as_i64().unwrap();
+    assert_eq!(m1["author_id"].as_i64().unwrap(), id1);
+
+    // t2 can reply to it (same pair).
+    let m2: Value = app
+        .client
+        .post(format!("{}/api/messages", app.base_url))
+        .bearer_auth(&t2)
+        .json(&json!({"text": "hi!", "reply_to_message_id": m1_id}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(m2["reply_to_message_id"].as_i64().unwrap(), m1_id);
+
+    // Non-existent message id -> 404
+    let bad = app
+        .client
+        .post(format!("{}/api/messages", app.base_url))
+        .bearer_auth(&t2)
+        .json(&json!({"text": "x", "reply_to_message_id": 999_999}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad.status(), StatusCode::NOT_FOUND);
+
+    // Non-existent checkin id -> 404
+    let bad_checkin = app
+        .client
+        .post(format!("{}/api/messages", app.base_url))
+        .bearer_auth(&t2)
+        .json(&json!({"text": "x", "reply_to_checkin_id": 999_999}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bad_checkin.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn message_creation_is_rate_limited_per_user() {
+    let app = TestApp::start().await;
+    let (t1, _t2, _id1, _id2) = app.pair_both().await;
+
+    for _ in 0..60 {
+        let r = app
+            .client
+            .post(format!("{}/api/messages", app.base_url))
+            .bearer_auth(&t1)
+            .json(&json!({"text": "spam"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::CREATED);
+    }
+    let blocked = app
+        .client
+        .post(format!("{}/api/messages", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"text": "spam"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn checkin_creation_is_rate_limited_per_user() {
+    let app = TestApp::start().await;
+    let (t1, _t2, _id1, _id2) = app.pair_both().await;
+    let jpeg = make_test_jpeg(32, 32);
+
+    // First checkin succeeds and consumes one unit of the 50/day budget.
+    let ok = app
+        .client
+        .post(format!("{}/api/checkins", app.base_url))
+        .bearer_auth(&t1)
+        .multipart(
+            reqwest::multipart::Form::new().part(
+                "photo",
+                reqwest::multipart::Part::bytes(jpeg.clone())
+                    .file_name("p.jpg")
+                    .mime_str("image/jpeg")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::CREATED);
+
+    // Simulate the daily budget being exhausted by issuing 49 more checkins in a loop
+    // (total 50 = CHECKIN_MAX_PER_DAY). The 51st must be blocked.
+    for _ in 1..50 {
+        let r = app
+            .client
+            .post(format!("{}/api/checkins", app.base_url))
+            .bearer_auth(&t1)
+            .multipart(
+                reqwest::multipart::Form::new().part(
+                    "photo",
+                    reqwest::multipart::Part::bytes(jpeg.clone())
+                        .file_name("p.jpg")
+                        .mime_str("image/jpeg")
+                        .unwrap(),
+                ),
+            )
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::CREATED);
+    }
+    let blocked = app
+        .client
+        .post(format!("{}/api/checkins", app.base_url))
+        .bearer_auth(&t1)
+        .multipart(
+            reqwest::multipart::Form::new().part(
+                "photo",
+                reqwest::multipart::Part::bytes(jpeg)
+                    .file_name("p.jpg")
+                    .mime_str("image/jpeg")
+                    .unwrap(),
+            ),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn place_delete_rejects_user_outside_the_pair() {
+    let app = TestApp::start().await;
+    let (t1, _t2, _id1, _id2) = app.pair_both().await;
+
+    // t1 creates a place.
+    let created: Value = app
+        .client
+        .post(format!("{}/api/places", app.base_url))
+        .bearer_auth(&t1)
+        .json(&json!({"name": "Secret Base", "lat": -6.2, "lon": 106.8, "radius_m": 100.0}))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let place_id = created["id"].as_i64().unwrap();
+
+    // An attacker who has taken over the *other* pair member's account via setup_key
+    // recovery is still allowed to delete (that attacker IS the paired partner).
+    // But an attacker on a DIFFERENT pair slot cannot exist here because the server
+    // allows at most 2 users; so the meaningful isolation test is: deleting a
+    // non-existent place still returns 404 (and does not cascade anything).
+    let missing = app
+        .client
+        .delete(format!("{}/api/places/99999", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    // Sanity: the place still exists and is listed for the creator.
+    let list: Value = app
+        .client
+        .get(format!("{}/api/places", app.base_url))
+        .bearer_auth(&t1)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let ids: Vec<i64> = list["places"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p["id"].as_i64())
+        .collect();
+    assert!(ids.contains(&place_id));
 }

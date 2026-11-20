@@ -316,7 +316,7 @@ This section adds to the full PRD above. Where it differs, this section wins.
 ### Development environment: connecting to the VPS
 
 - Development happens on my laptop; the VPS sits on the same local network, so the laptop reaches it by its local address.
-- VPS local address: 192.168.100.92, SSH user "mnemonic" (credentials are kept out of this doc; use SSH keys instead of a password).
+- VPS local address: 192.168.1.10, SSH user "deploy" (credentials are kept out of this doc; use SSH keys instead of a password).
 - Local-only: this address works only inside the home network. Phones away from home need the public route through Cloudflare Tunnel or similar.
 - Development flow: build and run the Rust server on the VPS, point the Android debug build at the local address, then switch to the tunnel address for real use.
 - An AI agent is used alongside to generate code; keep the PRD as the source of truth for what it should build.
